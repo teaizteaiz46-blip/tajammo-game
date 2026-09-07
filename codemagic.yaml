@@ -22,7 +22,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - your-email@example.com
+          - ameerazax@gmail.com
 
   ios-release:
     name: تجمّع - iOS
