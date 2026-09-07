@@ -305,132 +305,28 @@
 <div class="wrap" id="app"></div>
 
 <script>
-/* ============================ BUILT-IN QUESTION BANK ============================ */
-/* كل موضوع فيه ٦ أسئلة سهلة (١٠٠ نقطة) و٦ أسئلة متوسطة (٢٠٠ نقطة).
+/* ============================ CATEGORY QUESTION BANK (Supabase) ============================ */
+/* كل موضوع فيه ٥ أسئلة سهلة (١٠٠ نقطة) و٥ أسئلة متوسطة (٢٠٠ نقطة)، محمّلة من قاعدة بيانات أونلاين.
    كل لعبة تختار عشوائياً ٢ من كل مستوى، وتتجنب تكرار نفس الأسئلة قبل ما تخلص كل الأسئلة المتوفرة. */
-const TOPIC_BANK = {
-  geo: { label:'جغرافيا', easy:[
-      {text:'شنو أكبر قارة من حيث المساحة؟', answer:'آسيا'},
-      {text:'شنو أطول نهر بالعالم؟', answer:'نهر النيل'},
-      {text:'بأي قارة تقع صحراء الصحراء الكبرى؟', answer:'أفريقيا'},
-      {text:'شنو عاصمة فرنسا؟', answer:'باريس'},
-      {text:'شنو أكبر محيط بالعالم؟', answer:'المحيط الهادئ'},
-      {text:'شنو أصغر قارة من حيث المساحة؟', answer:'أستراليا'}
-    ], medium:[
-      {text:'شنو أعلى قمة جبلية بالعالم؟', answer:'قمة إفرست'},
-      {text:'بأي دولة تقع مدينة البتراء الأثرية؟', answer:'الأردن'},
-      {text:'شنو الدولة اللي فيها أكبر عدد من الأهرامات القديمة؟', answer:'مصر'},
-      {text:'شنو اسم أكبر جزيرة بالعالم؟', answer:'جرينلاند'},
-      {text:'بأي قارة يوجد أكبر عدد من الدول؟', answer:'أفريقيا'},
-      {text:'شنو اسم المضيق اللي يفصل بين آسيا وأوروبا؟', answer:'مضيق البوسفور'}
-    ]},
-  history: { label:'تاريخ', easy:[
-      {text:'شنو اسم أول حضارة عرفت الكتابة بالعالم؟', answer:'الحضارة السومرية'},
-      {text:'بأي بلد قامت حضارة الفراعنة؟', answer:'مصر'},
-      {text:'شنو اسم السفينة اللي غرقت سنة ١٩١٢ بعد اصطدامها بجبل جليدي؟', answer:'تايتانك'},
-      {text:'مين اكتشف قارة أمريكا سنة ١٤٩٢؟', answer:'كريستوفر كولومبوس'},
-      {text:'شنو اسم الإمبراطورية اللي عاصمتها إسطنبول وحكمت أجزاء واسعة من العالم لقرون؟', answer:'الإمبراطورية العثمانية'},
-      {text:'مين أول خليفة بالإسلام؟', answer:'أبو بكر الصديق'}
-    ], medium:[
-      {text:'بأي سنة انتهت الحرب العالمية الثانية؟', answer:'١٩٤٥'},
-      {text:'بأي مدينة عراقية تأسست "دار الحكمة" بالعصر العباسي؟', answer:'بغداد'},
-      {text:'مين قاد فتح الأندلس بقيادة المسلمين؟', answer:'طارق بن زياد'},
-      {text:'شنو اسم الحضارة القديمة اللي بنت أهرامات الجيزة؟', answer:'الحضارة المصرية القديمة'},
-      {text:'بأي سنة تقريباً سقطت بغداد بيد المغول؟', answer:'سنة ١٢٥٨ ميلادية'},
-      {text:'شنو اسم أول جامعة بالتاريخ لسا موجودة لليوم، تأسست بالمغرب؟', answer:'جامعة القرويين بفاس'}
-    ]},
-  science: { label:'علوم', easy:[
-      {text:'شنو أقرب كوكب للشمس؟', answer:'عطارد'},
-      {text:'شنو الغاز اللي يتنفسه الإنسان للحياة؟', answer:'الأوكسجين'},
-      {text:'شنو العضو المسؤول عن ضخ الدم بجسم الإنسان؟', answer:'القلب'},
-      {text:'شنو أسرع حيوان بري بالعالم؟', answer:'الفهد (الشيتا)'},
-      {text:'شنو حالة الماء عند التجمد؟', answer:'صلبة (جليد)'},
-      {text:'كم عدد عظام جسم الإنسان البالغ تقريباً؟', answer:'٢٠٦ عظمة'}
-    ], medium:[
-      {text:'مين العالم اللي اشتهر باكتشاف قوانين الجاذبية؟', answer:'إسحاق نيوتن'},
-      {text:'شنو اسم أصغر وحدة بناء بجسم الكائن الحي؟', answer:'الخلية'},
-      {text:'شنو الكوكب المعروف بـ"الكوكب الأحمر"؟', answer:'المريخ'},
-      {text:'شنو الغاز المسؤول بشكل رئيسي عن ظاهرة الاحتباس الحراري؟', answer:'ثاني أكسيد الكربون'},
-      {text:'شنو اسم العملية اللي تحوّل فيها النباتات ضوء الشمس لطاقة؟', answer:'التمثيل الضوئي'},
-      {text:'كم عدد الكروموسومات بخلايا جسم الإنسان؟', answer:'٤٦ كروموسوم'}
-    ]},
-  sports: { label:'رياضة', easy:[
-      {text:'كم عدد لاعبي فريق كرة القدم بالملعب لكل فريق؟', answer:'١١ لاعب'},
-      {text:'شنو الرياضة اللي تلعب بمضرب وكرة صغيرة فوق طاولة؟', answer:'تنس الطاولة'},
-      {text:'كم دقيقة مدة الشوط الواحد بكرة القدم بالوقت الأصلي؟', answer:'٤٥ دقيقة'},
-      {text:'شنو الدولة اللي فازت بكأس العالم لكرة القدم أكثر من غيرها؟', answer:'البرازيل'},
-      {text:'شنو اسم الرياضة اللي تعتمد على تسديد الكرة بسلة مرتفعة؟', answer:'كرة السلة'},
-      {text:'كم عدد اللاعبين بفريق الكرة الطائرة داخل الملعب؟', answer:'٦ لاعبين'}
-    ], medium:[
-      {text:'مين اللاعب اللي فاز بكأس العالم مع منتخب الأرجنتين سنة ٢٠٢٢؟', answer:'ليونيل ميسي'},
-      {text:'بأي دولة أقيمت بطولة كأس العالم لكرة القدم سنة ٢٠٢٢؟', answer:'قطر'},
-      {text:'شنو اسم البطولة القارية لكرة القدم بين المنتخبات الآسيوية؟', answer:'كأس آسيا'},
-      {text:'شنو الرياضة الأولمبية اللي تجمع السباحة وركوب الخيل والمبارزة والجري والرماية؟', answer:'الخماسي الحديث'},
-      {text:'كم عدد اللاعبين الأساسيين بفريق كرة السلة داخل الملعب؟', answer:'٥ لاعبين'},
-      {text:'شنو اسم الكأس اللي يحصل عليها بطل دوري أبطال أوروبا لكرة القدم؟', answer:'كأس دوري أبطال أوروبا'}
-    ]},
-  movies: { label:'سينما وتلفزيون', easy:[
-      {text:'شنو اسم أشهر جائزة عالمية بمجال السينما تمنح سنوياً بهوليوود؟', answer:'جائزة الأوسكار'},
-      {text:'شنو اسم الشخصية الكرتونية اللي تعيش تحت البحر بمدينة "بيكيني بوتم"؟', answer:'سبونج بوب'},
-      {text:'شنو اسم أول فيلم أنيميشن طويل أنتجته شركة ديزني؟', answer:'سنو وايت والأقزام السبعة'},
-      {text:'شنو اسم المسلسل الكرتوني عن عائلة صفراء اللون تعيش بمدينة سبرينغفيلد؟', answer:'عائلة سيمبسون'},
-      {text:'شنو الاسم السري لبطل سلسلة أفلام "باتمان"؟', answer:'بروس واين'},
-      {text:'شنو أشهر مهرجان سينمائي عالمي يقام بفرنسا كل سنة؟', answer:'مهرجان كان'}
-    ], medium:[
-      {text:'مين المخرج المعروف بأفلام مثل "إنسبشن" و"إنترستيلر"؟', answer:'كريستوفر نولان'},
-      {text:'شنو اسم الاستوديو المسؤول عن أفلام مثل "توي ستوري" و"عالم السمك نيمو"؟', answer:'بيكسار'},
-      {text:'مين الممثل اللي جسّد شخصية "آيرون مان" بأفلام مارفل؟', answer:'روبرت داوني جونيور'},
-      {text:'شنو الدولة اللي تشتهر بإنتاج "الأنمي" (الرسوم المتحركة اليابانية)؟', answer:'اليابان'},
-      {text:'شنو اسم الجائزة السنوية التلفزيونية الأمريكية المعروفة اختصاراً بـ"إيمي"؟', answer:'جوائز الإيمي'},
-      {text:'شنو اسم أول فيلم بسلسلة "حرب النجوم" صدر بالسينمات سنة ١٩٧٧؟', answer:'أمل جديد'}
-    ]},
-  literature: { label:'أدب ولغة', easy:[
-      {text:'مين مؤلف رواية "مدن الملح"؟', answer:'عبدالرحمن منيف'},
-      {text:'شنو اسم أشهر مجموعة قصصية عربية تراثية فيها حكايات مثل علاء الدين وعلي بابا؟', answer:'ألف ليلة وليلة'},
-      {text:'كم عدد حروف اللغة العربية؟', answer:'٢٨ حرف'},
-      {text:'مين الشاعر العراقي الملقب برائد الشعر الحر؟', answer:'بدر شاكر السياب'},
-      {text:'شنو اسم أول سورة بالقرآن الكريم؟', answer:'سورة الفاتحة'},
-      {text:'مين مؤلف كتاب "الأيام" اللي يحكي سيرته الذاتية؟', answer:'طه حسين'}
-    ], medium:[
-      {text:'مين الأديب المصري الحاصل على جائزة نوبل للآداب سنة ١٩٨٨؟', answer:'نجيب محفوظ'},
-      {text:'مين مؤلف كتاب "مقدمة ابن خلدون"؟', answer:'ابن خلدون'},
-      {text:'شنو لقب الشاعر أحمد شوقي بالأدب العربي؟', answer:'أمير الشعراء'},
-      {text:'مين الشاعرة العراقية اللي تعتبر من رواد الشعر الحر؟', answer:'نازك الملائكة'},
-      {text:'شنو اسم القاموس العربي الشهير اللي ألفه ابن منظور؟', answer:'لسان العرب'},
-      {text:'شنو أكثر بحور الشعر العربي استخداماً؟', answer:'بحر الطويل'}
-    ]},
-  animals: { label:'حيوانات وطبيعة', easy:[
-      {text:'شنو أكبر حيوان بالعالم؟', answer:'الحوت الأزرق'},
-      {text:'شنو الحيوان الملقب بـ"ملك الغابة"؟', answer:'الأسد'},
-      {text:'كم عدد أرجل العنكبوت؟', answer:'٨ أرجل'},
-      {text:'شنو الحيوان المعروف بطول رقبته الشديد؟', answer:'الزرافة'},
-      {text:'شنو اسم صغير الكلب؟', answer:'جرو'},
-      {text:'شنو الطائر اللي ما يكدر يطير ويعيش بالمناطق الباردة جداً؟', answer:'البطريق'}
-    ], medium:[
-      {text:'شنو أسرع طائر بالعالم أثناء الانقضاض؟', answer:'الصقر الشاهين'},
-      {text:'شنو اسم أكبر غابة استوائية بالعالم؟', answer:'غابات الأمازون'},
-      {text:'شنو الثدييات الوحيدة القادرة على الطيران الحقيقي؟', answer:'الخفافيش'},
-      {text:'شنو الحيوان اللي يغيّر لون جلده حسب محيطه؟', answer:'الحرباء'},
-      {text:'شنو الحيوان البحري المعروف بذكائه العالي وقدرته على استخدام الأدوات؟', answer:'الأخطبوط'},
-      {text:'شنو اسم أكبر قطط العالم من حيث الحجم؟', answer:'النمر السيبيري'}
-    ]},
-  tech: { label:'معلومات عامة وتكنولوجيا', easy:[
-      {text:'شنو الشركة اللي تصنع هاتف الآيفون؟', answer:'أبل (Apple)'},
-      {text:'شنو محرك البحث الأكثر استخداماً بالعالم؟', answer:'جوجل'},
-      {text:'شنو عدد أيام السنة الكبيسة؟', answer:'٣٦٦ يوم'},
-      {text:'شنو اسم العملة الرسمية باليابان؟', answer:'الين الياباني'},
-      {text:'شنو التطبيق المعروف سابقاً بشعار طائر أزرق للتغريد؟', answer:'تويتر (X حالياً)'},
-      {text:'شنو اسم أول رجل مشى على سطح القمر؟', answer:'نيل آرمسترونغ'}
-    ], medium:[
-      {text:'مين مؤسس شركة مايكروسوفت؟', answer:'بيل غيتس'},
-      {text:'شنو اسم أول عملة رقمية مشفرة انتشرت بالعالم؟', answer:'بيتكوين'},
-      {text:'شنو معنى اختصار "www" اللي نشوفه بروابط الإنترنت؟', answer:'الشبكة العالمية العنكبوتية (World Wide Web)'},
-      {text:'مين مؤسس شركة أمازون؟', answer:'جيف بيزوس'},
-      {text:'شنو اسم أول قمر صناعي أطلقته البشرية للفضاء؟', answer:'سبوتنيك ١'},
-      {text:'شنو الاختصار الشائع لتقنية "الذكاء الاصطناعي" بالإنجليزية؟', answer:'AI'}
-    ]}
-};
-const bankUsage = {}; // { key: { easy:Set, medium:Set } }, in-memory rotation tracker
+let CATEGORY_TOPICS = [];   // ['جغرافيا', 'تاريخ', ...] يُملى بعد التحميل
+let CATEGORY_DATA = {};     // { 'جغرافيا': { easy:[{text,answer}], medium:[{text,answer}] } }
+const bankUsage = {};       // { topicName: { easy:Set, medium:Set } }, in-memory rotation tracker
+
+async function loadCategoryDatabase(){
+  const { data, error } = await sb
+    .from('category_questions')
+    .select('topic, points, question, answer')
+    .limit(2000);
+  if(error) throw error;
+  const grouped = {};
+  data.forEach(row=>{
+    if(!grouped[row.topic]) grouped[row.topic] = { easy:[], medium:[] };
+    const tier = row.points <= 100 ? 'easy' : 'medium';
+    grouped[row.topic][tier].push({ text:row.question, answer:row.answer });
+  });
+  CATEGORY_DATA = grouped;
+  CATEGORY_TOPICS = Object.keys(grouped);
+}
 
 function shuffled(arr){
   const a = arr.slice();
@@ -444,11 +340,11 @@ function pickFromTier(tier, usedSet, n){
   chosen.forEach(i=>usedSet.add(i));
   return chosen.map(i=>tier[i]);
 }
-function pickQuestionsForBankTopic(key){
-  if(!bankUsage[key]) bankUsage[key] = { easy:new Set(), medium:new Set() };
-  const bank = TOPIC_BANK[key];
-  const easyQs = pickFromTier(bank.easy, bankUsage[key].easy, 2);
-  const medQs = pickFromTier(bank.medium, bankUsage[key].medium, 2);
+function pickQuestionsForBankTopic(topicName){
+  if(!bankUsage[topicName]) bankUsage[topicName] = { easy:new Set(), medium:new Set() };
+  const bank = CATEGORY_DATA[topicName];
+  const easyQs = pickFromTier(bank.easy, bankUsage[topicName].easy, 2);
+  const medQs = pickFromTier(bank.medium, bankUsage[topicName].medium, 2);
   return [
     ...easyQs.map(q=>({ id:nextId(), text:q.text, answer:q.answer, points:100 })),
     ...medQs.map(q=>({ id:nextId(), text:q.text, answer:q.answer, points:200 }))
@@ -536,6 +432,8 @@ const state = {
   authMode: 'signin', // 'signin' | 'signup'
   authError: '',
   authBusy: false,
+  categoryDataLoaded: false,
+  categoryDataError: '',
   teams: [
     { name: 'الفريق الأول', score: 0 },
     { name: 'الفريق الثاني', score: 0 }
@@ -582,14 +480,14 @@ function makeCustomTopic(name){
     ]
   };
 }
-function makeBankTopic(key){
+function makeBankTopic(topicName){
   return {
     id: nextId(),
-    name: TOPIC_BANK[key].label,
-    bankKey: key,
+    name: topicName,
+    bankKey: topicName,
     taken:false, takenBy:null,
     expanded:false,
-    questions: pickQuestionsForBankTopic(key)
+    questions: pickQuestionsForBankTopic(topicName)
   };
 }
 
@@ -613,6 +511,7 @@ function render(){
   let body;
   switch(state.screen){
     case 'hub': body = renderHub(); break;
+    case 'cat-loading': body = renderCatLoading(); break;
     case 'editor': body = renderEditor(); break;
     case 'teams': body = renderTeams(); break;
     case 'select': body = renderSelect(); break;
@@ -647,6 +546,7 @@ function renderTopbar(){
     goto('hub');
   });
   const crumbMap = {
+    'cat-loading':'لعبة الفئات · تحميل البنك',
     editor:'لعبة الفئات · اختيار المواضيع',
     teams:'لعبة الفئات · الفرق والإعدادات',
     select:'لعبة الفئات · اختيار الفئات',
@@ -706,11 +606,27 @@ function renderHub(){
       </div>
     </div>
   </div>`);
-  wrap.querySelector('#card-cat').addEventListener('click', ()=>{
-    if(state.pool.length === 0){
-      Object.keys(TOPIC_BANK).forEach(key=> state.pool.push(makeBankTopic(key)));
+  wrap.querySelector('#card-cat').addEventListener('click', async ()=>{
+    if(state.categoryDataLoaded){
+      if(state.pool.length === 0){
+        CATEGORY_TOPICS.forEach(t=> state.pool.push(makeBankTopic(t)));
+      }
+      goto('editor');
+      return;
     }
-    goto('editor');
+    state.categoryDataError = '';
+    goto('cat-loading');
+    try{
+      await loadCategoryDatabase();
+      state.categoryDataLoaded = true;
+      if(state.pool.length === 0){
+        CATEGORY_TOPICS.forEach(t=> state.pool.push(makeBankTopic(t)));
+      }
+      goto('editor');
+    } catch(e){
+      state.categoryDataError = 'تعذّر تحميل بنك الأسئلة — تأكد من اتصال الإنترنت وحاول مرة ثانية.';
+      render();
+    }
   });
   wrap.querySelector('#card-whoami').addEventListener('click', ()=>{
     goto('whoami-setup');
@@ -719,6 +635,42 @@ function renderHub(){
 }
 
 /* ============================ EDITOR (choose topics) ============================ */
+function renderCatLoading(){
+  const wrap = el(`<div></div>`);
+  if(state.categoryDataError){
+    const panel = el(`<div class="panel" style="text-align:center;">
+      <div class="section-title">${escapeAttr(state.categoryDataError)}</div>
+      <div class="btn-row" style="justify-content:center;">
+        <button class="btn btn-gold" id="retry-load">حاول مرة ثانية</button>
+        <button class="btn btn-ghost" id="back-hub-load">رجوع</button>
+      </div>
+    </div>`);
+    panel.querySelector('#retry-load').addEventListener('click', async ()=>{
+      state.categoryDataError = '';
+      render();
+      try{
+        await loadCategoryDatabase();
+        state.categoryDataLoaded = true;
+        if(state.pool.length === 0){
+          CATEGORY_TOPICS.forEach(t=> state.pool.push(makeBankTopic(t)));
+        }
+        goto('editor');
+      } catch(e){
+        state.categoryDataError = 'تعذّر تحميل بنك الأسئلة — تأكد من اتصال الإنترنت وحاول مرة ثانية.';
+        render();
+      }
+    });
+    panel.querySelector('#back-hub-load').addEventListener('click', ()=> goto('hub'));
+    wrap.appendChild(panel);
+  } else {
+    wrap.appendChild(el(`<div class="panel" style="text-align:center;">
+      <div class="section-title">...جاري تحميل بنك الأسئلة</div>
+      <div class="section-sub">يحتاج اتصال إنترنت</div>
+    </div>`));
+  }
+  return wrap;
+}
+
 function renderEditor(){
   const wrap = el(`<div></div>`);
 
@@ -730,17 +682,17 @@ function renderEditor(){
   wrap.appendChild(intro);
 
   const grid = el(`<div class="pick-grid" id="bank-grid" style="margin-bottom:20px;"></div>`);
-  Object.keys(TOPIC_BANK).forEach(key=>{
-    const inPool = state.pool.find(t=>t.bankKey === key);
+  CATEGORY_TOPICS.forEach(topicName=>{
+    const inPool = state.pool.find(t=>t.bankKey === topicName);
     const card = el(`<div class="pick-card ${inPool?'':'taken'}" style="${inPool? `border-color:var(--gold-dim); background:rgba(212,168,87,0.10);`:''}">
-      ${TOPIC_BANK[key].label}
+      ${escapeAttr(topicName)}
       <span class="taken-by">${inPool ? '✓ مُختار' : 'اضغط للإضافة'}</span>
     </div>`);
     card.addEventListener('click', ()=>{
       if(inPool){
-        state.pool = state.pool.filter(t => t.bankKey !== key);
+        state.pool = state.pool.filter(t => t.bankKey !== topicName);
       } else {
-        state.pool.push(makeBankTopic(key));
+        state.pool.push(makeBankTopic(topicName));
       }
       render();
     });
