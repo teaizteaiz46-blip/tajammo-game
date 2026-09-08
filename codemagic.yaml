@@ -12,7 +12,9 @@ workflows:
       - name: Install dependencies
         script: npm install
       - name: Sync Capacitor
-        script: npx cap sync android
+        script: |
+          chmod +x node_modules/.bin/*
+          npx cap sync android
       - name: Build Android release AAB
         script: |
           cd android
