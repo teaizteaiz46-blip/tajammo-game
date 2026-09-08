@@ -8,6 +8,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.azax.tajammo"
       node: 22
+      java: 21
     scripts:
       - name: Install dependencies
         script: npm install
