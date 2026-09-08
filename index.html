@@ -313,6 +313,7 @@ let CATEGORY_DATA = {};     // { 'جغرافيا': { easy:[{text,answer}], mediu
 const bankUsage = {};       // { topicName: { easy:Set, medium:Set } }, in-memory rotation tracker
 
 async function loadCategoryDatabase(){
+  if(!sb) throw new Error('لا يوجد اتصال بالإنترنت');
   const { data, error } = await sb
     .from('category_questions')
     .select('topic, points, question, answer')
@@ -354,19 +355,28 @@ function pickQuestionsForBankTopic(topicName){
 /* ============================ SUPABASE (حسابات + إحصائيات) ============================ */
 const SUPABASE_URL = "https://pajxormplmloivyankji.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhanhvcm1wbG1sb2l2eWFua2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA0ODQ3OTksImV4cCI6MjA3NjA2MDc5OX0.eEPB_Gt5HywU9oGNXLpSNc4IA7CTTL7CX-EMKDE3yec";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let sb = null;
+try{
+  if(typeof supabase !== 'undefined'){
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+}catch(e){ console.warn('تعذّر تهيئة Supabase (لا يوجد اتصال بالإنترنت على الأغلب)', e); }
 
 async function signUpWithEmail(email, password){
+  if(!sb) throw new Error('لا يوجد اتصال بالإنترنت');
   const { error } = await sb.auth.signUp({ email, password });
   if(error) throw error;
 }
 
 async function signInWithEmail(email, password){
+  if(!sb) throw new Error('لا يوجد اتصال بالإنترنت');
   const { error } = await sb.auth.signInWithPassword({ email, password });
   if(error) throw error;
 }
 
 function signOutUser(){
+  if(!sb) return;
   sb.auth.signOut();
 }
 
@@ -398,7 +408,7 @@ async function loadOrCreateProfile(authUser){
 }
 
 async function recordGameResult(totalPoints){
-  if(!state.user) return;
+  if(!sb || !state.user) return;
   const newGamesPlayed = (state.user.gamesPlayed||0) + 1;
   const newTotalPoints = (state.user.totalPoints||0) + totalPoints;
   try{
@@ -412,14 +422,16 @@ async function recordGameResult(totalPoints){
   } catch(e){ console.warn('تعذّر حفظ الإحصائيات', e); }
 }
 
-sb.auth.onAuthStateChange(async (event, session)=>{
-  if(session && session.user){
-    state.user = await loadOrCreateProfile(session.user);
-  } else {
-    state.user = null;
-  }
-  render();
-});
+if(sb){
+  sb.auth.onAuthStateChange(async (event, session)=>{
+    if(session && session.user){
+      state.user = await loadOrCreateProfile(session.user);
+    } else {
+      state.user = null;
+    }
+    render();
+  });
+}
 
 /* ============================ STATE ============================ */
 const state = {
@@ -1210,14 +1222,15 @@ function renderEnd(){
 
 /* ============================ WHO AM I? (من أنا؟) ============================ */
 async function fetchRandomCharacters(n){
+  if(!sb) throw new Error('لا يوجد اتصال بالإنترنت');
   const { data, error } = await sb
     .from('whoami_characters')
     .select('name')
     .limit(500);
   if(error) throw error;
-  const shuffled = data.map(r=>r.name).sort(()=> Math.random()-0.5);
-  if(shuffled.length < n) throw new Error('not enough characters');
-  return shuffled.slice(0, n);
+  const shuffledNames = data.map(r=>r.name).sort(()=> Math.random()-0.5);
+  if(shuffledNames.length < n) throw new Error('not enough characters');
+  return shuffledNames.slice(0, n);
 }
 
 function renderWhoamiSetup(){
