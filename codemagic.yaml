@@ -7,7 +7,7 @@ workflows:
         - tajammo_keystore
       vars:
         PACKAGE_NAME: "com.azax.tajammo"
-      node: 20
+      node: 22
     scripts:
       - name: Install dependencies
         script: npm install
