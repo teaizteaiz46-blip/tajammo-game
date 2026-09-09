@@ -81,12 +81,13 @@ async function loadOrCreateProfile(authUser){
       email: authUser.email || '',
       avatar_url: '',
       games_played: 0,
-      total_points: 0
+      total_points: 0,
+      is_subscribed: false
     };
     const { data: inserted, error: insertErr } = await sb.from('tajammo_profiles').insert(fresh).select().single();
     if(insertErr){
       console.warn('تعذّر إنشاء الملف الشخصي', insertErr);
-      return { uid: authUser.id, name: fresh.name, photo: '', gamesPlayed: 0, totalPoints: 0 };
+      return { uid: authUser.id, name: fresh.name, photo: '', gamesPlayed: 0, totalPoints: 0, isSubscribed: false };
     }
     data = inserted;
   }
@@ -95,7 +96,8 @@ async function loadOrCreateProfile(authUser){
     name: data.name,
     photo: data.avatar_url,
     gamesPlayed: data.games_played,
-    totalPoints: data.total_points
+    totalPoints: data.total_points,
+    isSubscribed: !!data.is_subscribed
   };
 }
 
