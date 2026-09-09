@@ -35,6 +35,9 @@ function render(){
   if(state.showAuthModal){
     app.appendChild(renderAuthOverlay());
   }
+  if(state.showUpsellModal){
+    app.appendChild(renderUpsellOverlay());
+  }
 }
 
 function renderTopbar(){
@@ -113,12 +116,12 @@ function renderHub(){
         <p>كل فريق يختار ٣ فئات، وكل فئة فيها ٦ أسئلة بنقاط متفاوتة. من يجمع نقاط أكثر يفوز.</p>
       </div>
       <div class="card" id="card-whoami">
-        <span class="tag">جماعي · ٣-١٠ لاعبين</span>
+        <span class="tag">جماعي · ٣-١٠ لاعبين${!isSubscribed()?' · 🔒 للمشتركين':''}</span>
         <h3>من أنا؟</h3>
         <p>كل لاعب تنحط له شخصية بالسر يشوفها الكل إلا هو، ويحاول يخمنها بأسئلة نعم/لا.</p>
       </div>
       <div class="card" id="card-shd">
-        <span class="tag">جماعي · ٥-١٠ لاعبين</span>
+        <span class="tag">جماعي · ٥-١٠ لاعبين${!isSubscribed()?' · 🔒 للمشتركين':''}</span>
         <h3>الحلفاء والشياطين</h3>
         <p>فريقين بالسر: حلفاء وشياطين. انتخاب رئيس ووزير، تمرير قوانين، ونقاش وشكوك. من يمرر أهدافه أول يفوز.</p>
       </div>
@@ -127,7 +130,7 @@ function renderHub(){
   wrap.querySelector('#card-cat').addEventListener('click', async ()=>{
     if(state.categoryDataLoaded){
       if(state.pool.length === 0){
-        CATEGORY_TOPICS.forEach(t=> state.pool.push(makeBankTopic(t)));
+        (isSubscribed() ? CATEGORY_TOPICS : FREE_TOPICS).forEach(t=> state.pool.push(makeBankTopic(t)));
       }
       goto('editor');
       return;
@@ -138,7 +141,7 @@ function renderHub(){
       await loadCategoryDatabase();
       state.categoryDataLoaded = true;
       if(state.pool.length === 0){
-        CATEGORY_TOPICS.forEach(t=> state.pool.push(makeBankTopic(t)));
+        (isSubscribed() ? CATEGORY_TOPICS : FREE_TOPICS).forEach(t=> state.pool.push(makeBankTopic(t)));
       }
       goto('editor');
     } catch(e){
@@ -147,9 +150,11 @@ function renderHub(){
     }
   });
   wrap.querySelector('#card-whoami').addEventListener('click', ()=>{
+    if(!isSubscribed()){ openUpsell('لعبة "من أنا؟" حصرية للمشتركين.'); return; }
     goto('whoami-setup');
   });
   wrap.querySelector('#card-shd').addEventListener('click', ()=>{
+    if(!isSubscribed()){ openUpsell('لعبة "الحلفاء والشياطين" حصرية للمشتركين.'); return; }
     goto('shd-setup');
   });
   return wrap;
