@@ -12,6 +12,8 @@ workflows:
     scripts:
       - name: Install dependencies
         script: npm install
+      - name: Sync web assets into www
+        script: cp index.html www/index.html && cp styles.css www/styles.css && cp privacy.html www/privacy.html && rm -rf www/js && cp -r js www/js
       - name: Sync Capacitor
         script: |
           chmod +x node_modules/.bin/*
