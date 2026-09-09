@@ -335,6 +335,35 @@ function wireHelpButtons(modal, topic, q){
   });
 }
 
+function wireSongPlayer(modal, q){
+  if(q.mediaType !== 'song' || !q.image) return;
+  const container = modal.querySelector('#song-player');
+  if(!container) return;
+  fetch('https://itunes.apple.com/search?term=' + encodeURIComponent(q.image) + '&entity=song&limit=1')
+    .then(r=>r.json())
+    .then(data=>{
+      const track = data.results && data.results[0];
+      if(!track || !track.previewUrl){
+        container.innerHTML = '<div class="section-sub">تعذّر تحميل المقطع</div>';
+        return;
+      }
+      container.innerHTML = `
+        <audio id="song-audio" src="${escapeAttr(track.previewUrl)}" preload="auto"></audio>
+        <button class="btn btn-gold btn-sm" id="song-play">▶ شغّل المقطع (١٠ ثواني)</button>
+        <div style="margin-top:8px;"><a href="${escapeAttr(track.trackViewUrl||'#')}" target="_blank" rel="noopener" style="color:var(--muted); font-size:12px;">استمع كامل على Apple Music ↗</a></div>
+      `;
+      const audio = container.querySelector('#song-audio');
+      let stopHandle = null;
+      container.querySelector('#song-play').addEventListener('click', ()=>{
+        if(stopHandle) clearTimeout(stopHandle);
+        audio.currentTime = 0;
+        audio.play();
+        stopHandle = setTimeout(()=>{ audio.pause(); }, 10000);
+      });
+    })
+    .catch(()=>{ container.innerHTML = '<div class="section-sub">تعذّر تحميل المقطع — تأكد من اتصال الإنترنت</div>'; });
+}
+
 function renderQuestionOverlay(){
   const { topicId, qId } = state.activeCell;
   const topic = state.pool.find(t=>t.id===topicId);
@@ -377,7 +406,8 @@ function renderQuestionOverlay(){
   const modal = el(`<div class="q-modal">
     <div class="q-topic">${escapeAttr(topic.name)}</div>
     <div class="q-points">${q.points} نقطة</div>
-    ${q.image ? `<img src="https://flagcdn.com/w320/${q.image}.png" style="width:180px; max-width:70%; border-radius:8px; margin-bottom:14px; box-shadow:0 4px 14px rgba(0,0,0,0.4);" alt=""/>` : ''}
+    ${q.mediaType === 'flag' && q.image ? `<img src="https://flagcdn.com/w320/${q.image}.png" style="width:180px; max-width:70%; border-radius:8px; margin-bottom:14px; box-shadow:0 4px 14px rgba(0,0,0,0.4);" alt=""/>` : ''}
+    ${q.mediaType === 'song' && q.image ? `<div class="song-player" id="song-player"><div class="section-sub">...جاري تحميل المقطع</div></div>` : ''}
     <div class="q-text">${escapeAttr(q.text)}</div>
     ${state.timerEnabled ? `<div class="timer" id="timer-display">${state.timerLeft}</div>` : ''}
     ${!revealed ? renderHelpSection(topic, q) : ''}
@@ -397,6 +427,8 @@ function renderQuestionOverlay(){
       </div>
     `}
   </div>`);
+
+  wireSongPlayer(modal, q);
 
   if(!revealed){
     modal.querySelector('#reveal').addEventListener('click', ()=>{
