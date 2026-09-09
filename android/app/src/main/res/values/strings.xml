@@ -1,7 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">تجمّع</string>
-    <string name="title_activity_main">تجمّع</string>
+    <string name="app_name">تجمع</string>
+    <string name="title_activity_main">تجمع</string>
     <string name="package_name">com.azax.tajammo</string>
     <string name="custom_url_scheme">com.azax.tajammo</string>
+    <string name="admob_app_id">ca-app-pub-4662085630111714~7080873038</string>
 </resources>
