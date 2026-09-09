@@ -9,6 +9,8 @@ const state = {
   authMode: 'signin',
   authError: '',
   authBusy: false,
+  showUpsellModal: false,
+  upsellMessage: '',
   categoryDataLoaded: false,
   categoryDataError: '',
   teams: [
@@ -63,6 +65,19 @@ const state = {
 
 let uid = 1;
 const nextId = () => 'id' + (uid++);
+
+/* ============================ SUBSCRIPTION ============================ */
+const FREE_TOPICS = ['جغرافيا','تاريخ','علوم','رياضة','سينما وتلفزيون','الأعلام'];
+
+function isSubscribed(){
+  return !!(state.user && state.user.isSubscribed);
+}
+
+function openUpsell(message){
+  state.upsellMessage = message;
+  state.showUpsellModal = true;
+  render();
+}
 
 /* ============================ HELPERS ============================ */
 function makeCustomTopic(name){
