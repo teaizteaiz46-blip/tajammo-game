@@ -981,25 +981,21 @@ function renderScoreboard(){
 
 /* ============================ QUESTION OVERLAY ============================ */
 function renderHelpSection(topic, q){
-  const cols = [0,1].map(ti=>{
-    const team = state.teams[ti];
-    const disabled = team.helps<=0;
-    return `<div class="help-col">
-      <div class="help-col-name">${escapeAttr(team.name)} — متبقي ${team.helps}</div>
-      <div class="help-btns">
-        <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="letter" ${disabled?'disabled':''}>أول حرف</button>
-        <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="blanks" ${disabled?'disabled':''}>عدد الأحرف</button>
-        ${topic.bankKey ? `
-        <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="choices" ${disabled?'disabled':''}>خيارات</button>
-        <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="swap" ${disabled?'disabled':''}>تبديل السؤال</button>
-        ` : ''}
-      </div>
-      ${state.helpHints[ti] ? `<div class="help-result">${escapeAttr(state.helpHints[ti])}</div>` : ''}
-    </div>`;
-  }).join('');
+  const ti = topic.takenBy;
+  if(ti !== 0 && ti !== 1) return '';
+  const team = state.teams[ti];
+  const disabled = team.helps<=0;
   return `<div class="help-wrap">
-    <div class="help-title">مساعدات</div>
-    <div class="help-cols">${cols}</div>
+    <div class="help-title">مساعدات ${escapeAttr(team.name)} — متبقي ${team.helps}</div>
+    <div class="help-btns" style="justify-content:center;">
+      <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="letter" ${disabled?'disabled':''}>أول حرف</button>
+      <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="blanks" ${disabled?'disabled':''}>عدد الأحرف</button>
+      ${topic.bankKey ? `
+      <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="choices" ${disabled?'disabled':''}>خيارات</button>
+      <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="swap" ${disabled?'disabled':''}>تبديل السؤال</button>
+      ` : ''}
+    </div>
+    ${state.helpHints[ti] ? `<div class="help-result">${escapeAttr(state.helpHints[ti])}</div>` : ''}
   </div>`;
 }
 
