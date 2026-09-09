@@ -16,7 +16,7 @@ function renderCatLoading(){
         await loadCategoryDatabase();
         state.categoryDataLoaded = true;
         if(state.pool.length === 0){
-          CATEGORY_TOPICS.forEach(t=> state.pool.push(makeBankTopic(t)));
+          (isSubscribed() ? CATEGORY_TOPICS : FREE_TOPICS).forEach(t=> state.pool.push(makeBankTopic(t)));
         }
         goto('editor');
       } catch(e){
@@ -48,11 +48,13 @@ function renderEditor(){
   const grid = el(`<div class="pick-grid" id="bank-grid" style="margin-bottom:20px;"></div>`);
   CATEGORY_TOPICS.forEach(topicName=>{
     const inPool = state.pool.find(t=>t.bankKey === topicName);
-    const card = el(`<div class="pick-card ${inPool?'':'taken'}" style="${inPool? `border-color:var(--gold-dim); background:rgba(212,168,87,0.10);`:''}">
-      ${escapeAttr(topicName)}
-      <span class="taken-by">${inPool ? '✓ مُختار' : 'اضغط للإضافة'}</span>
+    const locked = !isSubscribed() && !FREE_TOPICS.includes(topicName);
+    const card = el(`<div class="pick-card ${inPool?'':'taken'}" style="${inPool? `border-color:var(--gold-dim); background:rgba(212,168,87,0.10);`:''}${locked?'opacity:.45;':''}">
+      ${locked?'🔒 ':''}${escapeAttr(topicName)}
+      <span class="taken-by">${locked ? 'للمشتركين' : (inPool ? '✓ مُختار' : 'اضغط للإضافة')}</span>
     </div>`);
     card.addEventListener('click', ()=>{
+      if(locked){ openUpsell('هذا الموضوع متاح للمشتركين بس. المواضيع المجانية: ' + FREE_TOPICS.join('، ')); return; }
       if(inPool){
         state.pool = state.pool.filter(t => t.bankKey !== topicName);
       } else {
@@ -82,22 +84,31 @@ function renderEditor(){
     wrap.appendChild(customPanel);
   }
 
-  const addCustom = el(`<div class="panel">
-    <div class="section-title" style="font-size:16px;">أضف موضوع خاص</div>
-    <div class="section-sub">تكتب اسم موضوعك، والأسئلة تكتبها بنفسك أثناء اللعب لحظة ما تفتح كل خانة.</div>
-    <div style="display:flex; gap:10px;">
-      <input type="text" id="custom-name" placeholder="مثال: نجوم كرة القدم العراقية"/>
-      <button class="btn btn-gold btn-sm" id="add-custom" style="flex:none;">إضافة</button>
-    </div>
-  </div>`);
-  addCustom.querySelector('#add-custom').addEventListener('click', ()=>{
-    const input = addCustom.querySelector('#custom-name');
-    const name = input.value.trim();
-    if(!name) { input.focus(); return; }
-    state.pool.push(makeCustomTopic(name));
-    render();
-  });
-  wrap.appendChild(addCustom);
+  if(isSubscribed()){
+    const addCustom = el(`<div class="panel">
+      <div class="section-title" style="font-size:16px;">أضف موضوع خاص</div>
+      <div class="section-sub">تكتب اسم موضوعك، والأسئلة تكتبها بنفسك أثناء اللعب لحظة ما تفتح كل خانة.</div>
+      <div style="display:flex; gap:10px;">
+        <input type="text" id="custom-name" placeholder="مثال: نجوم كرة القدم العراقية"/>
+        <button class="btn btn-gold btn-sm" id="add-custom" style="flex:none;">إضافة</button>
+      </div>
+    </div>`);
+    addCustom.querySelector('#add-custom').addEventListener('click', ()=>{
+      const input = addCustom.querySelector('#custom-name');
+      const name = input.value.trim();
+      if(!name) { input.focus(); return; }
+      state.pool.push(makeCustomTopic(name));
+      render();
+    });
+    wrap.appendChild(addCustom);
+  } else {
+    const addCustomLocked = el(`<div class="panel" style="text-align:center; cursor:pointer;">
+      <div class="section-title" style="font-size:16px;">🔒 أضف موضوع خاص</div>
+      <div class="section-sub" style="margin-bottom:0;">ميزة حصرية للمشتركين — اضغط للتفاصيل</div>
+    </div>`);
+    addCustomLocked.addEventListener('click', ()=> openUpsell('إضافة مواضيعك الخاصة ميزة حصرية للمشتركين.'));
+    wrap.appendChild(addCustomLocked);
+  }
 
   const actions = el(`<div class="btn-row">
     <button class="btn btn-gold" id="to-teams">التالي: الفرق</button>
@@ -511,6 +522,33 @@ function renderAuthOverlay(){
   });
 
   return overlay.appendChild(modal), overlay;
+}
+
+function renderUpsellOverlay(){
+  const overlay = el(`<div class="overlay"></div>`);
+  const modal = el(`<div class="q-modal" style="max-width:400px;">
+    <div style="font-size:40px; margin-bottom:10px;">⭐</div>
+    <div class="section-title" style="justify-content:center;">اشتراك تجمّع</div>
+    <p style="color:var(--muted); font-size:14px; margin-bottom:18px;">${escapeAttr(state.upsellMessage)}</p>
+    <div class="panel" style="text-align:right; margin-bottom:18px;">
+      <div style="font-family:'Changa'; font-size:22px; color:var(--gold); margin-bottom:10px;">١٥٠٠ د.ع / شهرياً</div>
+      <div style="color:var(--muted); font-size:13px; line-height:2;">
+        ✓ كل مواضيع لعبة الفئات + إضافة مواضيعك الخاصة<br>
+        ✓ لعبة "من أنا؟"<br>
+        ✓ لعبة "الحلفاء والشياطين"
+      </div>
+    </div>
+    <div class="btn-row" style="justify-content:center;">
+      <button class="btn btn-gold" id="upsell-subscribe">اشترك الآن</button>
+      <button class="btn btn-ghost" id="upsell-close">إغلاق</button>
+    </div>
+  </div>`);
+  modal.querySelector('#upsell-close').addEventListener('click', ()=>{ state.showUpsellModal=false; render(); });
+  modal.querySelector('#upsell-subscribe').addEventListener('click', ()=>{
+    alert('الدفع الفعلي قيد التجهيز حالياً — راح يتفعّل قريباً عبر Google Play.');
+  });
+  overlay.appendChild(modal);
+  return overlay;
 }
 
 function translateAuthError(msg){
