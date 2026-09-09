@@ -1012,7 +1012,7 @@ function renderQuestionOverlay(){
   const modal = el(`<div class="q-modal">
     <div class="q-topic">${escapeAttr(topic.name)}</div>
     <div class="q-points">${q.points} نقطة</div>
-      ${q.image ? `<div style="font-size:110px; line-height:1.2; margin-bottom:10px;">${q.image}</div>` : ''}
+            ${q.image ? `<img src="https://flagcdn.com/w320/${q.image}.png" style="width:180px; max-width:70%; border-radius:8px; margin-bottom:14px; box-shadow:0 4px 14px rgba(0,0,0,0.4);" alt=""/>` : ''}
     <div class="q-text">${escapeAttr(q.text)}</div>
     ${state.timerEnabled ? `<div class="timer" id="timer-display">${state.timerLeft}</div>` : ''}
     ${revealed ? `
