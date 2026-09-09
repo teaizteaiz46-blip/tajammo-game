@@ -254,6 +254,7 @@ function renderWhoamiEnd(){
   });
   wrap.querySelector('#wa-new-hub').addEventListener('click', ()=>{
     state.statsRecordedForThisGame = false;
+    showInterstitialAd();
     goto('hub');
   });
 
