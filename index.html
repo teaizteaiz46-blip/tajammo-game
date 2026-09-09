@@ -320,11 +320,11 @@ async function loadCategoryDatabase(){
     .limit(2000);
   if(error) throw error;
   const grouped = {};
-  data.forEach(row=>{
-    if(!grouped[row.topic]) grouped[row.topic] = { easy:[], medium:[] };
-    const tier = row.points <= 100 ? 'easy' : 'medium';
-          grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image });
-  });
+      data.forEach(row=>{
+              if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
+              const tier = grouped[row.topic][row.points] ? row.points : 200;
+              grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image });
+      });
   CATEGORY_DATA = grouped;
   CATEGORY_TOPICS = Object.keys(grouped);
 }
@@ -341,18 +341,19 @@ function pickFromTier(tier, usedSet, n){
   chosen.forEach(i=>usedSet.add(i));
   return chosen.map(i=>tier[i]);
 }
-function pickQuestionsForBankTopic(topicName){
-  if(!bankUsage[topicName]) bankUsage[topicName] = { easy:new Set(), medium:new Set() };
-  const bank = CATEGORY_DATA[topicName];
-  const easyQs = pickFromTier(bank.easy, bankUsage[topicName].easy, 2);
-  const medQs = pickFromTier(bank.medium, bankUsage[topicName].medium, 2);
-  return [
-          ...easyQs.map(q=>({ id:nextId(), text:q.text, answer:q.answer, points:100, image:q.image })),
-          ...medQs.map(q=>({ id:nextId(), text:q.text, answer:q.answer, points:200, image:q.image }))
-  ];
+  function pickQuestionsForBankTopic(topicName){
+      if(!bankUsage[topicName]) bankUsage[topicName] = { 100:new Set(), 200:new Set(), 400:new Set(), 600:new Set() };
+         const bank = CATEGORY_DATA[topicName];
+      const counts = { 100:2, 200:2, 400:1, 600:1 };
+      const result = [];
+      [100,200,400,600].forEach(pts=>{
+        const picked = pickFromTier(bank[pts], bankUsage[topicName][pts], counts[pts]);
+              picked.forEach(q=> result.push({ id:nextId(), text:q.text, answer:q.answer, points:pts, image:q.image }));
+      });
+      return result;
 }
 
-/* ============================ SUPABASE (حسابات + إحصائيات) ============================ */
+    /* ============================ SUPABASE (حسابات + إحصائيات) ============================ */
 const SUPABASE_URL = "https://pajxormplmloivyankji.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhanhvcm1wbG1sb2l2eWFua2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA0ODQ3OTksImV4cCI6MjA3NjA2MDc5OX0.eEPB_Gt5HywU9oGNXLpSNc4IA7CTTL7CX-EMKDE3yec";
 
@@ -447,13 +448,14 @@ const state = {
   categoryDataLoaded: false,
   categoryDataError: '',
   teams: [
-    { name: 'الفريق الأول', score: 0 },
-    { name: 'الفريق الثاني', score: 0 }
+    { name: 'الفريق الأول', score: 0, helps: 3 },
+    { name: 'الفريق الثاني', score: 0, helps: 3 }
   ],
   pool: [],           // { id, name, bankKey|null, taken:false, takenBy:null, questions:[{id,text,answer,points}] }
   selectedTopicIds: [],
   turn: 0,
   activeCell: null,
+      helpHints: {0:null, 1:null},
   timerLeft: 0,
   timerHandle: null,
 
@@ -512,17 +514,19 @@ function makeCustomTopic(name){
       { id: nextId(), text:'', answer:'', points:100 },
       { id: nextId(), text:'', answer:'', points:100 },
       { id: nextId(), text:'', answer:'', points:200 },
-      { id: nextId(), text:'', answer:'', points:200 }
+      { id: nextId(), text:'', answer:'', points:200 },
+      { id: nextId(), text:'', answer:'', points:400 },
+      { id: nextId(), text:'', answer:'', points:600 }
     ]
   };
 }
 function makeBankTopic(topicName){
   return {
     id: nextId(),
-    name: topicName,
-    bankKey: topicName,
-    taken:false, takenBy:null,
-    expanded:false,
+          name: topicName,
+          bankKey: topicName,
+          taken:false, takenBy:null,
+          expanded:false,
     questions: pickQuestionsForBankTopic(topicName)
   };
 }
@@ -869,6 +873,8 @@ function renderTeams(){
     state.turn = 0;
     state.teams[0].score = 0;
     state.teams[1].score = 0;
+            state.teams[0].helps = 3;
+          state.teams[1].helps = 3;
     state.statsRecordedForThisGame = false;
     goto('select');
   });
@@ -1192,6 +1198,8 @@ function renderEnd(){
     state.selectedTopicIds = [];
     state.turn = 0;
     state.teams[0].score = 0;
+    state.teams[0].helps = 3;
+        state.teams[1].helps = 3;
     state.teams[1].score = 0;
     state.statsRecordedForThisGame = false;
   }
