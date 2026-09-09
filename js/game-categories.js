@@ -300,6 +300,7 @@ function renderHelpSection(topic, q){
       <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="choices" ${disabled?'disabled':''}>خيارات</button>
       <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="swap" ${disabled?'disabled':''}>تبديل السؤال</button>
       ` : ''}
+      ${isNativeApp() ? `<button class="btn btn-gold btn-sm help-btn" data-team="${ti}" data-type="ad">🎥 شاهد إعلان (+١ مساعدة)</button>` : ''}
     </div>
     ${state.helpHints[ti] ? `<div class="help-result">${escapeAttr(state.helpHints[ti])}</div>` : ''}
   </div>`;
@@ -311,6 +312,17 @@ function wireHelpButtons(modal, topic, q){
       const ti = parseInt(btn.dataset.team,10);
       const type = btn.dataset.type;
       const team = state.teams[ti];
+
+      if(type==='ad'){
+        btn.disabled = true;
+        btn.textContent = '...جاري تحميل الإعلان';
+        showRewardedAd((earned)=>{
+          if(earned){ team.helps++; }
+          render();
+        });
+        return;
+      }
+
       if(team.helps<=0) return;
 
       if(type==='swap'){
@@ -655,7 +667,7 @@ function renderEnd(){
     goto('select');
   });
 
-  wrap.querySelector('#new-hub').addEventListener('click', ()=> goto('hub'));
+  wrap.querySelector('#new-hub').addEventListener('click', ()=>{ showInterstitialAd(); goto('hub'); });
 
   return wrap;
 }
