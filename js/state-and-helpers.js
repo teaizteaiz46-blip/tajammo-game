@@ -1,0 +1,106 @@
+/* ============================ STATE ============================ */
+const state = {
+  screen: 'hub',
+  timerEnabled: false,
+  timerSeconds: 30,
+  user: null,
+  statsRecordedForThisGame: false,
+  showAuthModal: false,
+  authMode: 'signin',
+  authError: '',
+  authBusy: false,
+  categoryDataLoaded: false,
+  categoryDataError: '',
+  teams: [
+    { name: 'الفريق الأول', score: 0, helps: 3 },
+    { name: 'الفريق الثاني', score: 0, helps: 3 }
+  ],
+  pool: [],
+  selectedTopicIds: [],
+  turn: 0,
+  activeCell: null,
+  helpHints: {0:null, 1:null},
+  timerLeft: 0,
+  timerHandle: null,
+
+  whoamiPlayerCount: 5,
+  whoamiPlayerNames: [],
+  whoamiPlayers: [],
+  whoamiRevealIndex: 0,
+  whoamiRevealShown: false,
+  whoamiTurn: 0,
+  whoamiFinishOrder: [],
+  whoamiTimerEnabled: false,
+  whoamiTimerSeconds: 30,
+  whoamiTimerLeft: 0,
+  whoamiTimerHandle: null,
+  whoamiLoading: false,
+  whoamiError: '',
+
+  shdPlayerCount: 6,
+  shdPlayerNames: [],
+  shdPlayers: [],
+  shdRevealIndex: 0,
+  shdRevealShown: false,
+  shdDeck: [],
+  shdDiscard: [],
+  shdGoodCount: 0,
+  shdEvilCount: 0,
+  shdPresidentIdx: 0,
+  shdChancellorIdx: null,
+  shdLastPresidentIdx: null,
+  shdLastChancellorIdx: null,
+  shdVotes: {},
+  shdVoteStep: 0,
+  shdVoteOrder: [],
+  shdDrawnPolicies: [],
+  shdPresDiscardDone: false,
+  shdChanDiscardDone: false,
+  shdLastEnacted: null,
+  shdWinner: null,
+  shdRoundMessage: ''
+};
+
+let uid = 1;
+const nextId = () => 'id' + (uid++);
+
+/* ============================ HELPERS ============================ */
+function makeCustomTopic(name){
+  return {
+    id: nextId(),
+    name: name,
+    bankKey: null,
+    taken:false, takenBy:null,
+    expanded:false,
+    questions:[
+      { id: nextId(), text:'', answer:'', points:100 },
+      { id: nextId(), text:'', answer:'', points:100 },
+      { id: nextId(), text:'', answer:'', points:200 },
+      { id: nextId(), text:'', answer:'', points:200 },
+      { id: nextId(), text:'', answer:'', points:400 },
+      { id: nextId(), text:'', answer:'', points:600 }
+    ]
+  };
+}
+function makeBankTopic(topicName){
+  return {
+    id: nextId(),
+    name: topicName,
+    bankKey: topicName,
+    taken:false, takenBy:null,
+    expanded:false,
+    questions: pickQuestionsForBankTopic(topicName)
+  };
+}
+
+function el(html){
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  return t.content.firstElementChild;
+}
+
+function goto(screen){ state.screen = screen; render(); window.scrollTo({top:0, behavior:'smooth'}); }
+
+function escapeAttr(s){
+  return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
