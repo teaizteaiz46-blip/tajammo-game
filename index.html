@@ -316,14 +316,14 @@ async function loadCategoryDatabase(){
   if(!sb) throw new Error('لا يوجد اتصال بالإنترنت');
   const { data, error } = await sb
     .from('category_questions')
-    .select('topic, points, question, answer')
+          .select('topic, points, question, answer, image')
     .limit(2000);
   if(error) throw error;
   const grouped = {};
   data.forEach(row=>{
     if(!grouped[row.topic]) grouped[row.topic] = { easy:[], medium:[] };
     const tier = row.points <= 100 ? 'easy' : 'medium';
-    grouped[row.topic][tier].push({ text:row.question, answer:row.answer });
+          grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image });
   });
   CATEGORY_DATA = grouped;
   CATEGORY_TOPICS = Object.keys(grouped);
@@ -347,8 +347,8 @@ function pickQuestionsForBankTopic(topicName){
   const easyQs = pickFromTier(bank.easy, bankUsage[topicName].easy, 2);
   const medQs = pickFromTier(bank.medium, bankUsage[topicName].medium, 2);
   return [
-    ...easyQs.map(q=>({ id:nextId(), text:q.text, answer:q.answer, points:100 })),
-    ...medQs.map(q=>({ id:nextId(), text:q.text, answer:q.answer, points:200 }))
+          ...easyQs.map(q=>({ id:nextId(), text:q.text, answer:q.answer, points:100, image:q.image })),
+          ...medQs.map(q=>({ id:nextId(), text:q.text, answer:q.answer, points:200, image:q.image }))
   ];
 }
 
@@ -1012,6 +1012,7 @@ function renderQuestionOverlay(){
   const modal = el(`<div class="q-modal">
     <div class="q-topic">${escapeAttr(topic.name)}</div>
     <div class="q-points">${q.points} نقطة</div>
+      ${q.image ? `<div style="font-size:110px; line-height:1.2; margin-bottom:10px;">${q.image}</div>` : ''}
     <div class="q-text">${escapeAttr(q.text)}</div>
     ${state.timerEnabled ? `<div class="timer" id="timer-display">${state.timerLeft}</div>` : ''}
     ${revealed ? `
