@@ -286,6 +286,13 @@
   .answer-box .label{color:var(--muted); font-size:13px; margin-bottom:6px;}
   .answer-box .val{font-size:19px; color:var(--sage); font-weight:700;}
   .award-row{display:flex; gap:10px; justify-content:center; margin-top:24px; flex-wrap:wrap;}
+  .help-wrap{border-top:1px dashed var(--line); margin-top:20px; padding-top:16px;}
+  .help-title{font-size:13px; color:var(--muted); margin-bottom:12px;}
+  .help-cols{display:flex; gap:20px; justify-content:center; flex-wrap:wrap;}
+  .help-col{min-width:210px;}
+  .help-col-name{font-size:12px; color:var(--muted); margin-bottom:8px;}
+  .help-btns{display:flex; gap:6px; flex-wrap:wrap; justify-content:center;}
+  .help-result{margin-top:8px; font-size:15px; color:var(--gold); font-family:'Changa';}
 
   /* ---------- end screen ---------- */
   .end-wrap{text-align:center; padding:40px 10px;}
@@ -306,25 +313,23 @@
 
 <script>
 /* ============================ CATEGORY QUESTION BANK (Supabase) ============================ */
-/* كل موضوع فيه ٥ أسئلة سهلة (١٠٠ نقطة) و٥ أسئلة متوسطة (٢٠٠ نقطة)، محمّلة من قاعدة بيانات أونلاين.
-   كل لعبة تختار عشوائياً ٢ من كل مستوى، وتتجنب تكرار نفس الأسئلة قبل ما تخلص كل الأسئلة المتوفرة. */
-let CATEGORY_TOPICS = [];   // ['جغرافيا', 'تاريخ', ...] يُملى بعد التحميل
-let CATEGORY_DATA = {};     // { 'جغرافيا': { easy:[{text,answer}], medium:[{text,answer}] } }
-const bankUsage = {};       // { topicName: { easy:Set, medium:Set } }, in-memory rotation tracker
+let CATEGORY_TOPICS = [];
+let CATEGORY_DATA = {};
+const bankUsage = {};
 
 async function loadCategoryDatabase(){
   if(!sb) throw new Error('لا يوجد اتصال بالإنترنت');
   const { data, error } = await sb
     .from('category_questions')
-          .select('topic, points, question, answer, image')
+    .select('topic, points, question, answer, image')
     .limit(2000);
   if(error) throw error;
   const grouped = {};
-      data.forEach(row=>{
-              if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
-              const tier = grouped[row.topic][row.points] ? row.points : 200;
-              grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image });
-      });
+  data.forEach(row=>{
+    if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
+    const tier = grouped[row.topic][row.points] ? row.points : 200;
+    grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image });
+  });
   CATEGORY_DATA = grouped;
   CATEGORY_TOPICS = Object.keys(grouped);
 }
@@ -341,19 +346,19 @@ function pickFromTier(tier, usedSet, n){
   chosen.forEach(i=>usedSet.add(i));
   return chosen.map(i=>tier[i]);
 }
-  function pickQuestionsForBankTopic(topicName){
-      if(!bankUsage[topicName]) bankUsage[topicName] = { 100:new Set(), 200:new Set(), 400:new Set(), 600:new Set() };
-         const bank = CATEGORY_DATA[topicName];
-      const counts = { 100:2, 200:2, 400:1, 600:1 };
-      const result = [];
-      [100,200,400,600].forEach(pts=>{
-        const picked = pickFromTier(bank[pts], bankUsage[topicName][pts], counts[pts]);
-              picked.forEach(q=> result.push({ id:nextId(), text:q.text, answer:q.answer, points:pts, image:q.image }));
-      });
-      return result;
+function pickQuestionsForBankTopic(topicName){
+  if(!bankUsage[topicName]) bankUsage[topicName] = { 100:new Set(), 200:new Set(), 400:new Set(), 600:new Set() };
+  const bank = CATEGORY_DATA[topicName];
+  const counts = { 100:2, 200:2, 400:1, 600:1 };
+  const result = [];
+  [100,200,400,600].forEach(pts=>{
+    const picked = pickFromTier(bank[pts], bankUsage[topicName][pts], counts[pts]);
+    picked.forEach(q=> result.push({ id:nextId(), text:q.text, answer:q.answer, points:pts, image:q.image }));
+  });
+  return result;
 }
 
-    /* ============================ SUPABASE (حسابات + إحصائيات) ============================ */
+/* ============================ SUPABASE (حسابات + إحصائيات) ============================ */
 const SUPABASE_URL = "https://pajxormplmloivyankji.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhanhvcm1wbG1sb2l2eWFua2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA0ODQ3OTksImV4cCI6MjA3NjA2MDc5OX0.eEPB_Gt5HywU9oGNXLpSNc4IA7CTTL7CX-EMKDE3yec";
 
@@ -442,7 +447,7 @@ const state = {
   user: null,
   statsRecordedForThisGame: false,
   showAuthModal: false,
-  authMode: 'signin', // 'signin' | 'signup'
+  authMode: 'signin',
   authError: '',
   authBusy: false,
   categoryDataLoaded: false,
@@ -451,18 +456,17 @@ const state = {
     { name: 'الفريق الأول', score: 0, helps: 3 },
     { name: 'الفريق الثاني', score: 0, helps: 3 }
   ],
-  pool: [],           // { id, name, bankKey|null, taken:false, takenBy:null, questions:[{id,text,answer,points}] }
+  pool: [],
   selectedTopicIds: [],
   turn: 0,
   activeCell: null,
-      helpHints: {0:null, 1:null},
+  helpHints: {0:null, 1:null},
   timerLeft: 0,
   timerHandle: null,
 
-  // ---- من أنا؟ ----
   whoamiPlayerCount: 5,
   whoamiPlayerNames: [],
-  whoamiPlayers: [],     // [{name, character, guessed:false}]
+  whoamiPlayers: [],
   whoamiRevealIndex: 0,
   whoamiRevealShown: false,
   whoamiTurn: 0,
@@ -474,10 +478,9 @@ const state = {
   whoamiLoading: false,
   whoamiError: '',
 
-  // ---- الحلفاء والشياطين ----
   shdPlayerCount: 6,
   shdPlayerNames: [],
-  shdPlayers: [],        // [{name, role:'good'|'evil'}]
+  shdPlayers: [],
   shdRevealIndex: 0,
   shdRevealShown: false,
   shdDeck: [],
@@ -523,10 +526,10 @@ function makeCustomTopic(name){
 function makeBankTopic(topicName){
   return {
     id: nextId(),
-          name: topicName,
-          bankKey: topicName,
-          taken:false, takenBy:null,
-          expanded:false,
+    name: topicName,
+    bankKey: topicName,
+    taken:false, takenBy:null,
+    expanded:false,
     questions: pickQuestionsForBankTopic(topicName)
   };
 }
@@ -655,7 +658,7 @@ function renderHub(){
       <div class="card" id="card-cat">
         <span class="tag">فرق · ٢-فرق</span>
         <h3>لعبة الفئات</h3>
-        <p>كل فريق يختار ٣ فئات، وكل فئة فيها ٤ أسئلة بنقاط متفاوتة. من يجمع نقاط أكثر يفوز.</p>
+        <p>كل فريق يختار ٣ فئات، وكل فئة فيها ٦ أسئلة بنقاط متفاوتة. من يجمع نقاط أكثر يفوز.</p>
       </div>
       <div class="card" id="card-whoami">
         <span class="tag">جماعي · ٣-١٠ لاعبين</span>
@@ -873,8 +876,8 @@ function renderTeams(){
     state.turn = 0;
     state.teams[0].score = 0;
     state.teams[1].score = 0;
-            state.teams[0].helps = 3;
-          state.teams[1].helps = 3;
+    state.teams[0].helps = 3;
+    state.teams[1].helps = 3;
     state.statsRecordedForThisGame = false;
     goto('select');
   });
@@ -949,6 +952,7 @@ function renderBoard(){
       if(!used){
         cell.addEventListener('click', ()=>{
           state.activeCell = { topicId:t.id, qId:q.id };
+          state.helpHints = {0:null, 1:null};
           render();
           if(state.timerEnabled && q.text.trim()) startTimer();
         });
@@ -976,6 +980,70 @@ function renderScoreboard(){
 }
 
 /* ============================ QUESTION OVERLAY ============================ */
+function renderHelpSection(topic, q){
+  const cols = [0,1].map(ti=>{
+    const team = state.teams[ti];
+    const disabled = team.helps<=0;
+    return `<div class="help-col">
+      <div class="help-col-name">${escapeAttr(team.name)} — متبقي ${team.helps}</div>
+      <div class="help-btns">
+        <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="letter" ${disabled?'disabled':''}>أول حرف</button>
+        <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="blanks" ${disabled?'disabled':''}>عدد الأحرف</button>
+        ${topic.bankKey ? `
+        <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="choices" ${disabled?'disabled':''}>خيارات</button>
+        <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="swap" ${disabled?'disabled':''}>تبديل السؤال</button>
+        ` : ''}
+      </div>
+      ${state.helpHints[ti] ? `<div class="help-result">${escapeAttr(state.helpHints[ti])}</div>` : ''}
+    </div>`;
+  }).join('');
+  return `<div class="help-wrap">
+    <div class="help-title">مساعدات</div>
+    <div class="help-cols">${cols}</div>
+  </div>`;
+}
+
+function wireHelpButtons(modal, topic, q){
+  modal.querySelectorAll('.help-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const ti = parseInt(btn.dataset.team,10);
+      const type = btn.dataset.type;
+      const team = state.teams[ti];
+      if(team.helps<=0) return;
+
+      if(type==='swap'){
+        if(topic.bankKey){
+          const fresh = pickFromTier(CATEGORY_DATA[topic.bankKey][q.points], bankUsage[topic.bankKey][q.points], 1)[0];
+          if(fresh){ q.text = fresh.text; q.answer = fresh.answer; q.image = fresh.image; }
+        }
+        team.helps--;
+        state.helpHints = {0:null, 1:null};
+        render();
+        return;
+      }
+
+      let hint = '';
+      if(type==='letter'){
+        hint = 'أول حرف: ' + (q.answer.trim().charAt(0) || '؟');
+      } else if(type==='blanks'){
+        hint = 'عدد الأحرف: ' + q.answer.replace(/\s/g,'').length;
+      } else if(type==='choices' && topic.bankKey){
+        const bank = CATEGORY_DATA[topic.bankKey];
+        const allAnswers = [].concat(bank[100]||[], bank[200]||[], bank[400]||[], bank[600]||[])
+          .map(x=>x.answer).filter(a=> a && a !== q.answer);
+        const decoys = shuffled(allAnswers).slice(0,2);
+        const options = shuffled([q.answer, ...decoys]);
+        hint = 'الخيارات: ' + options.join(' / ');
+      }
+      if(hint){
+        team.helps--;
+        state.helpHints[ti] = hint;
+        render();
+      }
+    });
+  });
+}
+
 function renderQuestionOverlay(){
   const { topicId, qId } = state.activeCell;
   const topic = state.pool.find(t=>t.id===topicId);
@@ -1018,9 +1086,10 @@ function renderQuestionOverlay(){
   const modal = el(`<div class="q-modal">
     <div class="q-topic">${escapeAttr(topic.name)}</div>
     <div class="q-points">${q.points} نقطة</div>
-            ${q.image ? `<img src="https://flagcdn.com/w320/${q.image}.png" style="width:180px; max-width:70%; border-radius:8px; margin-bottom:14px; box-shadow:0 4px 14px rgba(0,0,0,0.4);" alt=""/>` : ''}
+    ${q.image ? `<img src="https://flagcdn.com/w320/${q.image}.png" style="width:180px; max-width:70%; border-radius:8px; margin-bottom:14px; box-shadow:0 4px 14px rgba(0,0,0,0.4);" alt=""/>` : ''}
     <div class="q-text">${escapeAttr(q.text)}</div>
     ${state.timerEnabled ? `<div class="timer" id="timer-display">${state.timerLeft}</div>` : ''}
+    ${!revealed ? renderHelpSection(topic, q) : ''}
     ${revealed ? `
       <div class="answer-box">
         <div class="label">الإجابة</div>
@@ -1044,6 +1113,7 @@ function renderQuestionOverlay(){
       stopTimer();
       render();
     });
+    wireHelpButtons(modal, topic, q);
   } else {
     modal.querySelector('#award-0').addEventListener('click', ()=> awardPoints(0, topic, q));
     modal.querySelector('#award-1').addEventListener('click', ()=> awardPoints(1, topic, q));
@@ -1198,9 +1268,9 @@ function renderEnd(){
     state.selectedTopicIds = [];
     state.turn = 0;
     state.teams[0].score = 0;
-    state.teams[0].helps = 3;
-        state.teams[1].helps = 3;
     state.teams[1].score = 0;
+    state.teams[0].helps = 3;
+    state.teams[1].helps = 3;
     state.statsRecordedForThisGame = false;
   }
 
