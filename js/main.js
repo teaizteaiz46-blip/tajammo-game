@@ -10,3 +10,4 @@ if(sb){
 }
 
 render();
+initAdMob();
