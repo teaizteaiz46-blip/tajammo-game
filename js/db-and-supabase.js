@@ -7,14 +7,14 @@ async function loadCategoryDatabase(){
   if(!sb) throw new Error('لا يوجد اتصال بالإنترنت');
   const { data, error } = await sb
     .from('category_questions')
-    .select('topic, points, question, answer, image')
+    .select('topic, points, question, answer, image, media_type')
     .limit(2000);
   if(error) throw error;
   const grouped = {};
   data.forEach(row=>{
     if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
     const tier = grouped[row.topic][row.points] ? row.points : 200;
-    grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image });
+    grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type });
   });
   CATEGORY_DATA = grouped;
   CATEGORY_TOPICS = Object.keys(grouped);
@@ -39,7 +39,7 @@ function pickQuestionsForBankTopic(topicName){
   const result = [];
   [100,200,400,600].forEach(pts=>{
     const picked = pickFromTier(bank[pts], bankUsage[topicName][pts], counts[pts]);
-    picked.forEach(q=> result.push({ id:nextId(), text:q.text, answer:q.answer, points:pts, image:q.image }));
+    picked.forEach(q=> result.push({ id:nextId(), text:q.text, answer:q.answer, points:pts, image:q.image, mediaType:q.mediaType }));
   });
   return result;
 }
