@@ -1,6 +1,7 @@
 /* ============================ STATE ============================ */
 const state = {
   screen: 'hub',
+  history: [],
   timerEnabled: false,
   timerSeconds: 30,
   user: null,
@@ -114,7 +115,8 @@ function el(html){
   return t.content.firstElementChild;
 }
 
-function goto(screen){ state.screen = screen; render(); window.scrollTo({top:0, behavior:'smooth'}); }
+    function goto(screen){ if(state.screen!==screen) state.history.push(state.screen); state.screen = screen; render(); window.scrollTo({top:0, behavior:'smooth'}); }
+    function goBack(){ if(state.history.length){ state.screen = state.history.pop(); render(); window.scrollTo({top:0, behavior:'smooth'}); } }
 
 function escapeAttr(s){
   return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
