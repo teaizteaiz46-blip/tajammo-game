@@ -328,7 +328,7 @@ function wireHelpButtons(modal, topic, q){
 
       if(type==='swap'){
         if(topic.bankKey){
-          const fresh = pickFromTier(CATEGORY_DATA[topic.bankKey][q.points], bankUsage[topic.bankKey][q.points], 1)[0];
+                  const fresh = pickFromTier((CATEGORY_DATA[topic.bankKey]||{})[q.points]||[], bankUsage[topic.bankKey][q.points], 1)[0];
           if(fresh){ q.text = fresh.text; q.answer = fresh.answer; q.image = fresh.image; }
         }
         team.helps--;
@@ -343,7 +343,7 @@ function wireHelpButtons(modal, topic, q){
       } else if(type==='blanks'){
         hint = 'عدد الأحرف: ' + q.answer.replace(/\s/g,'').length;
       } else if(type==='choices' && topic.bankKey){
-        const bank = CATEGORY_DATA[topic.bankKey];
+                const bank = CATEGORY_DATA[topic.bankKey] || {};
         const allAnswers = [].concat(bank[100]||[], bank[200]||[], bank[400]||[], bank[600]||[])
           .map(x=>x.answer).filter(a=> a && a !== q.answer);
         const decoys = shuffled(allAnswers).slice(0,2);
