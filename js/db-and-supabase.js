@@ -23,6 +23,7 @@ function shuffled(arr){
   return a;
 }
 function pickFromTier(tier, usedSet, n){
+  tier = tier || [];
   let avail = tier.map((_,i)=>i).filter(i=>!usedSet.has(i));
   if(avail.length < n){ usedSet.clear(); avail = tier.map((_,i)=>i); }
   const chosen = shuffled(avail).slice(0,n);
