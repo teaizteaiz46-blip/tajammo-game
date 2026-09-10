@@ -4,20 +4,17 @@ let CATEGORY_DATA = {};
 const bankUsage = {};
 
 async function loadCategoryDatabase(){
-  if(!sb) throw new Error('لا يوجد اتصال بالإنترنت');
-  const { data, error } = await sb
-    .from('category_questions')
-    .select('topic, points, question, answer, image, media_type')
-    .limit(2000);
-  if(error) throw error;
-  const grouped = {};
-  data.forEach(row=>{
-    if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
-    const tier = grouped[row.topic][row.points] ? row.points : 200;
-    grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type });
-  });
-  CATEGORY_DATA = grouped;
-  CATEGORY_TOPICS = Object.keys(grouped);
+    const res = await fetch(SUPABASE_URL + '/rest/v1/category_questions?select=topic,points,question,answer,image,media_type&limit=2000', { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY } });
+    if(!res.ok) throw new Error('فشل تحميل الأسئلة (HTTP ' + res.status + ')');
+    const data = await res.json();
+    const grouped = {};
+    data.forEach(row=>{
+          if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
+          const tier = grouped[row.topic][row.points] ? row.points : 200;
+          grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type });
+    });
+    CATEGORY_DATA = grouped;
+    CATEGORY_TOPICS = Object.keys(grouped);
 }
 
 function shuffled(arr){
