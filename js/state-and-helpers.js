@@ -43,25 +43,13 @@ const state = {
   shdPlayerCount: 6,
   shdPlayerNames: [],
   shdPlayers: [],
+  shdDemonCount: 1,
+  shdDoctorCount: 0,
+  shdPoliceCount: 0,
   shdRevealIndex: 0,
   shdRevealShown: false,
-  shdDeck: [],
-  shdDiscard: [],
-  shdGoodCount: 0,
-  shdEvilCount: 0,
-  shdPresidentIdx: 0,
-  shdChancellorIdx: null,
-  shdLastPresidentIdx: null,
-  shdLastChancellorIdx: null,
-  shdVotes: {},
-  shdVoteStep: 0,
-  shdVoteOrder: [],
-  shdDrawnPolicies: [],
-  shdPresDiscardDone: false,
-  shdChanDiscardDone: false,
-  shdLastEnacted: null,
   shdWinner: null,
-  shdRoundMessage: ''
+  shdScores: {}
 };
 
 let uid = 1;
