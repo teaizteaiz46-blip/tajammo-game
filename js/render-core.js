@@ -42,6 +42,7 @@ function render(){
 
 function renderTopbar(){
   const bar = el(`<div class="topbar">
+    <button class="btn btn-ghost btn-sm" id="back-arrow" style="display:${state.history.length?'inline-flex':'none'};">→ رجوع</button>
     <div class="brand"><span class="dot"></span> تجمّع</div>
     <div class="topbar-right" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
       <div class="crumb"></div>
@@ -52,6 +53,7 @@ function renderTopbar(){
     stopWhoamiTimer();
     goto('hub');
   });
+    if(bar.querySelector('#back-arrow')) bar.querySelector('#back-arrow').addEventListener('click', ()=>{ stopTimer(); stopWhoamiTimer(); goBack(); });
   const crumbMap = {
     'cat-loading':'لعبة الفئات · تحميل البنك',
     editor:'لعبة الفئات · اختيار المواضيع',
