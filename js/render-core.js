@@ -17,13 +17,9 @@ function render(){
     case 'whoami-play': body = renderWhoamiPlay(); break;
     case 'whoami-end': body = renderWhoamiEnd(); break;
     case 'shd-setup': body = renderShdSetup(); break;
+    case 'shd-roles': body = renderShdRoles(); break;
     case 'shd-reveal': body = renderShdReveal(); break;
-    case 'shd-nominate': body = renderShdNominate(); break;
-    case 'shd-vote': body = renderShdVote(); break;
-    case 'shd-vote-result': body = renderShdVoteResult(); break;
-    case 'shd-president-policy': body = renderShdPresidentPolicy(); break;
-    case 'shd-chancellor-policy': body = renderShdChancellorPolicy(); break;
-    case 'shd-policy-result': body = renderShdPolicyResult(); break;
+    case 'shd-winner': body = renderShdWinner(); break;
     case 'shd-end': body = renderShdEnd(); break;
     default: body = renderHub();
   }
