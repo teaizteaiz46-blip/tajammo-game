@@ -12,4 +12,4 @@ if(sb){
 render();
 initAdMob();
 if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App){ window.Capacitor.Plugins.App.addListener('backButton', ()=>{ if(state.history && state.history.length){ goBack(); } else if(state.screen !== 'hub'){ goto('hub'); } else { window.Capacitor.Plugins.App.exitApp(); } }); }
-document.addEventListener('click', function(e){ if(e.target.closest('#back-arrow')){ stopTimer(); stopWhoamiTimer(); goBack(); } });
+document.addEventListener('click', function(e){ alert('ضغطت على: ' + e.target.tagName + ' id=' + e.target.id + ' class=' + e.target.className); if(e.target.closest('#back-arrow')){ stopTimer(); stopWhoamiTimer(); goBack(); } });
