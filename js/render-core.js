@@ -62,14 +62,11 @@ function renderTopbar(){
     'whoami-play':'من أنا؟ · اللعب',
     'whoami-end':'من أنا؟ · النتيجة',
     'shd-setup':'الحلفاء والشياطين · تجهيز',
+    'shd-roles':'الحلفاء والشياطين · تحديد الأدوار',
     'shd-reveal':'الحلفاء والشياطين · توزيع الأدوار',
-    'shd-nominate':'الحلفاء والشياطين · ترشيح الوزير',
-    'shd-vote':'الحلفاء والشياطين · التصويت',
-    'shd-vote-result':'الحلفاء والشياطين · نتيجة التصويت',
-    'shd-president-policy':'الحلفاء والشياطين · دور الرئيس',
-    'shd-chancellor-policy':'الحلفاء والشياطين · دور الوزير',
-    'shd-policy-result':'الحلفاء والشياطين · نتيجة القانون',
+    'shd-winner':'الحلفاء والشياطين · تحديد الفائز',
     'shd-end':'الحلفاء والشياطين · النتيجة'
+    
   };
   if(crumbMap[state.screen]) bar.querySelector('.crumb').textContent = crumbMap[state.screen];
 
