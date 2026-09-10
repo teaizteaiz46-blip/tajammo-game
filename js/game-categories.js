@@ -20,7 +20,8 @@ function renderCatLoading(){
         }
         goto('editor');
       } catch(e){
-        state.categoryDataError = 'تعذّر تحميل بنك الأسئلة — تأكد من اتصال الإنترنت وحاول مرة ثانية.';
+        console.error('loadCategoryDatabase failed:', e);
+        state.categoryDataError = 'تعذّر تحميل بنك الأسئلة — ' + (e && (e.message || e.error_description || JSON.stringify(e)) || 'خطأ غير معروف');
         render();
       }
     });
