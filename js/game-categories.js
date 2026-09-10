@@ -432,12 +432,12 @@ function renderQuestionOverlay(){
     <div class="q-points">${q.points} نقطة</div>
     ${q.mediaType === 'flag' && q.image ? `<img src="https://flagcdn.com/w320/${q.image}.png" style="width:180px; max-width:70%; border-radius:8px; margin-bottom:14px; box-shadow:0 4px 14px rgba(0,0,0,0.4);" alt=""/>` : ''}
     ${q.mediaType === 'song' && q.image ? `<div class="song-player" id="song-player"><div class="section-sub">...جاري تحميل المقطع</div></div>` : ''}
-    <div class="q-text">${escapeAttr(q.text)}</div>
+            <div class="q-text">${q.mediaType==='acting' ? '🎭 مثّل الكلمة أمام فريقك بدون كلام!' : escapeAttr(q.text)}</div>
     ${state.timerEnabled ? `<div class="timer" id="timer-display">${state.timerLeft}</div>` : ''}
-    ${!revealed ? renderHelpSection(topic, q) : ''}
+            ${!revealed && q.mediaType!=='acting' ? renderHelpSection(topic, q) : ''}
     ${revealed ? `
       <div class="answer-box">
-        <div class="label">الإجابة</div>
+                  <div class="label">${q.mediaType==='acting' ? 'الكلمة' : 'الإجابة'}</div>
         <div class="val">${escapeAttr(q.answer)}</div>
       </div>
       <div class="award-row">
@@ -447,7 +447,7 @@ function renderQuestionOverlay(){
       </div>
     ` : `
       <div class="btn-row" style="justify-content:center;">
-        <button class="btn btn-gold" id="reveal">إظهار الإجابة</button>
+                  <button class="btn btn-gold" id="reveal">${q.mediaType==='acting' ? '🎭 إظهار الكلمة' : 'إظهار الإجابة'}</button>
       </div>
     `}
   </div>`);
