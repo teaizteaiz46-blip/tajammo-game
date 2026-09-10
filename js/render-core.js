@@ -53,7 +53,7 @@ function renderTopbar(){
     stopWhoamiTimer();
     goto('hub');
   });
-    if(bar.querySelector('#back-arrow')) bar.querySelector('#back-arrow').addEventListener('click', ()=>{ stopTimer(); stopWhoamiTimer(); goBack(); });
+    bar.addEventListener('click', (e)=>{ if(e.target.closest('#back-arrow')){ stopTimer(); stopWhoamiTimer(); goBack(); } });
   const crumbMap = {
     'cat-loading':'لعبة الفئات · تحميل البنك',
     editor:'لعبة الفئات · اختيار المواضيع',
