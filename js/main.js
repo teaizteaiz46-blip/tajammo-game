@@ -11,3 +11,4 @@ if(sb){
 
 render();
 initAdMob();
+if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App){ window.Capacitor.Plugins.App.addListener('backButton', ()=>{ if(state.history && state.history.length){ goBack(); } else if(state.screen !== 'hub'){ goto('hub'); } else { window.Capacitor.Plugins.App.exitApp(); } }); }
