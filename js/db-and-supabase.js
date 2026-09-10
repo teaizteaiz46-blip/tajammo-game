@@ -31,7 +31,7 @@ function pickFromTier(tier, usedSet, n){
 }
 function pickQuestionsForBankTopic(topicName){
   if(!bankUsage[topicName]) bankUsage[topicName] = { 100:new Set(), 200:new Set(), 400:new Set(), 600:new Set() };
-  const bank = CATEGORY_DATA[topicName];
+  const bank = CATEGORY_DATA[topicName] || {};
   const counts = { 100:2, 200:2, 400:1, 600:1 };
   const result = [];
   [100,200,400,600].forEach(pts=>{
