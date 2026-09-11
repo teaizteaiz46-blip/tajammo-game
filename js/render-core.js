@@ -4,25 +4,20 @@ function render(){
   app.innerHTML = '';
   app.appendChild(renderTopbar());
   let body;
-  switch(state.screen){
-    case 'hub': body = renderHub(); break;
-    case 'cat-loading': body = renderCatLoading(); break;
-    case 'editor': body = renderEditor(); break;
-    case 'custom-editor': body = renderCustomEditor(); break;
-    case 'teams': body = renderTeams(); break;
-    case 'select': body = renderSelect(); break;
-    case 'board': body = renderBoard(); break;
-    case 'end': body = renderEnd(); break;
-    case 'whoami-setup': body = renderWhoamiSetup(); break;
-    case 'whoami-reveal': body = renderWhoamiReveal(); break;
-    case 'whoami-play': body = renderWhoamiPlay(); break;
-    case 'whoami-end': body = renderWhoamiEnd(); break;
-    case 'shd-setup': body = renderShdSetup(); break;
-    case 'shd-roles': body = renderShdRoles(); break;
-    case 'shd-reveal': body = renderShdReveal(); break;
-    case 'shd-winner': body = renderShdWinner(); break;
-    case 'shd-end': body = renderShdEnd(); break;
-    default: body = renderHub();
+  try{
+    body = renderScreen();
+  }catch(err){
+    // بلا هذا، أي خطأ بشاشة يخلي اللاعب قدام صفحة فاضية بلا أي تفسير
+    console.error('فشل رسم الشاشة "' + state.screen + '":', err);
+    body = el(`<div class="panel" style="text-align:center;">
+      <div class="section-title" style="justify-content:center;">صارت مشكلة بهذي الشاشة</div>
+      <div class="section-sub">${escapeAttr(String(err && err.message || err))}</div>
+      <div class="btn-row" style="justify-content:center;">
+        <button class="btn btn-gold" id="err-hub">رجوع للرئيسية</button>
+      </div>
+    </div>`);
+    const b = body.querySelector('#err-hub');
+    if(b) b.addEventListener('click', ()=>{ state.screen='hub'; state.history=[]; render(); });
   }
   app.appendChild(body);
 
@@ -37,6 +32,29 @@ function render(){
   }
   if(state.customShareCode){
     app.appendChild(renderShareCodeOverlay());
+  }
+}
+
+function renderScreen(){
+  switch(state.screen){
+    case 'hub':           return renderHub();
+    case 'cat-loading':   return renderCatLoading();
+    case 'editor':        return renderEditor();
+    case 'custom-editor': return renderCustomEditor();
+    case 'teams':         return renderTeams();
+    case 'select':        return renderSelect();
+    case 'board':         return renderBoard();
+    case 'end':           return renderEnd();
+    case 'whoami-setup':  return renderWhoamiSetup();
+    case 'whoami-reveal': return renderWhoamiReveal();
+    case 'whoami-play':   return renderWhoamiPlay();
+    case 'whoami-end':    return renderWhoamiEnd();
+    case 'shd-setup':     return renderShdSetup();
+    case 'shd-roles':     return renderShdRoles();
+    case 'shd-reveal':    return renderShdReveal();
+    case 'shd-winner':    return renderShdWinner();
+    case 'shd-end':       return renderShdEnd();
+    default:              return renderHub();
   }
 }
 
