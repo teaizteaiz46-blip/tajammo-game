@@ -33,6 +33,12 @@ function render(){
   if(state.customShareCode){
     app.appendChild(renderShareCodeOverlay());
   }
+  if(state.reportTopic){
+    app.appendChild(renderReportOverlay());
+  }
+  if(state.showTermsModal){
+    app.appendChild(renderTermsOverlay());
+  }
 }
 
 function renderScreen(){
