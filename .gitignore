@@ -1,3 +1,5 @@
-﻿node_modules/
+node_modules/
+www/
 *.jks
 *.keystore
+.DS_Store

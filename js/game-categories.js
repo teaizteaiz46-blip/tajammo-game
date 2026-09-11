@@ -85,31 +85,8 @@ function renderEditor(){
     wrap.appendChild(customPanel);
   }
 
-  if(isSubscribed()){
-    const addCustom = el(`<div class="panel">
-      <div class="section-title" style="font-size:16px;">أضف موضوع خاص</div>
-      <div class="section-sub">تكتب اسم موضوعك، والأسئلة تكتبها بنفسك أثناء اللعب لحظة ما تفتح كل خانة.</div>
-      <div style="display:flex; gap:10px;">
-        <input type="text" id="custom-name" placeholder="مثال: نجوم كرة القدم العراقية"/>
-        <button class="btn btn-gold btn-sm" id="add-custom" style="flex:none;">إضافة</button>
-      </div>
-    </div>`);
-    addCustom.querySelector('#add-custom').addEventListener('click', ()=>{
-      const input = addCustom.querySelector('#custom-name');
-      const name = input.value.trim();
-      if(!name) { input.focus(); return; }
-      state.pool.push(makeCustomTopic(name));
-      render();
-    });
-    wrap.appendChild(addCustom);
-  } else {
-    const addCustomLocked = el(`<div class="panel" style="text-align:center; cursor:pointer;">
-      <div class="section-title" style="font-size:16px;">🔒 أضف موضوع خاص</div>
-      <div class="section-sub" style="margin-bottom:0;">ميزة حصرية للمشتركين — اضغط للتفاصيل</div>
-    </div>`);
-    addCustomLocked.addEventListener('click', ()=> openUpsell('إضافة مواضيعك الخاصة ميزة حصرية للمشتركين.'));
-    wrap.appendChild(addCustomLocked);
-  }
+  // الفئات المخصصة: مفتوحة للكل بقصد — هي محرك الانتشار مو مصدر ربح
+  wrap.appendChild(renderCustomTopicsPanel());
 
   const actions = el(`<div class="btn-row">
     <button class="btn btn-gold" id="to-teams">التالي: الفرق</button>

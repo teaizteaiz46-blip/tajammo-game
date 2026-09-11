@@ -14,6 +14,19 @@ const state = {
   upsellMessage: '',
   categoryDataLoaded: false,
   categoryDataError: '',
+
+  // الفئات المخصصة (إنشاء / حفظ / مشاركة بكود)
+  customDraft: null,
+  customSaving: false,
+  customError: '',
+  customShareCode: '',
+  myCustomTopics: [],
+  myCustomLoading: false,
+  importCode: '',
+  importBusy: false,
+  importError: '',
+  importedNotice: '',
+
   teams: [
     { name: 'الفريق الأول', score: 0, helps: 3 },
     { name: 'الفريق الثاني', score: 0, helps: 3 }
@@ -56,7 +69,18 @@ let uid = 1;
 const nextId = () => 'id' + (uid++);
 
 /* ============================ SUBSCRIPTION ============================ */
-const FREE_TOPICS = ['جغرافيا','تاريخ','علوم','رياضة','سينما وتلفزيون','الأعلام'];
+/* الباقة المجانية مقصود تكون عراقية بالأغلب: هذا اللي يميّزنا عن التطبيقات
+   الخليجية، فلازم يشوفه اللاعب قبل ما يدفع — مو نخبّيه وراء الاشتراك. */
+const FREE_TOPICS = [
+  'أمثال عراقية',
+  'لهجة عراقية',
+  'أكل عراقي',
+  'بغداد',
+  'محافظات العراق',
+  'تاريخ العراق',
+  'معلومات عامة',
+  'رياضة'
+];
 
 function isSubscribed(){
   return !!(state.user && state.user.isSubscribed);

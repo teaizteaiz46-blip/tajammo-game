@@ -1,0 +1,2911 @@
+diff --git a/.gitignore b/.gitignore
+index f7e3508..08e5bb0 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,3 +1,5 @@
+-﻿node_modules/
+-*.jks
+-*.keystore
++node_modules/
++www/
++*.jks
++*.keystore
++.DS_Store
+diff --git a/build.js b/build.js
+new file mode 100644
+index 0000000..47a8f60
+--- /dev/null
++++ b/build.js
+@@ -0,0 +1,54 @@
++#!/usr/bin/env node
++/**
++ * يبني مجلد www/ (اللي يحزمه Capacitor للتطبيق) من ملفات المصدر بالجذر.
++ *
++ * المصدر الوحيد للحقيقة هو: index.html + styles.css + privacy.html + js/
++ * ومجلد www/ مُولَّد بالكامل — لا تعدّل أي ملف داخله، تعديلك راح يُمحى.
++ *
++ * الاستخدام:  npm run build
++ */
++const fs = require('fs');
++const path = require('path');
++
++const ROOT = __dirname;
++const OUT = path.join(ROOT, 'www');
++
++const FILES = ['index.html', 'styles.css', 'privacy.html'];
++const DIRS = ['js'];
++
++function fail(msg) {
++  console.error('✗ ' + msg);
++  process.exit(1);
++}
++
++// www/ مُولَّد بالكامل، فنمسحه ونبنيه من جديد حتى ما تبقى ملفات قديمة
++fs.rmSync(OUT, { recursive: true, force: true });
++fs.mkdirSync(OUT, { recursive: true });
++
++let copied = 0;
++
++for (const f of FILES) {
++  const src = path.join(ROOT, f);
++  if (!fs.existsSync(src)) fail(`الملف المطلوب مفقود: ${f}`);
++  fs.copyFileSync(src, path.join(OUT, f));
++  copied++;
++}
++
++for (const d of DIRS) {
++  const src = path.join(ROOT, d);
++  if (!fs.existsSync(src)) fail(`المجلد المطلوب مفقود: ${d}/`);
++  fs.cpSync(src, path.join(OUT, d), { recursive: true });
++  copied += fs.readdirSync(src).length;
++}
++
++// تحقق إن كل ملف <script src="js/..."> مذكور بـ index.html موجود فعلاً بالمخرجات،
++// حتى ما نرفع نسخة ناقصة للمتجر بلا ما نلاحظ
++const html = fs.readFileSync(path.join(OUT, 'index.html'), 'utf8');
++const missing = [...html.matchAll(/<script\s+src="([^"]+\.js)"/g)]
++  .map(m => m[1])
++  .filter(rel => !rel.startsWith('http'))
++  .filter(rel => !fs.existsSync(path.join(OUT, rel)));
++
++if (missing.length) fail('ملفات سكربت مذكورة بـ index.html بس غير موجودة: ' + missing.join(', '));
++
++console.log(`✓ تم بناء www/ — ${copied} ملف`);
+diff --git a/codemagic.yaml b/codemagic.yaml
+index 671a9ba..08b6d1b 100644
+--- a/codemagic.yaml
++++ b/codemagic.yaml
+@@ -12,8 +12,8 @@ workflows:
+     scripts:
+       - name: Install dependencies
+         script: npm install
+-      - name: Sync web assets into www
+-        script: cp index.html www/index.html && cp styles.css www/styles.css && cp privacy.html www/privacy.html && rm -rf www/js && cp -r js www/js
++      - name: Build www from source files
++        script: npm run build
+       - name: Sync Capacitor
+         script: |
+           chmod +x node_modules/.bin/*
+diff --git a/index.html b/index.html
+index 90d67bc..8fb0715 100644
+--- a/index.html
++++ b/index.html
+@@ -18,6 +18,7 @@
+ <script src="js/state-and-helpers.js"></script>
+ <script src="js/db-and-supabase.js"></script>
+ <script src="js/render-core.js"></script>
++<script src="js/custom-topics.js"></script>
+ <script src="js/game-categories.js"></script>
+ <script src="js/game-whoami.js"></script>
+ <script src="js/game-secrethitler.js"></script>
+diff --git a/js/custom-topics.js b/js/custom-topics.js
+new file mode 100644
+index 0000000..d40dee1
+--- /dev/null
++++ b/js/custom-topics.js
+@@ -0,0 +1,439 @@
++/* ============================ الفئات المخصصة (إنشاء + حفظ + مشاركة بكود) ============================
++ *
++ * الفكرة: الكروب يسوي فئة أسئلة عن نفسه، يحفظها بحسابه، ويطلع له كود قصير
++ * ينقله بالواتساب لكروب ثاني فيلعبها. الاستيراد ما يحتاج حساب أبداً — هذا مقصود،
++ * لأن هذي الميزة هي محرك الانتشار مو مصدر ربح.
++ *
++ * توزيع النقاط ثابت حتى يضل اللوح متوازن مع فئات البنك.
++ */
++
++const CUSTOM_POINTS_LAYOUT = [100, 100, 200, 200, 400, 600];
++const CUSTOM_MAX_NAME = 60;
++
++function newCustomDraft() {
++  return {
++    name: '',
++    questions: CUSTOM_POINTS_LAYOUT.map(points => ({ question: '', answer: '', points }))
++  };
++}
++
++/* يبني موضوعاً جاهزاً للّوح من بيانات فئة (مستوردة أو مسودّة) */
++function makeCustomTopicFromData(name, questions) {
++  return {
++    id: nextId(),
++    name: name,
++    bankKey: null,
++    taken: false,
++    takenBy: null,
++    expanded: false,
++    questions: questions.map(q => ({
++      id: nextId(),
++      text: q.question || q.text || '',
++      answer: q.answer || '',
++      points: q.points
++    }))
++  };
++}
++
++function customDraftFilledCount() {
++  return state.customDraft.questions.filter(
++    q => q.question.trim() && q.answer.trim()
++  ).length;
++}
++
++function customDraftIsComplete() {
++  return state.customDraft.name.trim().length > 0 && customDraftFilledCount() === 6;
++}
++
++/* ============================ حفظ ============================ */
++
++async function saveCustomTopicToCloud() {
++  if (!sb) { state.customError = 'تحتاج اتصال إنترنت حتى تحفظ الفئة.'; render(); return; }
++  if (!state.user) {
++    state.showAuthModal = true;
++    state.authMode = 'signin';
++    state.authError = '';
++    state.customError = 'سجّل دخول حتى تحفظ فئتك ويطلع لك كود مشاركة.';
++    render();
++    return;
++  }
++  if (!customDraftIsComplete()) {
++    state.customError = 'عبّي اسم الفئة وكل الأسئلة الستة مع أجوبتها.';
++    render();
++    return;
++  }
++
++  state.customSaving = true;
++  state.customError = '';
++  render();
++
++  try {
++    const payload = state.customDraft.questions.map(q => ({
++      question: q.question.trim(),
++      answer: q.answer.trim(),
++      points: q.points
++    }));
++
++    const { data, error } = await sb.rpc('save_custom_topic', {
++      p_name: state.customDraft.name.trim(),
++      p_questions: payload
++    });
++    if (error) throw error;
++
++    state.customShareCode = data.share_code;
++    state.customSaving = false;
++
++    // ضيفها للّوح فوراً حتى يقدر يلعبها بنفس الجلسة
++    const already = state.pool.find(
++      t => t.bankKey === null && t.name === state.customDraft.name.trim()
++    );
++    if (!already) {
++      state.pool.push(makeCustomTopicFromData(state.customDraft.name.trim(), state.customDraft.questions));
++    }
++
++    state.myCustomTopics = [];   // أبطل الكاش حتى تظهر بالقائمة
++    render();
++  } catch (e) {
++    state.customSaving = false;
++    state.customError = translateCustomError(e);
++    render();
++  }
++}
++
++function translateCustomError(e) {
++  const msg = (e && (e.message || e.error_description || e.hint)) || '';
++  if (msg.includes('SIGNIN_REQUIRED')) return 'سجّل دخول أول حتى تحفظ الفئة.';
++  if (msg.includes('SIX_QUESTIONS_REQUIRED')) return 'لازم ٦ أسئلة بالضبط.';
++  if (msg.includes('custom_topics_name_check')) return 'اسم الفئة لازم يكون بين حرف و٦٠ حرف.';
++  if (msg.toLowerCase().includes('failed to fetch')) return 'ما أكو اتصال إنترنت.';
++  return msg || 'صار خطأ غير متوقع.';
++}
++
++/* ============================ استيراد بالكود ============================ */
++
++async function importCustomTopicByCode(rawCode) {
++  const code = (rawCode || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
++  if (code.length < 4) { state.importError = 'الكود قصير — تأكد منه.'; render(); return; }
++  if (!sb) { state.importError = 'تحتاج اتصال إنترنت حتى تجيب فئة بالكود.'; render(); return; }
++
++  state.importBusy = true;
++  state.importError = '';
++  render();
++
++  try {
++    const { data, error } = await sb.rpc('get_custom_topic_by_code', { p_code: code });
++    if (error) throw error;
++
++    if (!data) {
++      state.importBusy = false;
++      state.importError = 'ما لقيت فئة بهذا الكود. تأكد من الحروف.';
++      render();
++      return;
++    }
++    if (!data.questions || data.questions.length === 0) {
++      state.importBusy = false;
++      state.importError = 'هذي الفئة فاضية — صاحبها ما كمّل أسئلتها.';
++      render();
++      return;
++    }
++
++    const exists = state.pool.find(t => t.bankKey === null && t.name === data.name);
++    if (exists) {
++      state.importBusy = false;
++      state.importError = 'فئة "' + data.name + '" مضافة عندك أصلاً.';
++      render();
++      return;
++    }
++
++    state.pool.push(makeCustomTopicFromData(data.name, data.questions));
++    state.importBusy = false;
++    state.importCode = '';
++    state.importedNotice = 'تمت إضافة فئة "' + data.name + '"' +
++      (data.author_name ? ' من ' + data.author_name : '') + ' ✓';
++    render();
++  } catch (e) {
++    state.importBusy = false;
++    state.importError = translateCustomError(e);
++    render();
++  }
++}
++
++/* ============================ فئاتي المحفوظة ============================ */
++
++async function loadMyCustomTopics() {
++  if (!sb || !state.user) return;
++  state.myCustomLoading = true;
++  render();
++  try {
++    const { data, error } = await sb
++      .from('custom_topics')
++      .select('id, name, share_code, plays_count, custom_topic_questions(question, answer, points, sort_order)')
++      .order('created_at', { ascending: false });
++    if (error) throw error;
++    state.myCustomTopics = data || [];
++  } catch (e) {
++    state.customError = translateCustomError(e);
++  }
++  state.myCustomLoading = false;
++  render();
++}
++
++async function deleteMyCustomTopic(id) {
++  if (!sb || !state.user) return;
++  try {
++    const { error } = await sb.from('custom_topics').delete().eq('id', id);
++    if (error) throw error;
++    state.myCustomTopics = state.myCustomTopics.filter(t => t.id !== id);
++    render();
++  } catch (e) {
++    state.customError = translateCustomError(e);
++    render();
++  }
++}
++
++function addSavedTopicToPool(saved) {
++  const qs = (saved.custom_topic_questions || [])
++    .slice()
++    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
++  if (!qs.length) return;
++  if (state.pool.find(t => t.bankKey === null && t.name === saved.name)) return;
++  state.pool.push(makeCustomTopicFromData(saved.name, qs));
++  render();
++}
++
++/* ============================ نسخ الكود ============================ */
++
++function copyTextToClipboard(text, btn) {
++  const done = () => {
++    if (!btn) return;
++    const old = btn.textContent;
++    btn.textContent = 'تم النسخ ✓';
++    setTimeout(() => { btn.textContent = old; }, 1600);
++  };
++  if (navigator.clipboard && navigator.clipboard.writeText) {
++    navigator.clipboard.writeText(text).then(done).catch(() => fallback());
++  } else {
++    fallback();
++  }
++  function fallback() {
++    try {
++      const ta = document.createElement('textarea');
++      ta.value = text;
++      ta.setAttribute('readonly', '');
++      ta.style.position = 'fixed';
++      ta.style.opacity = '0';
++      document.body.appendChild(ta);
++      ta.select();
++      document.execCommand('copy');
++      document.body.removeChild(ta);
++      done();
++    } catch (e) { /* المستخدم يقدر ينسخه بيده، الكود ظاهر قدامه */ }
++  }
++}
++
++/* ============================ شاشة إنشاء الفئة ============================ */
++
++function renderCustomEditor() {
++  if (!state.customDraft) state.customDraft = newCustomDraft();
++  const wrap = el(`<div></div>`);
++
++  const head = el(`<div class="panel">
++    <div class="section-title">سوّي فئة خاصة بكروبك</div>
++    <div class="section-sub">
++      ٦ أسئلة بنقاط متفاوتة، وتكتب الجواب وياها. بعد ما تحفظها يطلع لك
++      <b style="color:var(--gold);">كود قصير</b> تنقله لأي كروب ثاني فيلعب نفس فئتك.
++    </div>
++    <div class="field">
++      <input type="text" id="cd-name" maxlength="${CUSTOM_MAX_NAME}"
++             placeholder="اسم الفئة — مثال: أسئلة عن شباب الصف"
++             value="${escapeAttr(state.customDraft.name)}"/>
++    </div>
++    <div class="pool-counter">مكمّل <b>${customDraftFilledCount()}</b> من ٦ أسئلة</div>
++  </div>`);
++  head.querySelector('#cd-name').addEventListener('input', e => {
++    state.customDraft.name = e.target.value;
++  });
++  wrap.appendChild(head);
++
++  const block = el(`<div class="topic-block"><div class="q-grid"></div></div>`);
++  const grid = block.querySelector('.q-grid');
++
++  state.customDraft.questions.forEach((q, i) => {
++    const row = el(`<div class="q-row" style="flex-direction:column; align-items:stretch; gap:8px;">
++      <div style="display:flex; align-items:center; gap:8px;">
++        <span style="font-family:'Changa'; color:var(--gold); font-size:14px; min-width:58px;">${q.points} نقطة</span>
++        <input type="text" class="cd-q" data-i="${i}" placeholder="السؤال ${i + 1}"
++               value="${escapeAttr(q.question)}" style="flex:1;"/>
++      </div>
++      <input type="text" class="cd-a" data-i="${i}" placeholder="الجواب الصحيح"
++             value="${escapeAttr(q.answer)}"/>
++    </div>`);
++    row.querySelector('.cd-q').addEventListener('input', e => {
++      state.customDraft.questions[i].question = e.target.value;
++    });
++    row.querySelector('.cd-a').addEventListener('input', e => {
++      state.customDraft.questions[i].answer = e.target.value;
++    });
++    grid.appendChild(row);
++  });
++  wrap.appendChild(block);
++
++  if (state.customError) {
++    wrap.appendChild(el(`<div class="panel" style="border-color:var(--rose-dim); color:var(--rose);">
++      ${escapeAttr(state.customError)}
++    </div>`));
++  }
++
++  const actions = el(`<div class="btn-row">
++    <button class="btn btn-gold" id="cd-save">${state.customSaving ? '...جاري الحفظ' : 'احفظ واطلع لي كود'}</button>
++    <button class="btn btn-ghost" id="cd-session">استخدمها بهذي الجلسة بس</button>
++    <button class="btn btn-ghost" id="cd-back">رجوع</button>
++  </div>`);
++  actions.querySelector('#cd-save').disabled = state.customSaving;
++  actions.querySelector('#cd-save').addEventListener('click', saveCustomTopicToCloud);
++
++  // مسار بلا حساب: يلعبها هسه وتضيع بعد اللعبة — حتى ما نسد الطريق على أحد
++  actions.querySelector('#cd-session').addEventListener('click', () => {
++    if (!state.customDraft.name.trim()) {
++      state.customError = 'اكتب اسم الفئة أول.';
++      render();
++      return;
++    }
++    if (customDraftFilledCount() === 0) {
++      state.customError = 'اكتب سؤال واحد على الأقل.';
++      render();
++      return;
++    }
++    state.pool.push(makeCustomTopicFromData(
++      state.customDraft.name.trim(),
++      state.customDraft.questions
++    ));
++    state.customDraft = newCustomDraft();
++    state.customError = '';
++    goto('editor');
++  });
++  actions.querySelector('#cd-back').addEventListener('click', () => {
++    state.customError = '';
++    goBack();
++  });
++  wrap.appendChild(actions);
++
++  return wrap;
++}
++
++/* ============================ لوحة الفئات المخصصة داخل شاشة المواضيع ============================ */
++
++function renderCustomTopicsPanel() {
++  const wrap = el(`<div></div>`);
++
++  const actions = el(`<div class="panel">
++    <div class="section-title" style="font-size:16px;">الفئات المخصصة</div>
++    <div class="section-sub">سوّي فئة عن كروبك وشاركها بكود — مجاناً للكل.</div>
++    <div class="btn-row" style="margin-top:0;">
++      <button class="btn btn-gold btn-sm" id="ct-new">✏️ سوّي فئة جديدة</button>
++      ${state.user ? `<button class="btn btn-ghost btn-sm" id="ct-mine">📁 فئاتي المحفوظة</button>` : ''}
++    </div>
++  </div>`);
++  actions.querySelector('#ct-new').addEventListener('click', () => {
++    state.customDraft = newCustomDraft();
++    state.customError = '';
++    goto('custom-editor');
++  });
++  if (state.user) {
++    actions.querySelector('#ct-mine').addEventListener('click', loadMyCustomTopics);
++  }
++  wrap.appendChild(actions);
++
++  /* استيراد بالكود */
++  const imp = el(`<div class="panel">
++    <div class="section-title" style="font-size:16px;">وصلك كود فئة؟</div>
++    <div class="section-sub">اكتب الكود اللي وصلك من كروب ثاني — ما يحتاج حساب.</div>
++    <div style="display:flex; gap:10px;">
++      <input type="text" id="ct-code" placeholder="مثال: K7M2QP" maxlength="8"
++             dir="ltr" style="text-align:center; letter-spacing:3px; font-family:'Changa'; text-transform:uppercase;"
++             value="${escapeAttr(state.importCode || '')}"/>
++      <button class="btn btn-gold btn-sm" id="ct-import" style="flex:none;">
++        ${state.importBusy ? '...' : 'جيبها'}
++      </button>
++    </div>
++    ${state.importError ? `<div style="color:var(--rose); font-size:13px; margin-top:10px;">${escapeAttr(state.importError)}</div>` : ''}
++    ${state.importedNotice ? `<div style="color:var(--sage); font-size:13px; margin-top:10px;">${escapeAttr(state.importedNotice)}</div>` : ''}
++  </div>`);
++  const codeInput = imp.querySelector('#ct-code');
++  codeInput.addEventListener('input', e => { state.importCode = e.target.value; });
++  codeInput.addEventListener('keydown', e => {
++    if (e.key === 'Enter') importCustomTopicByCode(state.importCode);
++  });
++  imp.querySelector('#ct-import').disabled = state.importBusy;
++  imp.querySelector('#ct-import').addEventListener('click', () => importCustomTopicByCode(state.importCode));
++  wrap.appendChild(imp);
++
++  /* قائمة فئاتي المحفوظة */
++  if (state.myCustomLoading) {
++    wrap.appendChild(el(`<div class="panel"><div class="section-sub" style="margin:0;">...جاري تحميل فئاتك</div></div>`));
++  } else if (state.myCustomTopics && state.myCustomTopics.length) {
++    const panel = el(`<div class="panel">
++      <div class="section-title" style="font-size:16px;">فئاتي المحفوظة</div>
++    </div>`);
++    state.myCustomTopics.forEach(t => {
++      const inPool = !!state.pool.find(p => p.bankKey === null && p.name === t.name);
++      const row = el(`<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 4px; border-top:1px solid var(--line); flex-wrap:wrap;">
++        <div style="flex:1; min-width:150px;">
++          <div style="color:var(--ivory); font-size:14px;">${escapeAttr(t.name)}</div>
++          <div style="color:var(--muted); font-size:12px; margin-top:3px;">
++            الكود <b style="color:var(--gold); letter-spacing:2px;" dir="ltr">${escapeAttr(t.share_code)}</b>
++            · لُعبت ${t.plays_count || 0} مرة
++          </div>
++        </div>
++        <div style="display:flex; gap:8px; align-items:center;">
++          <button class="btn btn-ghost btn-sm ct-copy">انسخ الكود</button>
++          <button class="btn btn-gold btn-sm ct-add" ${inPool ? 'disabled' : ''}>${inPool ? 'مضافة ✓' : 'أضفها'}</button>
++          <button class="remove-x ct-del" title="حذف">✕</button>
++        </div>
++      </div>`);
++      row.querySelector('.ct-copy').addEventListener('click', e => copyTextToClipboard(t.share_code, e.target));
++      row.querySelector('.ct-add').addEventListener('click', () => addSavedTopicToPool(t));
++      row.querySelector('.ct-del').addEventListener('click', () => {
++        if (confirm('تحذف فئة "' + t.name + '"؟ الكود راح يبطل عند كل من عنده.')) {
++          deleteMyCustomTopic(t.id);
++        }
++      });
++      panel.appendChild(row);
++    });
++    wrap.appendChild(panel);
++  }
++
++  return wrap;
++}
++
++/* ============================ نافذة الكود بعد الحفظ ============================ */
++
++function renderShareCodeOverlay() {
++  const code = state.customShareCode;
++  const shareText = 'العبوا فئتي بلعبة تجمّع — الكود: ' + code;
++  const overlay = el(`<div class="overlay"></div>`);
++  const modal = el(`<div class="q-modal" style="max-width:420px; text-align:center;">
++    <div style="font-size:40px; margin-bottom:6px;">🔗</div>
++    <div class="section-title" style="justify-content:center;">انحفظت فئتك</div>
++    <p style="color:var(--muted); font-size:14px; margin-bottom:16px;">
++      انقل هذا الكود لأي كروب — يدخلونه ويلعبون نفس فئتك بلا حساب.
++    </p>
++    <div style="font-family:'Changa'; font-size:38px; font-weight:800; color:var(--gold);
++                letter-spacing:8px; padding:14px; border:1px dashed var(--gold-dim);
++                border-radius:12px; margin-bottom:18px;" dir="ltr">${escapeAttr(code)}</div>
++    <div class="btn-row" style="justify-content:center; margin-top:0;">
++      <button class="btn btn-gold" id="sc-copy">انسخ الكود</button>
++      <a class="btn btn-ghost" id="sc-wa" target="_blank" rel="noopener"
++         href="https://wa.me/?text=${encodeURIComponent(shareText)}">شارك بالواتساب</a>
++      <button class="btn btn-ghost" id="sc-close">تم</button>
++    </div>
++  </div>`);
++  modal.querySelector('#sc-copy').addEventListener('click', e => copyTextToClipboard(code, e.target));
++  modal.querySelector('#sc-close').addEventListener('click', () => {
++    state.customShareCode = '';
++    state.customDraft = newCustomDraft();
++    goto('editor');
++  });
++  overlay.appendChild(modal);
++  return overlay;
++}
+diff --git a/js/db-and-supabase.js b/js/db-and-supabase.js
+index b7fc4c6..ecc8391 100644
+--- a/js/db-and-supabase.js
++++ b/js/db-and-supabase.js
+@@ -3,18 +3,39 @@ let CATEGORY_TOPICS = [];
+ let CATEGORY_DATA = {};
+ const bankUsage = {};
+ 
++/* Supabase يحدد سقف الصفوف لكل طلب (غالباً ١٠٠٠)، فـ limit=2000 كان يقطع
++   البنك بصمت وتضيع مواضيع كاملة. نجيبه على صفحات لحد ما يخلص. */
++const CATEGORY_PAGE_SIZE = 1000;
++
+ async function loadCategoryDatabase(){
+-    const res = await fetch(SUPABASE_URL + '/rest/v1/category_questions?select=topic,points,question,answer,image,media_type&limit=2000', { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY } });
+-    if(!res.ok) throw new Error('فشل تحميل الأسئلة (HTTP ' + res.status + ')');
+-    const data = await res.json();
+-    const grouped = {};
+-    data.forEach(row=>{
+-          if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
+-          const tier = grouped[row.topic][row.points] ? row.points : 200;
+-          grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type });
+-    });
+-    CATEGORY_DATA = grouped;
+-    CATEGORY_TOPICS = Object.keys(grouped);
++  const rows = [];
++  for(let from = 0; ; from += CATEGORY_PAGE_SIZE){
++    const to = from + CATEGORY_PAGE_SIZE - 1;
++    const res = await fetch(
++      SUPABASE_URL + '/rest/v1/category_questions?select=topic,points,question,answer,image,media_type&order=id.asc',
++      { headers: {
++          'apikey': SUPABASE_ANON_KEY,
++          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
++          'Range-Unit': 'items',
++          'Range': from + '-' + to
++      } }
++    );
++    if(!res.ok && res.status !== 206) throw new Error('فشل تحميل الأسئلة (HTTP ' + res.status + ')');
++    const page = await res.json();
++    if(!Array.isArray(page) || page.length === 0) break;
++    rows.push.apply(rows, page);
++    if(page.length < CATEGORY_PAGE_SIZE) break;
++    if(from > 100000) break; // صمام أمان ضد حلقة لا نهائية
++  }
++
++  const grouped = {};
++  rows.forEach(row=>{
++        if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
++        const tier = grouped[row.topic][row.points] ? row.points : 200;
++        grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type });
++  });
++  CATEGORY_DATA = grouped;
++  CATEGORY_TOPICS = Object.keys(grouped);
+ }
+ 
+ function shuffled(arr){
+diff --git a/js/game-categories.js b/js/game-categories.js
+index bef9615..7c2dd0a 100644
+--- a/js/game-categories.js
++++ b/js/game-categories.js
+@@ -85,31 +85,8 @@ function renderEditor(){
+     wrap.appendChild(customPanel);
+   }
+ 
+-  if(isSubscribed()){
+-    const addCustom = el(`<div class="panel">
+-      <div class="section-title" style="font-size:16px;">أضف موضوع خاص</div>
+-      <div class="section-sub">تكتب اسم موضوعك، والأسئلة تكتبها بنفسك أثناء اللعب لحظة ما تفتح كل خانة.</div>
+-      <div style="display:flex; gap:10px;">
+-        <input type="text" id="custom-name" placeholder="مثال: نجوم كرة القدم العراقية"/>
+-        <button class="btn btn-gold btn-sm" id="add-custom" style="flex:none;">إضافة</button>
+-      </div>
+-    </div>`);
+-    addCustom.querySelector('#add-custom').addEventListener('click', ()=>{
+-      const input = addCustom.querySelector('#custom-name');
+-      const name = input.value.trim();
+-      if(!name) { input.focus(); return; }
+-      state.pool.push(makeCustomTopic(name));
+-      render();
+-    });
+-    wrap.appendChild(addCustom);
+-  } else {
+-    const addCustomLocked = el(`<div class="panel" style="text-align:center; cursor:pointer;">
+-      <div class="section-title" style="font-size:16px;">🔒 أضف موضوع خاص</div>
+-      <div class="section-sub" style="margin-bottom:0;">ميزة حصرية للمشتركين — اضغط للتفاصيل</div>
+-    </div>`);
+-    addCustomLocked.addEventListener('click', ()=> openUpsell('إضافة مواضيعك الخاصة ميزة حصرية للمشتركين.'));
+-    wrap.appendChild(addCustomLocked);
+-  }
++  // الفئات المخصصة: مفتوحة للكل بقصد — هي محرك الانتشار مو مصدر ربح
++  wrap.appendChild(renderCustomTopicsPanel());
+ 
+   const actions = el(`<div class="btn-row">
+     <button class="btn btn-gold" id="to-teams">التالي: الفرق</button>
+diff --git a/js/render-core.js b/js/render-core.js
+index f1d118b..ddd1199 100644
+--- a/js/render-core.js
++++ b/js/render-core.js
+@@ -8,6 +8,7 @@ function render(){
+     case 'hub': body = renderHub(); break;
+     case 'cat-loading': body = renderCatLoading(); break;
+     case 'editor': body = renderEditor(); break;
++    case 'custom-editor': body = renderCustomEditor(); break;
+     case 'teams': body = renderTeams(); break;
+     case 'select': body = renderSelect(); break;
+     case 'board': body = renderBoard(); break;
+@@ -34,6 +35,9 @@ function render(){
+   if(state.showUpsellModal){
+     app.appendChild(renderUpsellOverlay());
+   }
++  if(state.customShareCode){
++    app.appendChild(renderShareCodeOverlay());
++  }
+ }
+ 
+ function renderTopbar(){
+@@ -53,6 +57,7 @@ function renderTopbar(){
+   const crumbMap = {
+     'cat-loading':'لعبة الفئات · تحميل البنك',
+     editor:'لعبة الفئات · اختيار المواضيع',
++    'custom-editor':'لعبة الفئات · فئة خاصة',
+     teams:'لعبة الفئات · الفرق والإعدادات',
+     select:'لعبة الفئات · اختيار الفئات',
+     board:'لعبة الفئات · اللعب',
+diff --git a/js/state-and-helpers.js b/js/state-and-helpers.js
+index 65d5bd8..23180c6 100644
+--- a/js/state-and-helpers.js
++++ b/js/state-and-helpers.js
+@@ -14,6 +14,19 @@ const state = {
+   upsellMessage: '',
+   categoryDataLoaded: false,
+   categoryDataError: '',
++
++  // الفئات المخصصة (إنشاء / حفظ / مشاركة بكود)
++  customDraft: null,
++  customSaving: false,
++  customError: '',
++  customShareCode: '',
++  myCustomTopics: [],
++  myCustomLoading: false,
++  importCode: '',
++  importBusy: false,
++  importError: '',
++  importedNotice: '',
++
+   teams: [
+     { name: 'الفريق الأول', score: 0, helps: 3 },
+     { name: 'الفريق الثاني', score: 0, helps: 3 }
+@@ -56,7 +69,18 @@ let uid = 1;
+ const nextId = () => 'id' + (uid++);
+ 
+ /* ============================ SUBSCRIPTION ============================ */
+-const FREE_TOPICS = ['جغرافيا','تاريخ','علوم','رياضة','سينما وتلفزيون','الأعلام'];
++/* الباقة المجانية مقصود تكون عراقية بالأغلب: هذا اللي يميّزنا عن التطبيقات
++   الخليجية، فلازم يشوفه اللاعب قبل ما يدفع — مو نخبّيه وراء الاشتراك. */
++const FREE_TOPICS = [
++  'أمثال عراقية',
++  'لهجة عراقية',
++  'أكل عراقي',
++  'بغداد',
++  'محافظات العراق',
++  'تاريخ العراق',
++  'معلومات عامة',
++  'رياضة'
++];
+ 
+ function isSubscribed(){
+   return !!(state.user && state.user.isSubscribed);
+diff --git a/package.json b/package.json
+index 37cfebd..606268d 100644
+--- a/package.json
++++ b/package.json
+@@ -4,7 +4,10 @@
+   "description": "",
+   "main": "index.js",
+   "scripts": {
+-    "test": "echo \"Error: no test specified\" && exit 1"
++    "build": "node build.js",
++    "sync": "npm run build && npx cap sync",
++    "sync:android": "npm run build && npx cap sync android",
++    "test": "node test/e2e.js"
+   },
+   "repository": {
+     "type": "git",
+@@ -19,10 +22,10 @@
+   "homepage": "https://github.com/teaizteaiz46-blip/tajammo-game#readme",
+   "dependencies": {
+     "@capacitor/android": "^8.5.1",
+-        "@capacitor/app": "^8.1.1",
++    "@capacitor/app": "^8.1.1",
+     "@capacitor/cli": "^8.5.1",
+     "@capacitor/core": "^8.5.1",
+     "@capacitor/ios": "^8.5.1",
+     "@capacitor-community/admob": "^8.1.0"
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/test/e2e.js b/test/e2e.js
+new file mode 100644
+index 0000000..10a50b6
+--- /dev/null
++++ b/test/e2e.js
+@@ -0,0 +1,309 @@
++/**
++ * اختبار تدفق الفئات المخصصة بمتصفح حقيقي.
++ *
++ * الشبكة الخارجية مقطوعة بهذي البيئة، فنعترض الطلبات:
++ *   - سكربت unpkg  → نرجّع عميل Supabase مُحاكى يقلّد نفس صيغة {data, error}
++ *   - بنك الأسئلة  → أسئلة معلّبة
++ * يعني اللي يُختبر هنا هو منطق الواجهة والحالة واللوح — وهذا المقصود،
++ * لأن سلوك قاعدة البيانات نفسه انتُحقق منه بـ SQL بدور anon مباشرة.
++ */
++const { chromium } = require('playwright');
++
++const BASE = 'http://localhost:8099';
++const GOOD_CODE = '4U6AMY';
++
++const CANNED_TOPIC = {
++  name: 'أسئلة عن الكروب',
++  share_code: GOOD_CODE,
++  author_name: 'أمير',
++  questions: [
++    { question: 'منو أكثر واحد يتأخر؟', answer: 'سيف', points: 100 },
++    { question: 'منو ما يرد على الرسائل؟', answer: 'علي', points: 100 },
++    { question: 'أي مقهى نلتم بيه دائماً؟', answer: 'الشهبندر', points: 200 },
++    { question: 'منو خسران أكثر بالبلوت؟', answer: 'حسن', points: 200 },
++    { question: 'شنو أغرب شي صار بالطلعة؟', answer: 'انكسر الشيشة', points: 400 },
++    { question: 'منو أول واحد تعرفنا عليه؟', answer: 'أمير', points: 600 }
++  ]
++};
++
++const SHIM = `
++window.supabase = {
++  createClient: function(url, key){
++    return {
++      auth: {
++        onAuthStateChange: function(){ return { data:{ subscription:{ unsubscribe:function(){} } } }; },
++        signInWithPassword: async function(){ return { error:{ message:'mock' } }; },
++        signUp: async function(){ return { error:{ message:'mock' } }; },
++        signOut: function(){}
++      },
++      rpc: async function(name, params){
++        window.__rpcCalls = window.__rpcCalls || [];
++        window.__rpcCalls.push({ name: name, params: params });
++        if(name === 'get_custom_topic_by_code'){
++          var c = (params.p_code || '').trim().toUpperCase();
++          if(c === ${JSON.stringify(GOOD_CODE)}) return { data: ${JSON.stringify(CANNED_TOPIC)}, error: null };
++          return { data: null, error: null };
++        }
++        if(name === 'save_custom_topic'){
++          return { data: null, error: { message: 'SIGNIN_REQUIRED' } };
++        }
++        return { data: null, error: { message: 'unknown rpc ' + name } };
++      },
++      from: function(){
++        var chain = {
++          select: function(){ return chain; },
++          delete: function(){ return chain; },
++          insert: function(){ return chain; },
++          update: function(){ return chain; },
++          eq: function(){ return chain; },
++          order: function(){ return Promise.resolve({ data: [], error: null }); },
++          single: function(){ return Promise.resolve({ data: null, error: null }); },
++          then: function(res){ return Promise.resolve({ data: [], error: null }).then(res); }
++        };
++        return chain;
++      }
++    };
++  }
++};
++`;
++
++const FREE = ['أمثال عراقية','لهجة عراقية','أكل عراقي','بغداد','محافظات العراق','تاريخ العراق','معلومات عامة','رياضة'];
++// موضوع يسقط حصراً بالصفحة الثانية — هو الدليل إن الترقيم يشتغل
++const PAGE2_ONLY_TOPIC = 'موضوع_بالصفحة_الثانية';
++const CANNED_BANK = (() => {
++  const rows = [];
++  const pad = ['حشو أ','حشو ب','حشو ج','حشو د','حشو هـ','حشو و','حشو ز','حشو ح','حشو ط','حشو ي','حشو ك','حشو ل'];
++  FREE.concat(pad).forEach(t => {
++    [100,100,100,200,200,200,400,400,600,600].forEach((p, i) => {
++      rows.push({ topic: t, points: p, question: `سؤال ${t} ${i}`, answer: `جواب ${i}`, image: null, media_type: null });
++    });
++  });
++  // نكبّرها لتعدي ١٠٠٠ صف
++  while (rows.length < 1040) {
++    const i = rows.length;
++    rows.push({ topic: 'حشو كبير', points: [100,200,400,600][i % 4], question: 'سؤال حشو ' + i, answer: 'جواب ' + i, image: null, media_type: null });
++  }
++  // الموضوع الحصري بالآخر → يطلع بالصفحة الثانية فقط
++  [100,100,100,200,200,200,400,400,600,600].forEach((p, i) => {
++    rows.push({ topic: PAGE2_ONLY_TOPIC, points: p, question: 'سؤال صفحة٢ ' + i, answer: 'جواب ' + i, image: null, media_type: null });
++  });
++  return rows;
++})();
++
++(async () => {
++  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
++  const page = await browser.newPage();
++
++  const pageRequests = [];
++  const errors = [];
++  const consoleErrors = [];
++  page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
++  page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
++
++  await page.route('**/*', async route => {
++    const url = route.request().url();
++    if (url.includes('unpkg.com') && url.includes('supabase')) {
++      return route.fulfill({ status: 200, contentType: 'application/javascript', body: SHIM });
++    }
++    if (url.includes('/rest/v1/category_questions')) {
++      // نقلّد سلوك Supabase: نحترم Range ونسقّف كل طلب بـ ١٠٠٠ صف
++      const h = route.request().headers();
++      let from = 0, to = 999;
++      const m = /^(\d+)-(\d+)$/.exec(h['range'] || '');
++      if (m) { from = +m[1]; to = Math.min(+m[2], from + 999); }
++      const slice = CANNED_BANK.slice(from, to + 1);
++      pageRequests.push(h['range'] || '(بلا Range)');
++      return route.fulfill({
++        status: 206, contentType: 'application/json',
++        headers: { 'content-range': `${from}-${from + slice.length - 1}/${CANNED_BANK.length}` },
++        body: JSON.stringify(slice)
++      });
++    }
++    if (url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com') || url.includes('flagcdn.com')) {
++      return route.abort();
++    }
++    if (url.startsWith(BASE)) return route.continue();
++    return route.abort();
++  });
++
++  let pass = 0, fail = 0;
++  const step = async (name, fn) => {
++    try { await fn(); console.log('  ✓ ' + name); pass++; }
++    catch (e) { console.log('  ✗ ' + name + '\n      → ' + e.message); fail++; }
++  };
++
++  await page.goto(BASE, { waitUntil: 'domcontentloaded' });
++
++  console.log('\nالأساسيات');
++  await step('الصفحة تفتح والهب يظهر', async () => {
++    await page.waitForSelector('#card-cat', { timeout: 10000 });
++  });
++  await step('لعبة الفئات توصل شاشة المواضيع', async () => {
++    await page.click('#card-cat');
++    await page.waitForSelector('#ct-new', { timeout: 15000 });
++  });
++  await step('لوحة الفئات المخصصة ظاهرة بلا تسجيل دخول وبلا قفل', async () => {
++    const txt = await page.evaluate(() => document.body.innerText);
++    if (await page.$('#user-box')) throw new Error('متوقع غير مسجلين');
++    if (!txt.includes('سوّي فئة جديدة')) throw new Error('زر الإنشاء مو ظاهر');
++    if (txt.includes('🔒 أضف موضوع خاص')) throw new Error('اللوحة القديمة المقفولة لا تزال ظاهرة');
++  });
++
++  console.log('\nترقيم بنك الأسئلة (الباگ اللي صار بـ limit=2000)');
++  await step('الكود يطلب أكثر من صفحة وحدة', async () => {
++    if (pageRequests.length < 2)
++      throw new Error('طلب ' + pageRequests.length + ' صفحة فقط — الترقيم مو شغال: ' + pageRequests.join(' | '));
++  });
++  await step('موضوع موجود بالصفحة الثانية فقط يوصل للتطبيق', async () => {
++    const got = await page.evaluate(t => CATEGORY_TOPICS.includes(t), PAGE2_ONLY_TOPIC);
++    if (!got) throw new Error('الموضوع اللي بالصفحة الثانية ضاع — نفس الباگ القديم');
++  });
++  await step('كل الأسئلة وصلت بلا قطع', async () => {
++    const n = await page.evaluate(() => {
++      let c = 0;
++      Object.values(CATEGORY_DATA).forEach(t => [100,200,400,600].forEach(p => c += (t[p] || []).length));
++      return c;
++    });
++    if (n !== CANNED_BANK.length)
++      throw new Error('وصل ' + n + ' سؤال من ' + CANNED_BANK.length);
++  });
++
++  console.log('\nالباقة المجانية عراقية');
++  await step('مواضيع الباقة المجانية كلها موجودة بالبنك', async () => {
++    const missing = await page.evaluate(
++      free => free.filter(t => !CATEGORY_TOPICS.includes(t)), FREE
++    );
++    if (missing.length) throw new Error('مواضيع مجانية مفقودة من البنك: ' + missing.join(', '));
++  });
++  await step('أغلب الباقة المجانية عراقي (٦ من ٨ على الأقل)', async () => {
++    const iraqi = await page.evaluate(() => FREE_TOPICS.filter(t => /عراق|بغداد|أمثال|لهجة/.test(t)).length);
++    const total = await page.evaluate(() => FREE_TOPICS.length);
++    if (iraqi < 6) throw new Error(`فقط ${iraqi} من ${total} مواضيع عراقية`);
++  });
++
++  console.log('\nالاستيراد بالكود');
++  await step('كود غلط → رسالة واضحة', async () => {
++    await page.fill('#ct-code', 'ZZZZZZ');
++    await page.click('#ct-import');
++    await page.waitForFunction(() => document.body.innerText.includes('ما لقيت فئة بهذا الكود'), { timeout: 8000 });
++  });
++  await step('كود صحيح → تُضاف الفئة مع اسم صاحبها', async () => {
++    await page.fill('#ct-code', GOOD_CODE);
++    await page.click('#ct-import');
++    await page.waitForFunction(() => document.body.innerText.includes('تمت إضافة فئة'), { timeout: 8000 });
++    const txt = await page.evaluate(() => document.body.innerText);
++    if (!txt.includes('أمير')) throw new Error('اسم صاحب الفئة ما ظهر');
++  });
++  await step('أحرف صغيرة ومسافات بالكود تنقبل', async () => {
++    await page.evaluate(() => {
++      state.pool = state.pool.filter(t => t.bankKey !== null);
++      state.importedNotice = ''; state.importError = ''; render();
++    });
++    await page.fill('#ct-code', '  ' + GOOD_CODE.toLowerCase() + ' ');
++    await page.click('#ct-import');
++    await page.waitForFunction(() => document.body.innerText.includes('تمت إضافة فئة'), { timeout: 8000 });
++  });
++  await step('استيراد نفس الفئة مرتين يُمنع برسالة', async () => {
++    await page.fill('#ct-code', GOOD_CODE);
++    await page.click('#ct-import');
++    await page.waitForFunction(() => document.body.innerText.includes('مضافة عندك أصلاً'), { timeout: 8000 });
++  });
++  await step('الفئة المستوردة ٦ أسئلة بنقاط ١٠٠/١٠٠/٢٠٠/٢٠٠/٤٠٠/٦٠٠', async () => {
++    const info = await page.evaluate(() => {
++      const t = state.pool.find(x => x.bankKey === null);
++      return t && {
++        count: t.questions.length,
++        pts: t.questions.map(q => q.points).join(','),
++        allText: t.questions.every(q => q.text && q.text.trim()),
++        allAns: t.questions.every(q => q.answer && q.answer.trim())
++      };
++    });
++    if (!info) throw new Error('ما لقيت الفئة بالـ pool');
++    if (info.count !== 6) throw new Error('عدد الأسئلة ' + info.count);
++    if (info.pts !== '100,100,200,200,400,600') throw new Error('النقاط ' + info.pts);
++    if (!info.allText) throw new Error('أسئلة بلا نص');
++    if (!info.allAns) throw new Error('أسئلة بلا جواب');
++  });
++
++  console.log('\nإنشاء فئة');
++  await step('شاشة الإنشاء فيها ٦ صفوف سؤال + ٦ أجوبة', async () => {
++    await page.click('#ct-new');
++    await page.waitForSelector('#cd-name', { timeout: 8000 });
++    if ((await page.$$('.cd-q')).length !== 6) throw new Error('صفوف الأسئلة مو ٦');
++    if ((await page.$$('.cd-a')).length !== 6) throw new Error('صفوف الأجوبة مو ٦');
++  });
++  await step('عدّاد الأسئلة المكمّلة يتحدث', async () => {
++    await page.fill('#cd-name', 'فئة اختبار');
++    for (let i = 0; i < 6; i++) {
++      await page.fill(`.cd-q[data-i="${i}"]`, 'سؤال ' + (i + 1));
++      await page.fill(`.cd-a[data-i="${i}"]`, 'جواب ' + (i + 1));
++    }
++    const n = await page.evaluate(() => customDraftFilledCount());
++    if (n !== 6) throw new Error('العدّاد ' + n + ' مو ٦');
++  });
++  await step('الحفظ بلا حساب يفتح نافذة الدخول (مو يفشل بصمت)', async () => {
++    await page.click('#cd-save');
++    await page.waitForSelector('#tab-signin', { timeout: 8000 });
++    await page.evaluate(() => { state.showAuthModal = false; render(); });
++  });
++  await step('"استخدمها بهذي الجلسة" تضيف الفئة بلا حساب', async () => {
++    const before = await page.evaluate(() => state.pool.filter(t => t.bankKey === null).length);
++    await page.click('#cd-session');
++    await page.waitForSelector('#ct-new', { timeout: 8000 });
++    const after = await page.evaluate(() => state.pool.filter(t => t.bankKey === null).length);
++    if (after !== before + 1) throw new Error(`${before} → ${after}, متوقع +١`);
++  });
++  await step('فئة بلا اسم تُرفض برسالة', async () => {
++    await page.click('#ct-new');
++    await page.waitForSelector('#cd-session', { timeout: 8000 });
++    await page.click('#cd-session');
++    await page.waitForFunction(() => document.body.innerText.includes('اكتب اسم الفئة أول'), { timeout: 8000 });
++    await page.click('#cd-back');
++    await page.waitForSelector('#ct-new', { timeout: 8000 });
++  });
++
++  console.log('\nاللعب بفئة مستوردة');
++  await step('نص السؤال يظهر (مو شاشة الكتابة اليدوية) والجواب يُكشف', async () => {
++    const res = await page.evaluate(() => {
++      const t = state.pool.find(x => x.bankKey === null && x.questions.every(q => q.text));
++      if (!t) return { ok: false, why: 'ما أكو فئة مكتملة' };
++      state.selectedTopicIds = [t.id];
++      state.screen = 'board';
++      state.activeCell = { topicId: t.id, qId: t.questions[0].id };
++      render();
++      return { ok: true, text: t.questions[0].text, answer: t.questions[0].answer };
++    });
++    if (!res.ok) throw new Error(res.why);
++
++    const shown = await page.evaluate(() => document.body.innerText);
++    if (shown.includes('اكتب السؤال الآن'))
++      throw new Error('ظهرت شاشة كتابة السؤال اليدوية — الأسئلة ما وصلت للّوح');
++    if (!shown.includes(res.text)) throw new Error('نص السؤال ما ظهر');
++
++    await page.click('#reveal');
++    const after = await page.evaluate(() => document.body.innerText);
++    if (!after.includes(res.answer)) throw new Error('الجواب ما ظهر بعد "إظهار الإجابة"');
++  });
++
++  console.log('\nنافذة كود المشاركة');
++  await step('النافذة تعرض الكود وأزرار النسخ والواتساب', async () => {
++    await page.evaluate(() => { state.customShareCode = 'K7M2QP'; render(); });
++    await page.waitForSelector('#sc-copy', { timeout: 8000 });
++    const txt = await page.evaluate(() => document.body.innerText);
++    if (!txt.includes('K7M2QP')) throw new Error('الكود ما ظهر');
++    const wa = await page.getAttribute('#sc-wa', 'href');
++    if (!wa || !wa.startsWith('https://wa.me/?text=')) throw new Error('رابط الواتساب غلط: ' + wa);
++    if (!decodeURIComponent(wa).includes('K7M2QP')) throw new Error('الكود مو داخل رسالة الواتساب');
++  });
++
++  console.log('\nأخطاء جافاسكربت غير متوقعة');
++  if (errors.length) { console.log('  ✗ ' + errors.join('\n  ')); fail++; }
++  else console.log('  ✓ ماكو أي خطأ بالصفحة');
++
++  if (consoleErrors.length) console.log('\n(console.error: ' + consoleErrors.join(' | ') + ')');
++
++  console.log(`\n${'='.repeat(40)}\nناجح: ${pass}   فاشل: ${fail}\n${'='.repeat(40)}`);
++
++  await browser.close();
++  process.exit(fail ? 1 : 0);
++})();
+diff --git a/www/index.html b/www/index.html
+deleted file mode 100644
+index 6a4b07c..0000000
+--- a/www/index.html
++++ /dev/null
+@@ -1,1848 +0,0 @@
+-<!DOCTYPE html>
+-<html dir="rtl" lang="ar">
+-<head>
+-<meta charset="UTF-8">
+-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+-<title>تجمّع — لعبة الفئات</title>
+-<link rel="preconnect" href="https://fonts.googleapis.com">
+-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+-<link href="https://fonts.googleapis.com/css2?family=Changa:wght@400;600;700;800&family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+-<style>
+-  :root{
+-    --bg:#0F2B28;
+-    --bg-2:#0B211E;
+-    --panel:#143A35;
+-    --panel-2:#1B4740;
+-    --line: rgba(244,239,225,0.14);
+-    --gold:#D4A857;
+-    --gold-dim: rgba(212,168,87,0.35);
+-    --rose:#C1443A;
+-    --rose-dim: rgba(193,68,58,0.35);
+-    --ivory:#F4EFE1;
+-    --muted:#8FB3AC;
+-    --sage:#6FA287;
+-  }
+-  *{box-sizing:border-box;}
+-  html,body{margin:0;padding:0;}
+-  body{
+-    background:
+-      radial-gradient(ellipse at 50% -10%, rgba(212,168,87,0.10), transparent 55%),
+-      linear-gradient(180deg, var(--bg-2), var(--bg));
+-    color:var(--ivory);
+-    font-family:'Tajawal', sans-serif;
+-    min-height:100vh;
+-    padding:28px 16px 60px;
+-  }
+-  .wrap{max-width:980px; margin:0 auto;}
+-  .display{font-family:'Changa', sans-serif;}
+-
+-  /* ---------- top bar ---------- */
+-  .topbar{
+-    display:flex; align-items:center; justify-content:space-between;
+-    margin-bottom:34px;
+-  }
+-  .brand{
+-    font-family:'Changa', sans-serif;
+-    font-weight:800;
+-    font-size:22px;
+-    letter-spacing:1px;
+-    color:var(--gold);
+-    cursor:pointer;
+-    display:flex; align-items:center; gap:10px;
+-  }
+-  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--gold); box-shadow:0 0 10px var(--gold);}
+-  .crumb{color:var(--muted); font-size:14px;}
+-
+-  /* ---------- hub ---------- */
+-  .hero{
+-    text-align:center;
+-    padding:50px 20px 40px;
+-    position:relative;
+-  }
+-  .hero:before{
+-    content:"";
+-    position:absolute; inset:0 auto auto 50%;
+-    transform:translateX(-50%);
+-    top:0; width:280px; height:280px;
+-    background:radial-gradient(circle, rgba(212,168,87,0.18), transparent 70%);
+-    pointer-events:none;
+-  }
+-  .hero h1{
+-    font-family:'Changa', sans-serif;
+-    font-weight:800;
+-    font-size:clamp(42px,8vw,68px);
+-    margin:0 0 6px;
+-    color:var(--ivory);
+-    position:relative;
+-  }
+-  .hero h1 span{color:var(--gold);}
+-  .hero p{color:var(--muted); font-size:16px; margin:0; position:relative;}
+-
+-  .bulb-row{
+-    display:flex; justify-content:center; gap:10px; margin:22px 0 6px; position:relative;
+-  }
+-  .bulb-row i{
+-    width:6px;height:6px;border-radius:50%;
+-    background:var(--gold-dim);
+-  }
+-
+-  .cards{
+-    display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+-    gap:18px; margin-top:30px;
+-  }
+-  .card{
+-    background:linear-gradient(160deg, var(--panel-2), var(--panel));
+-    border:1px solid var(--line);
+-    border-radius:16px;
+-    padding:26px 22px;
+-    cursor:pointer;
+-    transition:transform .18s ease, border-color .18s ease;
+-    text-align:right;
+-    position:relative;
+-    overflow:hidden;
+-  }
+-  .card:hover{transform:translateY(-4px); border-color:var(--gold-dim);}
+-  .card h3{font-family:'Changa'; font-size:21px; margin:0 0 8px; color:var(--ivory);}
+-  .card p{color:var(--muted); font-size:14px; margin:0; line-height:1.7;}
+-  .card .tag{
+-    display:inline-block; margin-bottom:14px;
+-    font-size:12px; color:var(--gold); border:1px solid var(--gold-dim);
+-    padding:3px 10px; border-radius:20px;
+-  }
+-  .card.soon{opacity:.5; cursor:not-allowed;}
+-  .card.soon:hover{transform:none; border-color:var(--line);}
+-
+-  /* ---------- generic buttons ---------- */
+-  .btn{
+-    font-family:'Tajawal'; font-weight:700; font-size:15px;
+-    border:none; border-radius:12px; padding:13px 22px;
+-    cursor:pointer; transition:filter .15s ease, transform .1s ease;
+-  }
+-  .btn:active{transform:scale(.98);}
+-  .btn-gold{background:var(--gold); color:#22190A;}
+-  .btn-gold:hover{filter:brightness(1.08);}
+-  .btn-ghost{background:transparent; color:var(--ivory); border:1px solid var(--line);}
+-  .btn-ghost:hover{border-color:var(--gold-dim);}
+-  .btn:disabled{opacity:.4; cursor:not-allowed;}
+-  .btn-sm{padding:9px 14px; font-size:13px; border-radius:9px;}
+-  .btn-row{display:flex; gap:12px; margin-top:26px; flex-wrap:wrap;}
+-
+-  /* ---------- panels / sections ---------- */
+-  .panel{
+-    background:var(--panel);
+-    border:1px solid var(--line);
+-    border-radius:16px;
+-    padding:24px;
+-    margin-bottom:20px;
+-  }
+-  .section-title{
+-    font-family:'Changa'; font-size:19px; color:var(--gold); margin:0 0 4px;
+-  }
+-  .section-sub{color:var(--muted); font-size:13px; margin:0 0 18px;}
+-
+-  label{display:block; font-size:13px; color:var(--muted); margin-bottom:6px;}
+-  input[type=text], input[type=number]{
+-    width:100%; background:var(--bg-2); border:1px solid var(--line);
+-    color:var(--ivory); border-radius:10px; padding:11px 13px;
+-    font-family:'Tajawal'; font-size:15px;
+-  }
+-  input[type=text]:focus, input[type=number]:focus{outline:none; border-color:var(--gold-dim);}
+-  select{
+-    background:var(--bg-2); border:1px solid var(--line); color:var(--ivory);
+-    border-radius:10px; padding:9px 10px; font-family:'Tajawal';
+-  }
+-
+-  .field{margin-bottom:16px;}
+-  .row2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+-
+-  /* ---------- topic editor ---------- */
+-  .topic-block{
+-    border:1px solid var(--line); border-radius:14px; padding:18px;
+-    margin-bottom:16px; background:var(--bg-2);
+-  }
+-  .topic-block-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+-  .topic-block-head input{font-family:'Changa'; font-size:17px; font-weight:700;}
+-  .q-grid{display:grid; grid-template-columns:1fr; gap:10px;}
+-  .q-row{
+-    display:grid; grid-template-columns:auto 1fr 1fr; gap:10px; align-items:center;
+-    padding:8px; border:1px solid var(--line); border-radius:10px;
+-  }
+-  .q-row .pts{width:88px;}
+-  .q-row input{font-size:13px; padding:8px 10px;}
+-  .remove-x{
+-    background:none; border:none; color:var(--rose); cursor:pointer; font-size:18px;
+-    line-height:1; padding:4px 8px;
+-  }
+-  .pool-counter{
+-    display:inline-flex; align-items:center; gap:8px; font-size:13px;
+-    color:var(--muted); margin-bottom:16px;
+-  }
+-  .pool-counter b{color:var(--gold);}
+-
+-  /* ---------- teams / timer ---------- */
+-  .team-card{
+-    border-radius:14px; padding:18px; border:1px solid var(--line);
+-  }
+-  .team-card.t0{border-color:var(--gold-dim); background:rgba(212,168,87,0.06);}
+-  .team-card.t1{border-color:var(--rose-dim); background:rgba(193,68,58,0.06);}
+-
+-  .toggle-row{display:flex; align-items:center; justify-content:space-between; gap:14px;}
+-  .switch{
+-    width:46px; height:26px; border-radius:20px; background:var(--bg-2);
+-    border:1px solid var(--line); position:relative; cursor:pointer; flex:none;
+-  }
+-  .switch.on{background:var(--gold);}
+-  .switch .knob{
+-    position:absolute; top:2px; right:2px; width:20px; height:20px; border-radius:50%;
+-    background:var(--ivory); transition:right .15s ease;
+-  }
+-  .switch.on .knob{right:22px; background:#22190A;}
+-
+-  /* ---------- selection screen ---------- */
+-  .turn-banner{
+-    text-align:center; padding:16px; border-radius:14px; margin-bottom:22px;
+-    border:1px solid var(--gold-dim); background:rgba(212,168,87,0.08);
+-  }
+-  .turn-banner b{font-family:'Changa'; font-size:19px; color:var(--gold);}
+-  .pick-grid{
+-    display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px;
+-  }
+-  .pick-card{
+-    border:1px solid var(--line); border-radius:14px; padding:20px 14px;
+-    text-align:center; cursor:pointer; background:var(--panel-2);
+-    transition:transform .15s ease, border-color .15s ease;
+-    font-family:'Changa'; font-size:16px;
+-  }
+-  .pick-card:hover{transform:translateY(-3px); border-color:var(--gold-dim);}
+-  .pick-card.taken{opacity:.3; cursor:not-allowed;}
+-  .pick-card.taken:hover{transform:none;}
+-  .taken-by{display:block; font-family:'Tajawal'; font-size:12px; color:var(--muted); margin-top:6px;}
+-
+-  /* ---------- scoreboard ---------- */
+-  .scoreboard{
+-    display:flex; gap:14px; margin-bottom:22px;
+-  }
+-  .score-card{
+-    flex:1; border-radius:14px; padding:16px 18px; border:1px solid var(--line);
+-    display:flex; align-items:center; justify-content:space-between;
+-  }
+-  .score-card.t0{background:linear-gradient(120deg, rgba(212,168,87,0.14), transparent); border-color:var(--gold-dim);}
+-  .score-card.t1{background:linear-gradient(120deg, rgba(193,68,58,0.14), transparent); border-color:var(--rose-dim);}
+-  .score-card .name{font-size:14px; color:var(--muted);}
+-  .score-card .pts{font-family:'Changa'; font-size:30px; font-weight:700;}
+-  .score-card.t0 .pts{color:var(--gold);}
+-  .score-card.t1 .pts{color:var(--rose);}
+-
+-  /* ---------- board ---------- */
+-  .board{
+-    display:grid; gap:8px;
+-    grid-template-columns:repeat(var(--cols,6), 1fr);
+-  }
+-  .topic-head{
+-    font-family:'Changa'; font-size:14px; text-align:center; color:var(--ivory);
+-    padding:12px 6px; border-radius:10px; background:var(--panel-2);
+-    border:1px solid var(--line); min-height:52px; display:flex; align-items:center; justify-content:center;
+-  }
+-  .cell{
+-    font-family:'Changa'; font-size:20px; text-align:center; padding:18px 6px;
+-    border-radius:10px; background:var(--panel); border:1px solid var(--line);
+-    color:var(--gold); cursor:pointer; transition:transform .12s ease, background .12s ease;
+-  }
+-  .cell:hover{transform:translateY(-2px); background:var(--panel-2);}
+-  .cell.used{
+-    color:transparent; background:var(--bg-2); border-color:var(--line);
+-    cursor:default; box-shadow:none;
+-  }
+-  .cell.used:hover{transform:none;}
+-  @media (max-width:720px){
+-    .board{grid-template-columns:repeat(var(--cols,6), minmax(0,1fr)); gap:6px;}
+-    .topic-head{font-size:11px; padding:8px 3px; min-height:40px;}
+-    .cell{font-size:14px; padding:12px 3px;}
+-  }
+-
+-  /* ---------- question overlay ---------- */
+-  .overlay{
+-    position:fixed; inset:0; background:rgba(6,15,14,0.86);
+-    display:flex; align-items:center; justify-content:center; padding:20px; z-index:50;
+-  }
+-  .q-modal{
+-    width:100%; max-width:640px; background:var(--panel);
+-    border:1px solid var(--gold-dim); border-radius:20px; padding:34px 30px;
+-    text-align:center; position:relative;
+-  }
+-  .q-topic{color:var(--muted); font-size:14px; margin-bottom:6px;}
+-  .q-points{
+-    font-family:'Changa'; font-size:15px; color:#22190A; background:var(--gold);
+-    display:inline-block; padding:4px 16px; border-radius:20px; margin-bottom:20px;
+-  }
+-  .q-text{font-size:22px; line-height:1.8; margin-bottom:22px; min-height:60px;}
+-  .timer{
+-    font-family:'Changa'; font-size:34px; color:var(--gold); margin-bottom:18px;
+-  }
+-  .timer.warn{color:var(--rose);}
+-  .answer-box{
+-    border-top:1px dashed var(--line); margin-top:20px; padding-top:20px;
+-  }
+-  .answer-box .label{color:var(--muted); font-size:13px; margin-bottom:6px;}
+-  .answer-box .val{font-size:19px; color:var(--sage); font-weight:700;}
+-  .award-row{display:flex; gap:10px; justify-content:center; margin-top:24px; flex-wrap:wrap;}
+-
+-  /* ---------- end screen ---------- */
+-  .end-wrap{text-align:center; padding:40px 10px;}
+-  .end-wrap .trophy{font-size:54px; margin-bottom:10px;}
+-  .end-wrap h2{font-family:'Changa'; font-size:34px; margin:6px 0; color:var(--gold);}
+-  .end-wrap p{color:var(--muted); margin-bottom:30px;}
+-  .final-scores{display:flex; gap:14px; justify-content:center; margin-bottom:34px; flex-wrap:wrap;}
+-
+-  .empty{
+-    text-align:center; color:var(--muted); padding:40px 10px; font-size:14px;
+-  }
+-</style>
+-<!-- Supabase (تسجيل الدخول بحساب GitHub + حفظ الإحصائيات) -->
+-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+-</head>
+-<body>
+-<div class="wrap" id="app"></div>
+-
+-<script>
+-/* ============================ CATEGORY QUESTION BANK (Supabase) ============================ */
+-/* كل موضوع فيه ٥ أسئلة سهلة (١٠٠ نقطة) و٥ أسئلة متوسطة (٢٠٠ نقطة)، محمّلة من قاعدة بيانات أونلاين.
+-   كل لعبة تختار عشوائياً ٢ من كل مستوى، وتتجنب تكرار نفس الأسئلة قبل ما تخلص كل الأسئلة المتوفرة. */
+-let CATEGORY_TOPICS = [];   // ['جغرافيا', 'تاريخ', ...] يُملى بعد التحميل
+-let CATEGORY_DATA = {};     // { 'جغرافيا': { easy:[{text,answer}], medium:[{text,answer}] } }
+-const bankUsage = {};       // { topicName: { easy:Set, medium:Set } }, in-memory rotation tracker
+-
+-async function loadCategoryDatabase(){
+-  const { data, error } = await sb
+-    .from('category_questions')
+-    .select('topic, points, question, answer')
+-    .limit(2000);
+-  if(error) throw error;
+-  const grouped = {};
+-  data.forEach(row=>{
+-    if(!grouped[row.topic]) grouped[row.topic] = { easy:[], medium:[] };
+-    const tier = row.points <= 100 ? 'easy' : 'medium';
+-    grouped[row.topic][tier].push({ text:row.question, answer:row.answer });
+-  });
+-  CATEGORY_DATA = grouped;
+-  CATEGORY_TOPICS = Object.keys(grouped);
+-}
+-
+-function shuffled(arr){
+-  const a = arr.slice();
+-  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+-  return a;
+-}
+-function pickFromTier(tier, usedSet, n){
+-  let avail = tier.map((_,i)=>i).filter(i=>!usedSet.has(i));
+-  if(avail.length < n){ usedSet.clear(); avail = tier.map((_,i)=>i); }
+-  const chosen = shuffled(avail).slice(0,n);
+-  chosen.forEach(i=>usedSet.add(i));
+-  return chosen.map(i=>tier[i]);
+-}
+-function pickQuestionsForBankTopic(topicName){
+-  if(!bankUsage[topicName]) bankUsage[topicName] = { easy:new Set(), medium:new Set() };
+-  const bank = CATEGORY_DATA[topicName];
+-  const easyQs = pickFromTier(bank.easy, bankUsage[topicName].easy, 2);
+-  const medQs = pickFromTier(bank.medium, bankUsage[topicName].medium, 2);
+-  return [
+-    ...easyQs.map(q=>({ id:nextId(), text:q.text, answer:q.answer, points:100 })),
+-    ...medQs.map(q=>({ id:nextId(), text:q.text, answer:q.answer, points:200 }))
+-  ];
+-}
+-
+-/* ============================ SUPABASE (حسابات + إحصائيات) ============================ */
+-const SUPABASE_URL = "https://pajxormplmloivyankji.supabase.co";
+-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhanhvcm1wbG1sb2l2eWFua2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA0ODQ3OTksImV4cCI6MjA3NjA2MDc5OX0.eEPB_Gt5HywU9oGNXLpSNc4IA7CTTL7CX-EMKDE3yec";
+-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+-
+-async function signUpWithEmail(email, password){
+-  const { error } = await sb.auth.signUp({ email, password });
+-  if(error) throw error;
+-}
+-
+-async function signInWithEmail(email, password){
+-  const { error } = await sb.auth.signInWithPassword({ email, password });
+-  if(error) throw error;
+-}
+-
+-function signOutUser(){
+-  sb.auth.signOut();
+-}
+-
+-async function loadOrCreateProfile(authUser){
+-  let { data } = await sb.from('tajammo_profiles').select('*').eq('id', authUser.id).single();
+-  if(!data){
+-    const fresh = {
+-      id: authUser.id,
+-      name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || (authUser.email ? authUser.email.split('@')[0] : 'لاعب'),
+-      email: authUser.email || '',
+-      avatar_url: '',
+-      games_played: 0,
+-      total_points: 0
+-    };
+-    const { data: inserted, error: insertErr } = await sb.from('tajammo_profiles').insert(fresh).select().single();
+-    if(insertErr){
+-      console.warn('تعذّر إنشاء الملف الشخصي', insertErr);
+-      return { uid: authUser.id, name: fresh.name, photo: '', gamesPlayed: 0, totalPoints: 0 };
+-    }
+-    data = inserted;
+-  }
+-  return {
+-    uid: authUser.id,
+-    name: data.name,
+-    photo: data.avatar_url,
+-    gamesPlayed: data.games_played,
+-    totalPoints: data.total_points
+-  };
+-}
+-
+-async function recordGameResult(totalPoints){
+-  if(!state.user) return;
+-  const newGamesPlayed = (state.user.gamesPlayed||0) + 1;
+-  const newTotalPoints = (state.user.totalPoints||0) + totalPoints;
+-  try{
+-    await sb.from('tajammo_profiles').update({
+-      games_played: newGamesPlayed,
+-      total_points: newTotalPoints,
+-      last_played_at: new Date().toISOString()
+-    }).eq('id', state.user.uid);
+-    state.user.gamesPlayed = newGamesPlayed;
+-    state.user.totalPoints = newTotalPoints;
+-  } catch(e){ console.warn('تعذّر حفظ الإحصائيات', e); }
+-}
+-
+-sb.auth.onAuthStateChange(async (event, session)=>{
+-  if(session && session.user){
+-    state.user = await loadOrCreateProfile(session.user);
+-  } else {
+-    state.user = null;
+-  }
+-  render();
+-});
+-
+-/* ============================ STATE ============================ */
+-const state = {
+-  screen: 'hub',
+-  timerEnabled: false,
+-  timerSeconds: 30,
+-  user: null,
+-  statsRecordedForThisGame: false,
+-  showAuthModal: false,
+-  authMode: 'signin', // 'signin' | 'signup'
+-  authError: '',
+-  authBusy: false,
+-  categoryDataLoaded: false,
+-  categoryDataError: '',
+-  teams: [
+-    { name: 'الفريق الأول', score: 0 },
+-    { name: 'الفريق الثاني', score: 0 }
+-  ],
+-  pool: [],           // { id, name, bankKey|null, taken:false, takenBy:null, questions:[{id,text,answer,points}] }
+-  selectedTopicIds: [],
+-  turn: 0,
+-  activeCell: null,
+-  timerLeft: 0,
+-  timerHandle: null,
+-
+-  // ---- من أنا؟ ----
+-  whoamiPlayerCount: 5,
+-  whoamiPlayerNames: [],
+-  whoamiPlayers: [],     // [{name, character, guessed:false}]
+-  whoamiRevealIndex: 0,
+-  whoamiRevealShown: false,
+-  whoamiTurn: 0,
+-  whoamiFinishOrder: [],
+-  whoamiTimerEnabled: false,
+-  whoamiTimerSeconds: 30,
+-  whoamiTimerLeft: 0,
+-  whoamiTimerHandle: null,
+-  whoamiLoading: false,
+-  whoamiError: '',
+-
+-  // ---- الحلفاء والشياطين ----
+-  shdPlayerCount: 6,
+-  shdPlayerNames: [],
+-  shdPlayers: [],        // [{name, role:'good'|'evil'}]
+-  shdRevealIndex: 0,
+-  shdRevealShown: false,
+-  shdDeck: [],
+-  shdDiscard: [],
+-  shdGoodCount: 0,
+-  shdEvilCount: 0,
+-  shdPresidentIdx: 0,
+-  shdChancellorIdx: null,
+-  shdLastPresidentIdx: null,
+-  shdLastChancellorIdx: null,
+-  shdVotes: {},
+-  shdVoteStep: 0,
+-  shdVoteOrder: [],
+-  shdDrawnPolicies: [],
+-  shdPresDiscardDone: false,
+-  shdChanDiscardDone: false,
+-  shdLastEnacted: null,
+-  shdWinner: null,
+-  shdRoundMessage: ''
+-};
+-
+-let uid = 1;
+-const nextId = () => 'id' + (uid++);
+-
+-/* ============================ HELPERS ============================ */
+-function makeCustomTopic(name){
+-  return {
+-    id: nextId(),
+-    name: name,
+-    bankKey: null,
+-    taken:false, takenBy:null,
+-    expanded:false,
+-    questions:[
+-      { id: nextId(), text:'', answer:'', points:100 },
+-      { id: nextId(), text:'', answer:'', points:100 },
+-      { id: nextId(), text:'', answer:'', points:200 },
+-      { id: nextId(), text:'', answer:'', points:200 }
+-    ]
+-  };
+-}
+-function makeBankTopic(topicName){
+-  return {
+-    id: nextId(),
+-    name: topicName,
+-    bankKey: topicName,
+-    taken:false, takenBy:null,
+-    expanded:false,
+-    questions: pickQuestionsForBankTopic(topicName)
+-  };
+-}
+-
+-function el(html){
+-  const t = document.createElement('template');
+-  t.innerHTML = html.trim();
+-  return t.content.firstElementChild;
+-}
+-
+-function goto(screen){ state.screen = screen; render(); window.scrollTo({top:0, behavior:'smooth'}); }
+-
+-function escapeAttr(s){
+-  return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+-}
+-
+-/* ============================ RENDER ROOT ============================ */
+-function render(){
+-  const app = document.getElementById('app');
+-  app.innerHTML = '';
+-  app.appendChild(renderTopbar());
+-  let body;
+-  switch(state.screen){
+-    case 'hub': body = renderHub(); break;
+-    case 'cat-loading': body = renderCatLoading(); break;
+-    case 'editor': body = renderEditor(); break;
+-    case 'teams': body = renderTeams(); break;
+-    case 'select': body = renderSelect(); break;
+-    case 'board': body = renderBoard(); break;
+-    case 'end': body = renderEnd(); break;
+-    case 'whoami-setup': body = renderWhoamiSetup(); break;
+-    case 'whoami-reveal': body = renderWhoamiReveal(); break;
+-    case 'whoami-play': body = renderWhoamiPlay(); break;
+-    case 'whoami-end': body = renderWhoamiEnd(); break;
+-    case 'shd-setup': body = renderShdSetup(); break;
+-    case 'shd-reveal': body = renderShdReveal(); break;
+-    case 'shd-nominate': body = renderShdNominate(); break;
+-    case 'shd-vote': body = renderShdVote(); break;
+-    case 'shd-vote-result': body = renderShdVoteResult(); break;
+-    case 'shd-president-policy': body = renderShdPresidentPolicy(); break;
+-    case 'shd-chancellor-policy': body = renderShdChancellorPolicy(); break;
+-    case 'shd-policy-result': body = renderShdPolicyResult(); break;
+-    case 'shd-end': body = renderShdEnd(); break;
+-    default: body = renderHub();
+-  }
+-  app.appendChild(body);
+-
+-  if(state.screen === 'board' && state.activeCell){
+-    app.appendChild(renderQuestionOverlay());
+-  }
+-  if(state.showAuthModal){
+-    app.appendChild(renderAuthOverlay());
+-  }
+-}
+-
+-function renderTopbar(){
+-  const bar = el(`<div class="topbar">
+-    <div class="brand"><span class="dot"></span> تجمّع</div>
+-    <div class="topbar-right" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+-      <div class="crumb"></div>
+-    </div>
+-  </div>`);
+-  bar.querySelector('.brand').addEventListener('click', ()=>{
+-    stopTimer();
+-    stopWhoamiTimer();
+-    goto('hub');
+-  });
+-  const crumbMap = {
+-    'cat-loading':'لعبة الفئات · تحميل البنك',
+-    editor:'لعبة الفئات · اختيار المواضيع',
+-    teams:'لعبة الفئات · الفرق والإعدادات',
+-    select:'لعبة الفئات · اختيار الفئات',
+-    board:'لعبة الفئات · اللعب',
+-    end:'لعبة الفئات · النتيجة',
+-    'whoami-setup':'من أنا؟ · تجهيز اللاعبين',
+-    'whoami-reveal':'من أنا؟ · توزيع الشخصيات',
+-    'whoami-play':'من أنا؟ · اللعب',
+-    'whoami-end':'من أنا؟ · النتيجة',
+-    'shd-setup':'الحلفاء والشياطين · تجهيز',
+-    'shd-reveal':'الحلفاء والشياطين · توزيع الأدوار',
+-    'shd-nominate':'الحلفاء والشياطين · ترشيح الوزير',
+-    'shd-vote':'الحلفاء والشياطين · التصويت',
+-    'shd-vote-result':'الحلفاء والشياطين · نتيجة التصويت',
+-    'shd-president-policy':'الحلفاء والشياطين · دور الرئيس',
+-    'shd-chancellor-policy':'الحلفاء والشياطين · دور الوزير',
+-    'shd-policy-result':'الحلفاء والشياطين · نتيجة القانون',
+-    'shd-end':'الحلفاء والشياطين · النتيجة'
+-  };
+-  if(crumbMap[state.screen]) bar.querySelector('.crumb').textContent = crumbMap[state.screen];
+-
+-  const rightGroup = bar.querySelector('.topbar-right');
+-  const authArea = el(`<div style="display:flex; align-items:center; gap:10px;"></div>`);
+-  if(state.user){
+-    const box = el(`<div style="display:flex; align-items:center; gap:8px; cursor:pointer;" id="user-box">
+-      ${state.user.photo ? `<img src="${escapeAttr(state.user.photo)}" style="width:28px;height:28px;border-radius:50%; border:1px solid var(--gold-dim);"/>` : ''}
+-      <span style="font-size:13px; color:var(--muted);">${escapeAttr(state.user.name)}</span>
+-    </div>`);
+-    box.addEventListener('click', ()=>{
+-      if(confirm('تسجيل الخروج؟')) signOutUser();
+-    });
+-    authArea.appendChild(box);
+-  } else {
+-    const btn = el(`<button class="btn btn-ghost btn-sm" id="open-auth">تسجيل الدخول</button>`);
+-    btn.addEventListener('click', ()=>{
+-      state.showAuthModal = true;
+-      state.authMode = 'signin';
+-      state.authError = '';
+-      render();
+-    });
+-    authArea.appendChild(btn);
+-  }
+-  rightGroup.appendChild(authArea);
+-
+-  return bar;
+-}
+-
+-/* ============================ HUB ============================ */
+-function renderHub(){
+-  const wrap = el(`<div>
+-    <div class="hero">
+-      <div class="bulb-row">${'<i></i>'.repeat(9)}</div>
+-      <h1>تجمّ<span>ع</span></h1>
+-      <p>${state.user ? `أهلاً ${escapeAttr(state.user.name)} — لعبت ${state.user.gamesPlayed||0} لعبة` : 'اختاروا لعبة والعبوها سوا'}</p>
+-    </div>
+-    <div class="cards">
+-      <div class="card" id="card-cat">
+-        <span class="tag">فرق · ٢-فرق</span>
+-        <h3>لعبة الفئات</h3>
+-        <p>كل فريق يختار ٣ فئات، وكل فئة فيها ٤ أسئلة بنقاط متفاوتة. من يجمع نقاط أكثر يفوز.</p>
+-      </div>
+-      <div class="card" id="card-whoami">
+-        <span class="tag">جماعي · ٣-١٠ لاعبين</span>
+-        <h3>من أنا؟</h3>
+-        <p>كل لاعب تنحط له شخصية بالسر يشوفها الكل إلا هو، ويحاول يخمنها بأسئلة نعم/لا.</p>
+-      </div>
+-      <div class="card" id="card-shd">
+-        <span class="tag">جماعي · ٥-١٠ لاعبين</span>
+-        <h3>الحلفاء والشياطين</h3>
+-        <p>فريقين بالسر: حلفاء وشياطين. انتخاب رئيس ووزير، تمرير قوانين، ونقاش وشكوك. من يمرر أهدافه أول يفوز.</p>
+-      </div>
+-    </div>
+-  </div>`);
+-  wrap.querySelector('#card-cat').addEventListener('click', async ()=>{
+-    if(state.categoryDataLoaded){
+-      if(state.pool.length === 0){
+-        CATEGORY_TOPICS.forEach(t=> state.pool.push(makeBankTopic(t)));
+-      }
+-      goto('editor');
+-      return;
+-    }
+-    state.categoryDataError = '';
+-    goto('cat-loading');
+-    try{
+-      await loadCategoryDatabase();
+-      state.categoryDataLoaded = true;
+-      if(state.pool.length === 0){
+-        CATEGORY_TOPICS.forEach(t=> state.pool.push(makeBankTopic(t)));
+-      }
+-      goto('editor');
+-    } catch(e){
+-      state.categoryDataError = 'تعذّر تحميل بنك الأسئلة — تأكد من اتصال الإنترنت وحاول مرة ثانية.';
+-      render();
+-    }
+-  });
+-  wrap.querySelector('#card-whoami').addEventListener('click', ()=>{
+-    goto('whoami-setup');
+-  });
+-  wrap.querySelector('#card-shd').addEventListener('click', ()=>{
+-    goto('shd-setup');
+-  });
+-  return wrap;
+-}
+-
+-/* ============================ EDITOR (choose topics) ============================ */
+-function renderCatLoading(){
+-  const wrap = el(`<div></div>`);
+-  if(state.categoryDataError){
+-    const panel = el(`<div class="panel" style="text-align:center;">
+-      <div class="section-title">${escapeAttr(state.categoryDataError)}</div>
+-      <div class="btn-row" style="justify-content:center;">
+-        <button class="btn btn-gold" id="retry-load">حاول مرة ثانية</button>
+-        <button class="btn btn-ghost" id="back-hub-load">رجوع</button>
+-      </div>
+-    </div>`);
+-    panel.querySelector('#retry-load').addEventListener('click', async ()=>{
+-      state.categoryDataError = '';
+-      render();
+-      try{
+-        await loadCategoryDatabase();
+-        state.categoryDataLoaded = true;
+-        if(state.pool.length === 0){
+-          CATEGORY_TOPICS.forEach(t=> state.pool.push(makeBankTopic(t)));
+-        }
+-        goto('editor');
+-      } catch(e){
+-        state.categoryDataError = 'تعذّر تحميل بنك الأسئلة — تأكد من اتصال الإنترنت وحاول مرة ثانية.';
+-        render();
+-      }
+-    });
+-    panel.querySelector('#back-hub-load').addEventListener('click', ()=> goto('hub'));
+-    wrap.appendChild(panel);
+-  } else {
+-    wrap.appendChild(el(`<div class="panel" style="text-align:center;">
+-      <div class="section-title">...جاري تحميل بنك الأسئلة</div>
+-      <div class="section-sub">يحتاج اتصال إنترنت</div>
+-    </div>`));
+-  }
+-  return wrap;
+-}
+-
+-function renderEditor(){
+-  const wrap = el(`<div></div>`);
+-
+-  const intro = el(`<div class="panel">
+-    <div class="section-title">اختر المواضيع</div>
+-    <div class="section-sub">مواضيع جاهزة بأسئلتها — بس اختار وشيل اللي يعجبك، وتقدر تضيف موضوعك الخاص إذا حبيت. لازم يبقى ٦ مواضيع على الأقل.</div>
+-    <div class="pool-counter">مختار حالياً <b id="pool-count">${state.pool.length}</b> من ٦ مواضيع على الأقل</div>
+-  </div>`);
+-  wrap.appendChild(intro);
+-
+-  const grid = el(`<div class="pick-grid" id="bank-grid" style="margin-bottom:20px;"></div>`);
+-  CATEGORY_TOPICS.forEach(topicName=>{
+-    const inPool = state.pool.find(t=>t.bankKey === topicName);
+-    const card = el(`<div class="pick-card ${inPool?'':'taken'}" style="${inPool? `border-color:var(--gold-dim); background:rgba(212,168,87,0.10);`:''}">
+-      ${escapeAttr(topicName)}
+-      <span class="taken-by">${inPool ? '✓ مُختار' : 'اضغط للإضافة'}</span>
+-    </div>`);
+-    card.addEventListener('click', ()=>{
+-      if(inPool){
+-        state.pool = state.pool.filter(t => t.bankKey !== topicName);
+-      } else {
+-        state.pool.push(makeBankTopic(topicName));
+-      }
+-      render();
+-    });
+-    grid.appendChild(card);
+-  });
+-  wrap.appendChild(grid);
+-
+-  const customTopics = state.pool.filter(t=>t.bankKey === null);
+-  if(customTopics.length){
+-    const customPanel = el(`<div class="panel"><div class="section-title" style="font-size:16px;">مواضيعك الخاصة</div></div>`);
+-    const list = customPanel.querySelector('.section-title');
+-    customTopics.forEach(t=>{
+-      const row = el(`<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 4px; border-top:1px solid var(--line);">
+-        <span>${escapeAttr(t.name)}</span>
+-        <button class="remove-x" title="حذف">✕</button>
+-      </div>`);
+-      row.querySelector('.remove-x').addEventListener('click', ()=>{
+-        state.pool = state.pool.filter(x=>x.id!==t.id);
+-        render();
+-      });
+-      customPanel.appendChild(row);
+-    });
+-    wrap.appendChild(customPanel);
+-  }
+-
+-  const addCustom = el(`<div class="panel">
+-    <div class="section-title" style="font-size:16px;">أضف موضوع خاص</div>
+-    <div class="section-sub">تكتب اسم موضوعك، والأسئلة تكتبها بنفسك أثناء اللعب لحظة ما تفتح كل خانة.</div>
+-    <div style="display:flex; gap:10px;">
+-      <input type="text" id="custom-name" placeholder="مثال: نجوم كرة القدم العراقية"/>
+-      <button class="btn btn-gold btn-sm" id="add-custom" style="flex:none;">إضافة</button>
+-    </div>
+-  </div>`);
+-  addCustom.querySelector('#add-custom').addEventListener('click', ()=>{
+-    const input = addCustom.querySelector('#custom-name');
+-    const name = input.value.trim();
+-    if(!name) { input.focus(); return; }
+-    state.pool.push(makeCustomTopic(name));
+-    render();
+-  });
+-  wrap.appendChild(addCustom);
+-
+-  const actions = el(`<div class="btn-row">
+-    <button class="btn btn-gold" id="to-teams">التالي: الفرق</button>
+-    <button class="btn btn-ghost" id="back-hub">رجوع</button>
+-  </div>`);
+-  actions.querySelector('#to-teams').disabled = state.pool.length < 6;
+-  actions.querySelector('#to-teams').addEventListener('click', ()=>{
+-    if(state.pool.length >= 6) goto('teams');
+-  });
+-  actions.querySelector('#back-hub').addEventListener('click', ()=> goto('hub'));
+-  wrap.appendChild(actions);
+-
+-  if(state.pool.length < 6){
+-    wrap.appendChild(el(`<div class="section-sub" style="margin-top:-8px;">لازم يبقى عندك ٦ مواضيع على الأقل عشان تكمل.</div>`));
+-  }
+-
+-  return wrap;
+-}
+-
+-/* ============================ TEAMS / SETTINGS ============================ */
+-function renderTeams(){
+-  const wrap = el(`<div></div>`);
+-
+-  const panel = el(`<div class="panel">
+-    <div class="section-title">الفرق</div>
+-    <div class="section-sub">سمّوا الفرق قبل ما تبدون</div>
+-    <div class="row2">
+-      <div class="team-card t0">
+-        <label>اسم الفريق الأول</label>
+-        <input type="text" id="t0name" value="${escapeAttr(state.teams[0].name)}"/>
+-      </div>
+-      <div class="team-card t1">
+-        <label>اسم الفريق الثاني</label>
+-        <input type="text" id="t1name" value="${escapeAttr(state.teams[1].name)}"/>
+-      </div>
+-    </div>
+-  </div>`);
+-  panel.querySelector('#t0name').addEventListener('input', e=> state.teams[0].name = e.target.value || 'الفريق الأول');
+-  panel.querySelector('#t1name').addEventListener('input', e=> state.teams[1].name = e.target.value || 'الفريق الثاني');
+-  wrap.appendChild(panel);
+-
+-  const timerPanel = el(`<div class="panel">
+-    <div class="section-title">المؤقت</div>
+-    <div class="section-sub">اختر إذا بتلعبون بمؤقت زمني لكل سؤال أو بدون</div>
+-    <div class="toggle-row">
+-      <span>تفعيل المؤقت</span>
+-      <div class="switch ${state.timerEnabled?'on':''}" id="timer-switch"><div class="knob"></div></div>
+-    </div>
+-    <div class="field" style="margin-top:16px; ${state.timerEnabled?'':'display:none;'}" id="timer-duration-field">
+-      <label>مدة كل سؤال (بالثواني)</label>
+-      <input type="number" id="timer-seconds" min="10" max="180" value="${state.timerSeconds}"/>
+-    </div>
+-  </div>`);
+-  timerPanel.querySelector('#timer-switch').addEventListener('click', ()=>{
+-    state.timerEnabled = !state.timerEnabled;
+-    render();
+-  });
+-  const secInput = timerPanel.querySelector('#timer-seconds');
+-  if(secInput) secInput.addEventListener('input', e=>{
+-    state.timerSeconds = Math.max(5, parseInt(e.target.value||'30',10));
+-  });
+-  wrap.appendChild(timerPanel);
+-
+-  const actions = el(`<div class="btn-row">
+-    <button class="btn btn-gold" id="to-select">التالي: اختيار الفئات</button>
+-    <button class="btn btn-ghost" id="back-editor">رجوع</button>
+-  </div>`);
+-  actions.querySelector('#to-select').addEventListener('click', ()=>{
+-    state.pool.forEach(t=>{ t.taken=false; t.takenBy=null; });
+-    state.selectedTopicIds = [];
+-    state.turn = 0;
+-    state.teams[0].score = 0;
+-    state.teams[1].score = 0;
+-    state.statsRecordedForThisGame = false;
+-    goto('select');
+-  });
+-  actions.querySelector('#back-editor').addEventListener('click', ()=> goto('editor'));
+-  wrap.appendChild(actions);
+-
+-  return wrap;
+-}
+-
+-/* ============================ SELECT TOPICS ============================ */
+-function renderSelect(){
+-  const wrap = el(`<div></div>`);
+-  const currentTeam = state.teams[state.turn];
+-  const pickedCount = state.selectedTopicIds.length;
+-
+-  if(pickedCount >= 6){
+-    const done = el(`<div class="panel" style="text-align:center;">
+-      <div class="section-title">تم اختيار كل الفئات ✓</div>
+-      <div class="section-sub">جاهزين نبدأ اللعب</div>
+-      <div class="btn-row" style="justify-content:center;">
+-        <button class="btn btn-gold" id="start-board">ابدأ اللعبة</button>
+-      </div>
+-    </div>`);
+-    done.querySelector('#start-board').addEventListener('click', ()=> goto('board'));
+-    wrap.appendChild(done);
+-    return wrap;
+-  }
+-
+-  const banner = el(`<div class="turn-banner">دور <b>${currentTeam.name}</b> — يختار الفئة رقم ${pickedCount+1} من ٦ (${(pickedCount%3)+1} من ٣ لهذا الفريق)</div>`);
+-  wrap.appendChild(banner);
+-
+-  const grid = el(`<div class="pick-grid"></div>`);
+-  state.pool.forEach(topic=>{
+-    const card = el(`<div class="pick-card ${topic.taken?'taken':''}">
+-      ${escapeAttr(topic.name)}
+-      ${topic.taken ? `<span class="taken-by">اختارها ${escapeAttr(state.teams[topic.takenBy].name)}</span>`:''}
+-    </div>`);
+-    if(!topic.taken){
+-      card.addEventListener('click', ()=>{
+-        topic.taken = true;
+-        topic.takenBy = state.turn;
+-        state.selectedTopicIds.push(topic.id);
+-        state.turn = state.turn === 0 ? 1 : 0;
+-        render();
+-      });
+-    }
+-    grid.appendChild(card);
+-  });
+-  wrap.appendChild(grid);
+-  return wrap;
+-}
+-
+-/* ============================ BOARD ============================ */
+-function renderBoard(){
+-  const wrap = el(`<div></div>`);
+-  wrap.appendChild(renderScoreboard());
+-
+-  const topics = state.selectedTopicIds.map(id => state.pool.find(t=>t.id===id));
+-  const board = el(`<div class="board" style="--cols:${topics.length}"></div>`);
+-
+-  topics.forEach(t=>{
+-    board.appendChild(el(`<div class="topic-head">${escapeAttr(t.name)}</div>`));
+-  });
+-
+-  const maxQ = Math.max(...topics.map(t=>t.questions.length));
+-  for(let r=0; r<maxQ; r++){
+-    topics.forEach(t=>{
+-      const q = t.questions[r];
+-      if(!q){ board.appendChild(el(`<div></div>`)); return; }
+-      const used = q.usedBy !== undefined;
+-      const cell = el(`<div class="cell ${used?'used':''}">${used?'':q.points}</div>`);
+-      if(!used){
+-        cell.addEventListener('click', ()=>{
+-          state.activeCell = { topicId:t.id, qId:q.id };
+-          render();
+-          if(state.timerEnabled && q.text.trim()) startTimer();
+-        });
+-      }
+-      board.appendChild(cell);
+-    });
+-  }
+-  wrap.appendChild(board);
+-
+-  const allUsed = topics.every(t => t.questions.every(q => q.usedBy !== undefined));
+-  if(allUsed){
+-    const finishBtn = el(`<div class="btn-row"><button class="btn btn-gold" id="finish">إنهاء اللعبة وعرض النتيجة</button></div>`);
+-    finishBtn.querySelector('#finish').addEventListener('click', ()=> goto('end'));
+-    wrap.appendChild(finishBtn);
+-  }
+-
+-  return wrap;
+-}
+-
+-function renderScoreboard(){
+-  return el(`<div class="scoreboard">
+-    <div class="score-card t0"><span class="name">${escapeAttr(state.teams[0].name)}</span><span class="pts">${state.teams[0].score}</span></div>
+-    <div class="score-card t1"><span class="name">${escapeAttr(state.teams[1].name)}</span><span class="pts">${state.teams[1].score}</span></div>
+-  </div>`);
+-}
+-
+-/* ============================ QUESTION OVERLAY ============================ */
+-function renderQuestionOverlay(){
+-  const { topicId, qId } = state.activeCell;
+-  const topic = state.pool.find(t=>t.id===topicId);
+-  const q = topic.questions.find(q=>q.id===qId);
+-  const revealed = !!q.revealed;
+-  const needsContent = !q.text.trim();
+-
+-  const overlay = el(`<div class="overlay"></div>`);
+-
+-  if(needsContent){
+-    const modal = el(`<div class="q-modal">
+-      <div class="q-topic">${escapeAttr(topic.name)}</div>
+-      <div class="q-points">سؤال بـ ${q.points} نقطة</div>
+-      <div class="field" style="text-align:right;">
+-        <label>اكتب السؤال الآن</label>
+-        <input type="text" id="live-text" placeholder="نص السؤال"/>
+-      </div>
+-      <div class="field" style="text-align:right;">
+-        <label>الإجابة الصحيحة (تظهر بعدين)</label>
+-        <input type="text" id="live-answer" placeholder="الإجابة"/>
+-      </div>
+-      <div class="btn-row" style="justify-content:center;">
+-        <button class="btn btn-gold" id="live-submit">اطرح السؤال</button>
+-      </div>
+-    </div>`);
+-    const submit = ()=>{
+-      const t = modal.querySelector('#live-text').value.trim();
+-      const a = modal.querySelector('#live-answer').value.trim();
+-      if(!t) { modal.querySelector('#live-text').focus(); return; }
+-      q.text = t;
+-      q.answer = a || '—';
+-      render();
+-      if(state.timerEnabled) startTimer();
+-    };
+-    modal.querySelector('#live-submit').addEventListener('click', submit);
+-    overlay.appendChild(modal);
+-    return overlay;
+-  }
+-
+-  const modal = el(`<div class="q-modal">
+-    <div class="q-topic">${escapeAttr(topic.name)}</div>
+-    <div class="q-points">${q.points} نقطة</div>
+-    <div class="q-text">${escapeAttr(q.text)}</div>
+-    ${state.timerEnabled ? `<div class="timer" id="timer-display">${state.timerLeft}</div>` : ''}
+-    ${revealed ? `
+-      <div class="answer-box">
+-        <div class="label">الإجابة</div>
+-        <div class="val">${escapeAttr(q.answer)}</div>
+-      </div>
+-      <div class="award-row">
+-        <button class="btn btn-gold btn-sm" id="award-0">نقطة لـ ${escapeAttr(state.teams[0].name)}</button>
+-        <button class="btn btn-sm" style="background:var(--rose); color:#fff;" id="award-1">نقطة لـ ${escapeAttr(state.teams[1].name)}</button>
+-        <button class="btn btn-ghost btn-sm" id="award-none">بدون إجابة صحيحة</button>
+-      </div>
+-    ` : `
+-      <div class="btn-row" style="justify-content:center;">
+-        <button class="btn btn-gold" id="reveal">إظهار الإجابة</button>
+-      </div>
+-    `}
+-  </div>`);
+-
+-  if(!revealed){
+-    modal.querySelector('#reveal').addEventListener('click', ()=>{
+-      q.revealed = true;
+-      stopTimer();
+-      render();
+-    });
+-  } else {
+-    modal.querySelector('#award-0').addEventListener('click', ()=> awardPoints(0, topic, q));
+-    modal.querySelector('#award-1').addEventListener('click', ()=> awardPoints(1, topic, q));
+-    modal.querySelector('#award-none').addEventListener('click', ()=> awardPoints(null, topic, q));
+-  }
+-
+-  overlay.appendChild(modal);
+-  return overlay;
+-}
+-
+-/* ============================ AUTH OVERLAY ============================ */
+-function renderAuthOverlay(){
+-  const overlay = el(`<div class="overlay"></div>`);
+-  const isSignup = state.authMode === 'signup';
+-
+-  const modal = el(`<div class="q-modal" style="max-width:400px; text-align:right;">
+-    <div style="display:flex; gap:10px; justify-content:center; margin-bottom:22px;">
+-      <button class="btn ${!isSignup?'btn-gold':'btn-ghost'} btn-sm" id="tab-signin">دخول</button>
+-      <button class="btn ${isSignup?'btn-gold':'btn-ghost'} btn-sm" id="tab-signup">حساب جديد</button>
+-    </div>
+-    <div class="field">
+-      <label>الإيميل</label>
+-      <input type="text" id="auth-email" placeholder="example@email.com" dir="ltr" style="text-align:left;"/>
+-    </div>
+-    <div class="field">
+-      <label>الرمز السري</label>
+-      <input type="password" id="auth-password" placeholder="••••••••" dir="ltr" style="text-align:left;"/>
+-    </div>
+-    ${isSignup ? `<div class="field">
+-      <label>تأكيد الرمز السري</label>
+-      <input type="password" id="auth-password2" placeholder="••••••••" dir="ltr" style="text-align:left;"/>
+-    </div>` : ''}
+-    ${state.authError ? `<div style="color:var(--rose); font-size:13px; margin-bottom:14px;">${escapeAttr(state.authError)}</div>` : ''}
+-    <div class="btn-row" style="justify-content:center;">
+-      <button class="btn btn-gold" id="auth-submit" ${state.authBusy?'disabled':''}>${state.authBusy ? '...' : (isSignup ? 'إنشاء الحساب' : 'دخول')}</button>
+-      <button class="btn btn-ghost" id="auth-close">إلغاء</button>
+-    </div>
+-  </div>`);
+-
+-  modal.querySelector('#tab-signin').addEventListener('click', ()=>{ state.authMode='signin'; state.authError=''; render(); });
+-  modal.querySelector('#tab-signup').addEventListener('click', ()=>{ state.authMode='signup'; state.authError=''; render(); });
+-  modal.querySelector('#auth-close').addEventListener('click', ()=>{ state.showAuthModal=false; state.authError=''; render(); });
+-
+-  modal.querySelector('#auth-submit').addEventListener('click', async ()=>{
+-    const email = modal.querySelector('#auth-email').value.trim();
+-    const password = modal.querySelector('#auth-password').value;
+-    if(!email || !password){ state.authError = 'عبّي الإيميل والرمز السري.'; render(); return; }
+-    if(isSignup){
+-      const password2 = modal.querySelector('#auth-password2').value;
+-      if(password !== password2){ state.authError = 'الرمز السري وتأكيده غير متطابقين.'; render(); return; }
+-      if(password.length < 6){ state.authError = 'الرمز السري لازم يكون ٦ أحرف على الأقل.'; render(); return; }
+-    }
+-    state.authBusy = true; state.authError=''; render();
+-    try{
+-      if(isSignup){
+-        await signUpWithEmail(email, password);
+-        state.authBusy = false;
+-        state.authError = 'تم إنشاء الحساب. إذا يطلب تأكيد الإيميل، تحقق من صندوق بريدك، وإلا رجعلك تسجل دخولك مباشرة.';
+-        state.authMode = 'signin';
+-        render();
+-      } else {
+-        await signInWithEmail(email, password);
+-        state.authBusy = false;
+-        state.showAuthModal = false;
+-        render();
+-      }
+-    } catch(e){
+-      state.authBusy = false;
+-      state.authError = translateAuthError(e.message);
+-      render();
+-    }
+-  });
+-
+-  return overlay.appendChild(modal), overlay;
+-}
+-
+-function translateAuthError(msg){
+-  if(!msg) return 'صار خطأ غير متوقع.';
+-  const m = msg.toLowerCase();
+-  if(m.includes('invalid login credentials')) return 'الإيميل أو الرمز السري غلط.';
+-  if(m.includes('user already registered')) return 'هذا الإيميل مسجّل مسبقاً، جرب تسجل دخول.';
+-  if(m.includes('email not confirmed')) return 'لازم تأكد إيميلك أول (تحقق من صندوق بريدك).';
+-  if(m.includes('password should be at least')) return 'الرمز السري قصير، لازم ٦ أحرف على الأقل.';
+-  return msg;
+-}
+-
+-function awardPoints(teamIdx, topic, q){
+-  if(teamIdx !== null){
+-    state.teams[teamIdx].score += q.points;
+-  }
+-  q.usedBy = teamIdx;
+-  state.activeCell = null;
+-  stopTimer();
+-  render();
+-}
+-
+-/* ---------- timer ---------- */
+-function startTimer(){
+-  stopTimer();
+-  state.timerLeft = state.timerSeconds;
+-  state.timerHandle = setInterval(()=>{
+-    state.timerLeft -= 1;
+-    const disp = document.getElementById('timer-display');
+-    if(disp){
+-      disp.textContent = state.timerLeft;
+-      disp.classList.toggle('warn', state.timerLeft <= 5);
+-    }
+-    if(state.timerLeft <= 0){
+-      stopTimer();
+-    }
+-  }, 1000);
+-}
+-function stopTimer(){
+-  if(state.timerHandle){ clearInterval(state.timerHandle); state.timerHandle = null; }
+-}
+-
+-/* ============================ END ============================ */
+-function renderEnd(){
+-  const [a,b] = state.teams;
+-  let headline, sub;
+-  if(a.score === b.score){
+-    headline = 'تعادل!';
+-    sub = `${a.name} و${b.name} تعادلوا بـ ${a.score} نقطة`;
+-  } else {
+-    const winner = a.score > b.score ? a : b;
+-    headline = `${winner.name} فاز 🏆`;
+-    sub = `بفارق ${Math.abs(a.score-b.score)} نقطة`;
+-  }
+-
+-  if(state.user && !state.statsRecordedForThisGame){
+-    state.statsRecordedForThisGame = true;
+-    recordGameResult(a.score + b.score);
+-  }
+-
+-  const wrap = el(`<div class="end-wrap">
+-    <div class="trophy">🏆</div>
+-    <h2>${headline}</h2>
+-    <p>${sub}</p>
+-    <div class="final-scores">
+-      <div class="score-card t0"><span class="name">${escapeAttr(a.name)}</span><span class="pts">${a.score}</span></div>
+-      <div class="score-card t1"><span class="name">${escapeAttr(b.name)}</span><span class="pts">${b.score}</span></div>
+-    </div>
+-    <div class="btn-row" style="justify-content:center;">
+-      <button class="btn btn-gold" id="new-round">جولة جديدة — أسئلة جديدة</button>
+-      <button class="btn btn-ghost" id="replay">إعادة نفس الأسئلة</button>
+-      <button class="btn btn-ghost" id="new-hub">رجوع للرئيسية</button>
+-    </div>
+-  </div>`);
+-
+-  function resetRoundState(){
+-    state.pool.forEach(t=>{ t.taken=false; t.takenBy=null; });
+-    state.selectedTopicIds = [];
+-    state.turn = 0;
+-    state.teams[0].score = 0;
+-    state.teams[1].score = 0;
+-    state.statsRecordedForThisGame = false;
+-  }
+-
+-  wrap.querySelector('#new-round').addEventListener('click', ()=>{
+-    state.pool.forEach(t=>{
+-      if(t.bankKey){
+-        t.questions = pickQuestionsForBankTopic(t.bankKey);
+-      } else {
+-        t.questions.forEach(q=>{ q.text=''; q.answer=''; delete q.usedBy; delete q.revealed; });
+-      }
+-    });
+-    resetRoundState();
+-    goto('select');
+-  });
+-
+-  wrap.querySelector('#replay').addEventListener('click', ()=>{
+-    state.pool.forEach(t=>{
+-      t.questions.forEach(q=>{ delete q.usedBy; delete q.revealed; });
+-    });
+-    resetRoundState();
+-    goto('select');
+-  });
+-
+-  wrap.querySelector('#new-hub').addEventListener('click', ()=> goto('hub'));
+-
+-  return wrap;
+-}
+-
+-/* ============================ WHO AM I? (من أنا؟) ============================ */
+-async function fetchRandomCharacters(n){
+-  const { data, error } = await sb
+-    .from('whoami_characters')
+-    .select('name')
+-    .limit(500);
+-  if(error) throw error;
+-  const shuffled = data.map(r=>r.name).sort(()=> Math.random()-0.5);
+-  if(shuffled.length < n) throw new Error('not enough characters');
+-  return shuffled.slice(0, n);
+-}
+-
+-function renderWhoamiSetup(){
+-  const wrap = el(`<div></div>`);
+-
+-  const intro = el(`<div class="panel">
+-    <div class="section-title">من أنا؟</div>
+-    <div class="section-sub">كل لاعب تنحط له شخصية بالسر — يشوفها كل الحاضرين إلا هو، ويحاول يخمنها بأسئلة نعم/لا. الشخصيات تنجلب أونلاين من قاعدة بيانات، فلازم اتصال إنترنت.</div>
+-  </div>`);
+-  wrap.appendChild(intro);
+-
+-  const countPanel = el(`<div class="panel">
+-    <div class="section-title" style="font-size:16px;">عدد اللاعبين</div>
+-    <div style="display:flex; align-items:center; gap:16px; margin-top:10px;">
+-      <button class="btn btn-ghost btn-sm" id="count-minus">−</button>
+-      <span class="display" style="font-size:26px; min-width:30px; text-align:center;">${state.whoamiPlayerCount}</span>
+-      <button class="btn btn-ghost btn-sm" id="count-plus">+</button>
+-    </div>
+-  </div>`);
+-  countPanel.querySelector('#count-minus').addEventListener('click', ()=>{
+-    if(state.whoamiPlayerCount > 3){ state.whoamiPlayerCount--; render(); }
+-  });
+-  countPanel.querySelector('#count-plus').addEventListener('click', ()=>{
+-    if(state.whoamiPlayerCount < 10){ state.whoamiPlayerCount++; render(); }
+-  });
+-  wrap.appendChild(countPanel);
+-
+-  const namesPanel = el(`<div class="panel">
+-    <div class="section-title" style="font-size:16px;">أسماء اللاعبين (اختياري)</div>
+-    <div class="section-sub">لو تركتها فاضية، بنسميهم "اللاعب ١"، "اللاعب ٢"...</div>
+-    <div id="names-list" style="display:grid; gap:10px;"></div>
+-  </div>`);
+-  const namesList = namesPanel.querySelector('#names-list');
+-  for(let i=0;i<state.whoamiPlayerCount;i++){
+-    const row = el(`<input type="text" placeholder="اللاعب ${i+1}" value="${escapeAttr(state.whoamiPlayerNames[i]||'')}"/>`);
+-    row.addEventListener('input', e=>{ state.whoamiPlayerNames[i] = e.target.value; });
+-    namesList.appendChild(row);
+-  }
+-  wrap.appendChild(namesPanel);
+-
+-  const timerPanel = el(`<div class="panel">
+-    <div class="section-title" style="font-size:16px;">المؤقت</div>
+-    <div class="toggle-row">
+-      <span>تفعيل مؤقت لكل دور</span>
+-      <div class="switch ${state.whoamiTimerEnabled?'on':''}" id="wa-timer-switch"><div class="knob"></div></div>
+-    </div>
+-    <div class="field" style="margin-top:16px; ${state.whoamiTimerEnabled?'':'display:none;'}" id="wa-timer-field">
+-      <label>مدة كل دور (بالثواني)</label>
+-      <input type="number" id="wa-timer-seconds" min="10" max="180" value="${state.whoamiTimerSeconds}"/>
+-    </div>
+-  </div>`);
+-  timerPanel.querySelector('#wa-timer-switch').addEventListener('click', ()=>{
+-    state.whoamiTimerEnabled = !state.whoamiTimerEnabled;
+-    render();
+-  });
+-  const waSec = timerPanel.querySelector('#wa-timer-seconds');
+-  if(waSec) waSec.addEventListener('input', e=>{
+-    state.whoamiTimerSeconds = Math.max(5, parseInt(e.target.value||'30',10));
+-  });
+-  wrap.appendChild(timerPanel);
+-
+-  if(state.whoamiError){
+-    wrap.appendChild(el(`<div class="section-sub" style="color:var(--rose);">${escapeAttr(state.whoamiError)}</div>`));
+-  }
+-
+-  const actions = el(`<div class="btn-row">
+-    <button class="btn btn-gold" id="wa-start" ${state.whoamiLoading?'disabled':''}>${state.whoamiLoading?'...جاري الجلب':'ابدأ التوزيع'}</button>
+-    <button class="btn btn-ghost" id="wa-back">رجوع</button>
+-  </div>`);
+-  actions.querySelector('#wa-back').addEventListener('click', ()=> goto('hub'));
+-  actions.querySelector('#wa-start').addEventListener('click', async ()=>{
+-    state.whoamiLoading = true; state.whoamiError=''; render();
+-    try{
+-      const names = await fetchRandomCharacters(state.whoamiPlayerCount);
+-      state.whoamiPlayers = names.map((character, i)=>({
+-        name: state.whoamiPlayerNames[i]?.trim() || `اللاعب ${i+1}`,
+-        character,
+-        guessed: false
+-      }));
+-      state.whoamiRevealIndex = 0;
+-      state.whoamiRevealShown = false;
+-      state.whoamiTurn = 0;
+-      state.whoamiFinishOrder = [];
+-      state.whoamiLoading = false;
+-      goto('whoami-reveal');
+-    } catch(e){
+-      state.whoamiLoading = false;
+-      state.whoamiError = 'تعذّر جلب الشخصيات — تأكد من اتصال الإنترنت وحاول مرة ثانية.';
+-      render();
+-    }
+-  });
+-  wrap.appendChild(actions);
+-
+-  return wrap;
+-}
+-
+-function renderWhoamiReveal(){
+-  const wrap = el(`<div></div>`);
+-  const idx = state.whoamiRevealIndex;
+-  const player = state.whoamiPlayers[idx];
+-
+-  if(!player){
+-    const done = el(`<div class="panel" style="text-align:center;">
+-      <div class="section-title">كل الشخصيات اتوزعت ✓</div>
+-      <div class="section-sub">جاهزين نبدأ اللعب</div>
+-      <div class="btn-row" style="justify-content:center;">
+-        <button class="btn btn-gold" id="wa-play-start">ابدأ اللعبة</button>
+-      </div>
+-    </div>`);
+-    done.querySelector('#wa-play-start').addEventListener('click', ()=> goto('whoami-play'));
+-    wrap.appendChild(done);
+-    return wrap;
+-  }
+-
+-  const panel = el(`<div class="panel" style="text-align:center;">
+-    <div class="section-title">🙈 ${escapeAttr(player.name)} يبعد نظره عن الشاشة</div>
+-    <div class="section-sub">باقي كل اللاعبين ينطرون ويشوفون — بس مو هو</div>
+-    ${state.whoamiRevealShown ? `
+-      <div class="q-points" style="font-size:26px; padding:16px 26px;">${escapeAttr(player.character)}</div>
+-      <div class="btn-row" style="justify-content:center;">
+-        <button class="btn btn-gold" id="wa-next">التالي</button>
+-      </div>
+-    ` : `
+-      <div class="btn-row" style="justify-content:center;">
+-        <button class="btn btn-gold" id="wa-reveal">إظهار الشخصية (لو ${escapeAttr(player.name)} مو ناظر)</button>
+-      </div>
+-    `}
+-  </div>`);
+-
+-  const revealBtn = panel.querySelector('#wa-reveal');
+-  if(revealBtn) revealBtn.addEventListener('click', ()=>{ state.whoamiRevealShown = true; render(); });
+-  const nextBtn = panel.querySelector('#wa-next');
+-  if(nextBtn) nextBtn.addEventListener('click', ()=>{
+-    state.whoamiRevealIndex++;
+-    state.whoamiRevealShown = false;
+-    render();
+-  });
+-
+-  wrap.appendChild(panel);
+-  return wrap;
+-}
+-
+-function activeWhoamiPlayers(){
+-  return state.whoamiPlayers.filter(p=>!p.guessed);
+-}
+-
+-function renderWhoamiPlay(){
+-  const wrap = el(`<div></div>`);
+-
+-  const remaining = activeWhoamiPlayers();
+-  if(remaining.length === 0){
+-    goto('whoami-end');
+-    return wrap;
+-  }
+-
+-  if(state.whoamiTurn >= state.whoamiPlayers.length) state.whoamiTurn = 0;
+-  while(state.whoamiPlayers[state.whoamiTurn].guessed){
+-    state.whoamiTurn = (state.whoamiTurn + 1) % state.whoamiPlayers.length;
+-  }
+-  const player = state.whoamiPlayers[state.whoamiTurn];
+-
+-  const scoreStrip = el(`<div class="section-sub" style="margin-bottom:14px;">فازوا: ${state.whoamiFinishOrder.map(n=>escapeAttr(n)).join('، ') || '—'}</div>`);
+-  wrap.appendChild(scoreStrip);
+-
+-  const panel = el(`<div class="panel" style="text-align:center;">
+-    <div class="section-title">دور: ${escapeAttr(player.name)}</div>
+-    <div class="section-sub">يسأل سؤال نعم/لا بصوته، والباقي يردون بصوتهم</div>
+-    ${state.whoamiTimerEnabled ? `<div class="timer" id="wa-timer-display">${state.whoamiTimerLeft}</div>` : ''}
+-    <div class="award-row">
+-      <button class="btn btn-gold btn-sm" id="wa-yes">نعم (استمر)</button>
+-      <button class="btn btn-sm" style="background:var(--rose); color:#fff;" id="wa-no">لا (الدور التالي)</button>
+-    </div>
+-    <div class="btn-row" style="justify-content:center;">
+-      <button class="btn btn-gold" id="wa-correct">خمّنت صح ✅</button>
+-    </div>
+-  </div>`);
+-
+-  panel.querySelector('#wa-yes').addEventListener('click', ()=>{
+-    if(state.whoamiTimerEnabled) startWhoamiTimer();
+-    render();
+-  });
+-  panel.querySelector('#wa-no').addEventListener('click', ()=>{
+-    stopWhoamiTimer();
+-    state.whoamiTurn = (state.whoamiTurn + 1) % state.whoamiPlayers.length;
+-    render();
+-  });
+-  panel.querySelector('#wa-correct').addEventListener('click', ()=>{
+-    stopWhoamiTimer();
+-    player.guessed = true;
+-    state.whoamiFinishOrder.push(player.name);
+-    const stillLeft = activeWhoamiPlayers();
+-    if(stillLeft.length === 0){
+-      goto('whoami-end');
+-    } else {
+-      state.whoamiTurn = (state.whoamiTurn + 1) % state.whoamiPlayers.length;
+-      render();
+-    }
+-  });
+-
+-  wrap.appendChild(panel);
+-  return wrap;
+-}
+-
+-function startWhoamiTimer(){
+-  stopWhoamiTimer();
+-  state.whoamiTimerLeft = state.whoamiTimerSeconds;
+-  state.whoamiTimerHandle = setInterval(()=>{
+-    state.whoamiTimerLeft -= 1;
+-    const disp = document.getElementById('wa-timer-display');
+-    if(disp){
+-      disp.textContent = state.whoamiTimerLeft;
+-      disp.classList.toggle('warn', state.whoamiTimerLeft <= 5);
+-    }
+-    if(state.whoamiTimerLeft <= 0){ stopWhoamiTimer(); }
+-  }, 1000);
+-}
+-function stopWhoamiTimer(){
+-  if(state.whoamiTimerHandle){ clearInterval(state.whoamiTimerHandle); state.whoamiTimerHandle = null; }
+-}
+-
+-function renderWhoamiEnd(){
+-  if(state.user && !state.statsRecordedForThisGame){
+-    state.statsRecordedForThisGame = true;
+-    recordGameResult(0);
+-  }
+-
+-  const wrap = el(`<div class="end-wrap">
+-    <div class="trophy">🎉</div>
+-    <h2>انتهت اللعبة</h2>
+-    <p>ترتيب من خمّن شخصيته أول:</p>
+-    <div class="panel" style="max-width:400px; margin:0 auto 30px; text-align:right;">
+-      ${state.whoamiFinishOrder.map((n,i)=>`<div style="padding:8px 0; ${i? 'border-top:1px solid var(--line);':''}">${i+1}. ${escapeAttr(n)}</div>`).join('') || '<div>ما فيه نتائج</div>'}
+-    </div>
+-    <div class="btn-row" style="justify-content:center;">
+-      <button class="btn btn-gold" id="wa-new-round">جولة جديدة — شخصيات جديدة</button>
+-      <button class="btn btn-ghost" id="wa-new-hub">رجوع للرئيسية</button>
+-    </div>
+-  </div>`);
+-
+-  wrap.querySelector('#wa-new-round').addEventListener('click', ()=>{
+-    state.statsRecordedForThisGame = false;
+-    goto('whoami-setup');
+-  });
+-  wrap.querySelector('#wa-new-hub').addEventListener('click', ()=>{
+-    state.statsRecordedForThisGame = false;
+-    goto('hub');
+-  });
+-
+-  return wrap;
+-}
+-
+-/* ============================ الحلفاء والشياطين (simplified Secret-Hitler-style) ============================ */
+-function shdEvilCountFor(n){
+-  const table = {5:2,6:2,7:3,8:3,9:4,10:4};
+-  return table[n] || 2;
+-}
+-function shdBuildDeck(){
+-  const deck = [];
+-  for(let i=0;i<6;i++) deck.push('good');
+-  for(let i=0;i<11;i++) deck.push('evil');
+-  return shuffled(deck);
+-}
+-function shdDrawThree(){
+-  if(state.shdDeck.length < 3){
+-    state.shdDeck = shuffled([...state.shdDeck, ...state.shdDiscard]);
+-    state.shdDiscard = [];
+-  }
+-  const drawn = state.shdDeck.splice(0,3);
+-  return drawn;
+-}
+-function shdEligibleChancellors(){
+-  const n = state.shdPlayers.length;
+-  return state.shdPlayers.map((p,i)=>i).filter(i=>{
+-    if(i === state.shdPresidentIdx) return false;
+-    if(n > 5 && i === state.shdLastPresidentIdx) return false;
+-    if(i === state.shdLastChancellorIdx) return false;
+-    return true;
+-  });
+-}
+-
+-function renderShdSetup(){
+-  const wrap = el(`<div></div>`);
+-
+-  const intro = el(`<div class="panel">
+-    <div class="section-title">الحلفاء والشياطين</div>
+-    <div class="section-sub">فريقين بالسر: أغلبية "حلفاء" وأقلية "شياطين" تعرف بعضها. انتخاب رئيس ووزير كل جولة، وتمرير قانون واحد. الحلفاء يفوزون بتمرير ٥ قوانين صالحة، والشياطين يفوزون بتمرير ٦ قوانين شريرة.</div>
+-  </div>`);
+-  wrap.appendChild(intro);
+-
+-  const countPanel = el(`<div class="panel">
+-    <div class="section-title" style="font-size:16px;">عدد اللاعبين (٥-١٠)</div>
+-    <div style="display:flex; align-items:center; gap:16px; margin-top:10px;">
+-      <button class="btn btn-ghost btn-sm" id="shd-count-minus">−</button>
+-      <span class="display" style="font-size:26px; min-width:30px; text-align:center;">${state.shdPlayerCount}</span>
+-      <button class="btn btn-ghost btn-sm" id="shd-count-plus">+</button>
+-    </div>
+-    <div class="section-sub" style="margin-top:10px;">عدد الشياطين بهذا العدد: ${shdEvilCountFor(state.shdPlayerCount)}</div>
+-  </div>`);
+-  countPanel.querySelector('#shd-count-minus').addEventListener('click', ()=>{
+-    if(state.shdPlayerCount > 5){ state.shdPlayerCount--; render(); }
+-  });
+-  countPanel.querySelector('#shd-count-plus').addEventListener('click', ()=>{
+-    if(state.shdPlayerCount < 10){ state.shdPlayerCount++; render(); }
+-  });
+-  wrap.appendChild(countPanel);
+-
+-  const namesPanel = el(`<div class="panel">
+-    <div class="section-title" style="font-size:16px;">أسماء اللاعبين (اختياري)</div>
+-    <div id="shd-names-list" style="display:grid; gap:10px;"></div>
+-  </div>`);
+-  const namesList = namesPanel.querySelector('#shd-names-list');
+-  for(let i=0;i<state.shdPlayerCount;i++){
+-    const row = el(`<input type="text" placeholder="اللاعب ${i+1}" value="${escapeAttr(state.shdPlayerNames[i]||'')}"/>`);
+-    row.addEventListener('input', e=>{ state.shdPlayerNames[i] = e.target.value; });
+-    namesList.appendChild(row);
+-  }
+-  wrap.appendChild(namesPanel);
+-
+-  const actions = el(`<div class="btn-row">
+-    <button class="btn btn-gold" id="shd-start">ابدأ التوزيع</button>
+-    <button class="btn btn-ghost" id="shd-back">رجوع</button>
+-  </div>`);
+-  actions.querySelector('#shd-back').addEventListener('click', ()=> goto('hub'));
+-  actions.querySelector('#shd-start').addEventListener('click', ()=>{
+-    const n = state.shdPlayerCount;
+-    const evilCount = shdEvilCountFor(n);
+-    const roles = [];
+-    for(let i=0;i<evilCount;i++) roles.push('evil');
+-    for(let i=evilCount;i<n;i++) roles.push('good');
+-    const shuffledRoles = shuffled(roles);
+-    state.shdPlayers = shuffledRoles.map((role,i)=>({
+-      name: state.shdPlayerNames[i]?.trim() || `اللاعب ${i+1}`,
+-      role
+-    }));
+-    state.shdRevealIndex = 0;
+-    state.shdRevealShown = false;
+-    state.shdDeck = shdBuildDeck();
+-    state.shdDiscard = [];
+-    state.shdGoodCount = 0;
+-    state.shdEvilCount = 0;
+-    state.shdPresidentIdx = 0;
+-    state.shdChancellorIdx = null;
+-    state.shdLastPresidentIdx = null;
+-    state.shdLastChancellorIdx = null;
+-    state.shdWinner = null;
+-    goto('shd-reveal');
+-  });
+-  wrap.appendChild(actions);
+-
+-  return wrap;
+-}
+-
+-function renderShdReveal(){
+-  const wrap = el(`<div></div>`);
+-  const idx = state.shdRevealIndex;
+-  const player = state.shdPlayers[idx];
+-
+-  if(!player){
+-    const done = el(`<div class="panel" style="text-align:center;">
+-      <div class="section-title">كل اللاعبين عرفوا أدوارهم ✓</div>
+-      <div class="btn-row" style="justify-content:center;">
+-        <button class="btn btn-gold" id="shd-play-start">ابدأ اللعبة</button>
+-      </div>
+-    </div>`);
+-    done.querySelector('#shd-play-start').addEventListener('click', ()=> goto('shd-nominate'));
+-    wrap.appendChild(done);
+-    return wrap;
+-  }
+-
+-  const panel = el(`<div class="panel" style="text-align:center;">
+-    <div class="section-title">🙈 الكل غير ${escapeAttr(player.name)} يبعدون نظرهم</div>
+-    <div class="section-sub">بس ${escapeAttr(player.name)} يشوف الشاشة الحين</div>
+-    ${state.shdRevealShown ? `
+-      <div class="q-points" style="font-size:22px; padding:16px 26px;">
+-        ${player.role === 'good' ? 'أنت من الحلفاء 😇' : 'أنت من الشياطين 😈'}
+-      </div>
+-      ${player.role === 'evil' ? `<div class="section-sub">زملاؤك: ${state.shdPlayers.filter((p,i)=>p.role==='evil' && i!==idx).map(p=>escapeAttr(p.name)).join('، ')}</div>` : ''}
+-      <div class="btn-row" style="justify-content:center;">
+-        <button class="btn btn-gold" id="shd-next">التالي</button>
+-      </div>
+-    ` : `
+-      <div class="btn-row" style="justify-content:center;">
+-        <button class="btn btn-gold" id="shd-reveal-role">إظهار دوري (لو الباقي مو ناظرين)</button>
+-      </div>
+-    `}
+-  </div>`);
+-
+-  const revealBtn = panel.querySelector('#shd-reveal-role');
+-  if(revealBtn) revealBtn.addEventListener('click', ()=>{ state.shdRevealShown = true; render(); });
+-  const nextBtn = panel.querySelector('#shd-next');
+-  if(nextBtn) nextBtn.addEventListener('click', ()=>{
+-    state.shdRevealIndex++;
+-    state.shdRevealShown = false;
+-    render();
+-  });
+-
+-  wrap.appendChild(panel);
+-  return wrap;
+-}
+-
+-function renderShdNominate(){
+-  const wrap = el(`<div></div>`);
+-  wrap.appendChild(el(`<div class="section-sub" style="margin-bottom:14px;">الحلفاء: ${state.shdGoodCount}/٥ · الشياطين: ${state.shdEvilCount}/٦</div>`));
+-
+-  const president = state.shdPlayers[state.shdPresidentIdx];
+-  const banner = el(`<div class="turn-banner">الرئيس هذي الجولة: <b>${escapeAttr(president.name)}</b> — يختار وزير</div>`);
+-  wrap.appendChild(banner);
+-
+-  const eligible = shdEligibleChancellors();
+-  const grid = el(`<div class="pick-grid"></div>`);
+-  state.shdPlayers.forEach((p, i)=>{
+-    const ok = eligible.includes(i);
+-    const card = el(`<div class="pick-card ${ok?'':'taken'}">${escapeAttr(p.name)}</div>`);
+-    if(ok){
+-      card.addEventListener('click', ()=>{
+-        state.shdChancellorIdx = i;
+-        state.shdVotes = {};
+-        state.shdVoteStep = 0;
+-        state.shdVoteOrder = state.shdPlayers.map((_,idx)=>idx);
+-        goto('shd-vote');
+-      });
+-    }
+-    grid.appendChild(card);
+-  });
+-  wrap.appendChild(grid);
+-  return wrap;
+-}
+-
+-function renderShdVote(){
+-  const wrap = el(`<div></div>`);
+-  const president = state.shdPlayers[state.shdPresidentIdx];
+-  const chancellor = state.shdPlayers[state.shdChancellorIdx];
+-
+-  wrap.appendChild(el(`<div class="panel" style="text-align:center;">
+-    <div class="section-title">هل توافقون على هذي الحكومة؟</div>
+-    <div class="section-sub">الرئيس: ${escapeAttr(president.name)} — الوزير المرشّح: ${escapeAttr(chancellor.name)}</div>
+-  </div>`));
+-
+-  const step = state.shdVoteStep;
+-  if(step >= state.shdVoteOrder.length){
+-    const yes = Object.values(state.shdVotes).filter(v=>v).length;
+-    const no = Object.values(state.shdVotes).filter(v=>!v).length;
+-    const passed = yes > no;
+-    const goBtn = el(`<div class="panel" style="text-align:center;">
+-      <div class="section-title">${passed? 'الحكومة موافق عليها ✓' : 'الحكومة مرفوضة ✕'}</div>
+-      <div class="section-sub">نعم: ${yes} — لا: ${no}</div>
+-      <div class="btn-row" style="justify-content:center;">
+-        <button class="btn btn-gold" id="shd-vote-continue">متابعة</button>
+-      </div>
+-    </div>`);
+-    goBtn.querySelector('#shd-vote-continue').addEventListener('click', ()=>{
+-      if(passed){
+-        state.shdLastPresidentIdx = state.shdPresidentIdx;
+-        state.shdLastChancellorIdx = state.shdChancellorIdx;
+-        state.shdDrawnPolicies = shdDrawThree();
+-        state.shdRevealShown = false;
+-        goto('shd-president-policy');
+-      } else {
+-        state.shdPresidentIdx = (state.shdPresidentIdx + 1) % state.shdPlayers.length;
+-        state.shdChancellorIdx = null;
+-        goto('shd-nominate');
+-      }
+-    });
+-    wrap.appendChild(goBtn);
+-    return wrap;
+-  }
+-
+-  const voterIdx = state.shdVoteOrder[step];
+-  const voter = state.shdPlayers[voterIdx];
+-  const panel = el(`<div class="panel" style="text-align:center;">
+-    <div class="section-title">تصويت: ${escapeAttr(voter.name)}</div>
+-    <div class="award-row">
+-      <button class="btn btn-gold btn-sm" id="shd-yes">نعم</button>
+-      <button class="btn btn-sm" style="background:var(--rose); color:#fff;" id="shd-no">لا</button>
+-    </div>
+-  </div>`);
+-  panel.querySelector('#shd-yes').addEventListener('click', ()=>{
+-    state.shdVotes[voterIdx] = true;
+-    state.shdVoteStep++;
+-    render();
+-  });
+-  panel.querySelector('#shd-no').addEventListener('click', ()=>{
+-    state.shdVotes[voterIdx] = false;
+-    state.shdVoteStep++;
+-    render();
+-  });
+-  wrap.appendChild(panel);
+-  return wrap;
+-}
+-
+-function renderShdVoteResult(){
+-  return renderShdVote();
+-}
+-
+-function renderShdPresidentPolicy(){
+-  const wrap = el(`<div></div>`);
+-  const president = state.shdPlayers[state.shdPresidentIdx];
+-
+-  if(!state.shdRevealShown){
+-    const panel = el(`<div class="panel" style="text-align:center;">
+-      <div class="section-title">🙈 الكل غير ${escapeAttr(president.name)} يبعدون نظرهم</div>
+-      <div class="section-sub">الرئيس بس يشوف القوانين ويستبعد وحد</div>
+-      <div class="btn-row" style="justify-content:center;">
+-        <button class="btn btn-gold" id="shd-show-pres">إظهار القوانين</button>
+-      </div>
+-    </div>`);
+-    panel.querySelector('#shd-show-pres').addEventListener('click', ()=>{ state.shdRevealShown = true; render(); });
+-    wrap.appendChild(panel);
+-    return wrap;
+-  }
+-
+-  const panel = el(`<div class="panel" style="text-align:center;">
+-    <div class="section-title">اختر قانون تستبعده (يضل ٢ للوزير)</div>
+-    <div class="pick-grid" id="pres-tiles"></div>
+-  </div>`);
+-  const tilesGrid = panel.querySelector('#pres-tiles');
+-  state.shdDrawnPolicies.forEach((tile, i)=>{
+-    const card = el(`<div class="pick-card">${tile==='good'?'قانون صالح 😇':'قانون شرير 😈'}</div>`);
+-    card.addEventListener('click', ()=>{
+-      state.shdDiscard.push(tile);
+-      state.shdDrawnPolicies = state.shdDrawnPolicies.filter((_,idx)=>idx!==i);
+-      state.shdRevealShown = false;
+-      goto('shd-chancellor-policy');
+-    });
+-    tilesGrid.appendChild(card);
+-  });
+-  wrap.appendChild(panel);
+-  return wrap;
+-}
+-
+-function renderShdChancellorPolicy(){
+-  const wrap = el(`<div></div>`);
+-  const chancellor = state.shdPlayers[state.shdChancellorIdx];
+-
+-  if(!state.shdRevealShown){
+-    const panel = el(`<div class="panel" style="text-align:center;">
+-      <div class="section-title">🙈 الكل غير ${escapeAttr(chancellor.name)} يبعدون نظرهم</div>
+-      <div class="section-sub">الوزير بس يشوف القانونين ويستبعد وحد، والباقي ينطبق علناً</div>
+-      <div class="btn-row" style="justify-content:center;">
+-        <button class="btn btn-gold" id="shd-show-chan">إظهار القوانين</button>
+-      </div>
+-    </div>`);
+-    panel.querySelector('#shd-show-chan').addEventListener('click', ()=>{ state.shdRevealShown = true; render(); });
+-    wrap.appendChild(panel);
+-    return wrap;
+-  }
+-
+-  const panel = el(`<div class="panel" style="text-align:center;">
+-    <div class="section-title">اختر قانون تستبعده (الثاني ينطبق علناً)</div>
+-    <div class="pick-grid" id="chan-tiles"></div>
+-  </div>`);
+-  const tilesGrid = panel.querySelector('#chan-tiles');
+-  state.shdDrawnPolicies.forEach((tile, i)=>{
+-    const card = el(`<div class="pick-card">${tile==='good'?'قانون صالح 😇':'قانون شرير 😈'}</div>`);
+-    card.addEventListener('click', ()=>{
+-      state.shdDiscard.push(tile);
+-      const enacted = state.shdDrawnPolicies.find((_,idx)=>idx!==i);
+-      state.shdLastEnacted = enacted;
+-      if(enacted === 'good') state.shdGoodCount++; else state.shdEvilCount++;
+-      state.shdRevealShown = false;
+-      goto('shd-policy-result');
+-    });
+-    tilesGrid.appendChild(card);
+-  });
+-  wrap.appendChild(panel);
+-  return wrap;
+-}
+-
+-function renderShdPolicyResult(){
+-  const wrap = el(`<div></div>`);
+-  const enacted = state.shdLastEnacted;
+-  const panel = el(`<div class="panel" style="text-align:center;">
+-    <div class="section-title">${enacted==='good' ? 'انطبق قانون صالح 😇' : 'انطبق قانون شرير 😈'}</div>
+-    <div class="section-sub">الحلفاء: ${state.shdGoodCount}/٥ — الشياطين: ${state.shdEvilCount}/٦</div>
+-  </div>`);
+-  wrap.appendChild(panel);
+-
+-  if(state.shdGoodCount >= 5 || state.shdEvilCount >= 6){
+-    state.shdWinner = state.shdGoodCount >= 5 ? 'good' : 'evil';
+-    const btn = el(`<div class="btn-row" style="justify-content:center;"><button class="btn btn-gold" id="shd-to-end">عرض النتيجة النهائية</button></div>`);
+-    btn.querySelector('#shd-to-end').addEventListener('click', ()=> goto('shd-end'));
+-    wrap.appendChild(btn);
+-  } else {
+-    const btn = el(`<div class="btn-row" style="justify-content:center;"><button class="btn btn-gold" id="shd-next-round">الجولة التالية</button></div>`);
+-    btn.querySelector('#shd-next-round').addEventListener('click', ()=>{
+-      state.shdPresidentIdx = (state.shdPresidentIdx + 1) % state.shdPlayers.length;
+-      state.shdChancellorIdx = null;
+-      goto('shd-nominate');
+-    });
+-    wrap.appendChild(btn);
+-  }
+-  return wrap;
+-}
+-
+-function renderShdEnd(){
+-  if(state.user && !state.statsRecordedForThisGame){
+-    state.statsRecordedForThisGame = true;
+-    recordGameResult(0);
+-  }
+-  const winner = state.shdWinner;
+-  const wrap = el(`<div class="end-wrap">
+-    <div class="trophy">${winner==='good'?'😇':'😈'}</div>
+-    <h2>${winner==='good' ? 'فاز الحلفاء' : 'فاز الشياطين'}</h2>
+-    <p>الأدوار الحقيقية:</p>
+-    <div class="panel" style="max-width:400px; margin:0 auto 30px; text-align:right;">
+-      ${state.shdPlayers.map(p=>`<div style="padding:8px 0; border-top:1px solid var(--line);">${escapeAttr(p.name)} — ${p.role==='good'?'حلفاء 😇':'شياطين 😈'}</div>`).join('')}
+-    </div>
+-    <div class="btn-row" style="justify-content:center;">
+-      <button class="btn btn-gold" id="shd-replay">جولة جديدة</button>
+-      <button class="btn btn-ghost" id="shd-hub">رجوع للرئيسية</button>
+-    </div>
+-  </div>`);
+-  wrap.querySelector('#shd-replay').addEventListener('click', ()=>{
+-    state.statsRecordedForThisGame = false;
+-    goto('shd-setup');
+-  });
+-  wrap.querySelector('#shd-hub').addEventListener('click', ()=>{
+-    state.statsRecordedForThisGame = false;
+-    goto('hub');
+-  });
+-  return wrap;
+-}
+-
+-/* ============================ INIT ============================ */
+-render();
+-</script>
+-</body>
+-</html>

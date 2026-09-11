@@ -8,6 +8,7 @@ function render(){
     case 'hub': body = renderHub(); break;
     case 'cat-loading': body = renderCatLoading(); break;
     case 'editor': body = renderEditor(); break;
+    case 'custom-editor': body = renderCustomEditor(); break;
     case 'teams': body = renderTeams(); break;
     case 'select': body = renderSelect(); break;
     case 'board': body = renderBoard(); break;
@@ -34,6 +35,9 @@ function render(){
   if(state.showUpsellModal){
     app.appendChild(renderUpsellOverlay());
   }
+  if(state.customShareCode){
+    app.appendChild(renderShareCodeOverlay());
+  }
 }
 
 function renderTopbar(){
@@ -53,6 +57,7 @@ function renderTopbar(){
   const crumbMap = {
     'cat-loading':'لعبة الفئات · تحميل البنك',
     editor:'لعبة الفئات · اختيار المواضيع',
+    'custom-editor':'لعبة الفئات · فئة خاصة',
     teams:'لعبة الفئات · الفرق والإعدادات',
     select:'لعبة الفئات · اختيار الفئات',
     board:'لعبة الفئات · اللعب',
