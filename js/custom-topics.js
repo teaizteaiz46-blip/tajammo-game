@@ -18,11 +18,13 @@ function newCustomDraft() {
 }
 
 /* يبني موضوعاً جاهزاً للّوح من بيانات فئة (مستوردة أو مسودّة) */
-function makeCustomTopicFromData(name, questions) {
+function makeCustomTopicFromData(name, questions, shareCode) {
   return {
     id: nextId(),
     name: name,
     bankKey: null,
+    // sharedCode موجود يعني الفئة منشورة ويمكن التبليغ عنها
+    sharedCode: shareCode || null,
     taken: false,
     takenBy: null,
     expanded: false,
@@ -62,6 +64,13 @@ async function saveCustomTopicToCloud() {
     render();
     return;
   }
+  // سياسة Google: موافقة صريحة على الشروط قبل نشر أي محتوى
+  if (needsTermsAcceptance()) {
+    state.showTermsModal = true;
+    state.termsError = '';
+    render();
+    return;
+  }
 
   state.customSaving = true;
   state.customError = '';
@@ -88,7 +97,7 @@ async function saveCustomTopicToCloud() {
       t => t.bankKey === null && t.name === state.customDraft.name.trim()
     );
     if (!already) {
-      state.pool.push(makeCustomTopicFromData(state.customDraft.name.trim(), state.customDraft.questions));
+      state.pool.push(makeCustomTopicFromData(state.customDraft.name.trim(), state.customDraft.questions, data.share_code));
     }
 
     state.myCustomTopics = [];   // أبطل الكاش حتى تظهر بالقائمة
@@ -130,6 +139,12 @@ async function importCustomTopicByCode(rawCode) {
       render();
       return;
     }
+    if (data.hidden) {
+      state.importBusy = false;
+      state.importError = 'هذي الفئة مخفية بسبب بلاغات، وقيد المراجعة.';
+      render();
+      return;
+    }
     if (!data.questions || data.questions.length === 0) {
       state.importBusy = false;
       state.importError = 'هذي الفئة فاضية — صاحبها ما كمّل أسئلتها.';
@@ -145,7 +160,7 @@ async function importCustomTopicByCode(rawCode) {
       return;
     }
 
-    state.pool.push(makeCustomTopicFromData(data.name, data.questions));
+    state.pool.push(makeCustomTopicFromData(data.name, data.questions, code));
     state.importBusy = false;
     state.importCode = '';
     state.importedNotice = 'تمت إضافة فئة "' + data.name + '"' +
@@ -197,7 +212,7 @@ function addSavedTopicToPool(saved) {
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   if (!qs.length) return;
   if (state.pool.find(t => t.bankKey === null && t.name === saved.name)) return;
-  state.pool.push(makeCustomTopicFromData(saved.name, qs));
+  state.pool.push(makeCustomTopicFromData(saved.name, qs, saved.share_code));
   render();
 }
 
@@ -434,6 +449,216 @@ function renderShareCodeOverlay() {
     state.customDraft = newCustomDraft();
     goto('editor');
   });
+  overlay.appendChild(modal);
+  return overlay;
+}
+
+/* ============================ الإشراف على المحتوى ============================
+ *
+ * سياسة Google للمحتوى الذي ينشئه المستخدم تفرض ثلاثة أشياء على أي تطبيق
+ * يخلي مستخدميه ينشرون محتوى لبعض:
+ *   ١) تبليغ داخل التطبيق متاح لكل من يشوف المحتوى (حتى بلا حساب)
+ *   ٢) إشراف فعلي — عندنا: إخفاء تلقائي بعد ٣ بلاغات + مراجعة يدوية
+ *   ٣) موافقة على الشروط قبل نشر أي محتوى
+ */
+
+const TERMS_VERSION = '1.0';
+const TERMS_URL = 'terms.html';
+
+const REPORT_REASONS = [
+  ['offensive', 'محتوى مسيء أو بذيء'],
+  ['sexual',    'محتوى جنسي'],
+  ['violence',  'عنف أو تهديد'],
+  ['hate',      'كراهية أو تمييز أو إساءة لفئة'],
+  ['spam',      'إعلان أو سبام'],
+  ['wrong',     'معلومات غلط أو أجوبة خاطئة'],
+  ['other',     'سبب ثاني']
+];
+
+function openReportModal(topic){
+  state.reportTopic = topic;
+  state.reportReason = '';
+  state.reportNote = '';
+  state.reportError = '';
+  state.reportDone = false;
+  render();
+}
+
+function closeReportModal(){
+  state.reportTopic = null;
+  state.reportDone = false;
+  render();
+}
+
+async function submitReport(){
+  if(!state.reportReason){
+    state.reportError = 'اختار سبب البلاغ.';
+    render();
+    return;
+  }
+  const code = state.reportTopic && state.reportTopic.sharedCode;
+  if(!code){
+    state.reportError = 'هذي فئة محلية — ما تنشرت حتى تنبلّغ.';
+    render();
+    return;
+  }
+  if(!sb){
+    state.reportError = 'تحتاج اتصال إنترنت حتى ترسل البلاغ.';
+    render();
+    return;
+  }
+
+  state.reportBusy = true;
+  state.reportError = '';
+  render();
+
+  try{
+    const { data, error } = await sb.rpc('report_custom_topic', {
+      p_code: code,
+      p_reason: state.reportReason,
+      p_note: state.reportNote || null
+    });
+    if(error) throw error;
+
+    state.reportBusy = false;
+    if(data && data.ok === false){
+      state.reportError = 'ما لقيت هذي الفئة.';
+    } else {
+      state.reportDone = true;
+    }
+    render();
+  }catch(e){
+    state.reportBusy = false;
+    state.reportError = translateCustomError(e);
+    render();
+  }
+}
+
+function renderReportOverlay(){
+  const t = state.reportTopic;
+  const overlay = el(`<div class="overlay"></div>`);
+
+  if(state.reportDone){
+    const done = el(`<div class="q-modal" style="max-width:400px; text-align:center;">
+      <div style="font-size:38px; margin-bottom:8px;">✓</div>
+      <div class="section-title" style="justify-content:center;">وصلنا بلاغك</div>
+      <p style="color:var(--muted); font-size:14px; margin-bottom:18px;">
+        راح تُراجع الفئة. إذا وصلتها بلاغات كافية تنخفي فوراً عن الجميع
+        لحد ما تنتهي المراجعة.
+      </p>
+      <div class="btn-row" style="justify-content:center; margin-top:0;">
+        <button class="btn btn-gold" id="rep-close">تم</button>
+      </div>
+    </div>`);
+    done.querySelector('#rep-close').addEventListener('click', closeReportModal);
+    overlay.appendChild(done);
+    return overlay;
+  }
+
+  const modal = el(`<div class="q-modal" style="max-width:440px; text-align:right;">
+    <div class="section-title">بلّغ عن فئة</div>
+    <div class="section-sub">
+      «${escapeAttr(t ? t.name : '')}» — شنو المشكلة بيها؟
+    </div>
+    <div id="rep-reasons" style="display:flex; flex-direction:column; gap:7px; margin-bottom:14px;"></div>
+    <div class="field">
+      <input type="text" id="rep-note" maxlength="500"
+             placeholder="تفاصيل إضافية (اختياري)" value="${escapeAttr(state.reportNote || '')}"/>
+    </div>
+    ${state.reportError ? `<div style="color:var(--rose); font-size:13px; margin-bottom:10px;">${escapeAttr(state.reportError)}</div>` : ''}
+    <div class="btn-row" style="justify-content:center; margin-top:6px;">
+      <button class="btn btn-gold" id="rep-send">${state.reportBusy ? '...' : 'أرسل البلاغ'}</button>
+      <button class="btn btn-ghost" id="rep-cancel">إلغاء</button>
+    </div>
+  </div>`);
+
+  const box = modal.querySelector('#rep-reasons');
+  REPORT_REASONS.forEach(([key, label])=>{
+    const on = state.reportReason === key;
+    const b = el(`<button class="btn ${on ? 'btn-gold' : 'btn-ghost'} btn-sm"
+                    style="text-align:right; justify-content:flex-start;">${escapeAttr(label)}</button>`);
+    b.addEventListener('click', ()=>{ state.reportReason = key; state.reportError=''; render(); });
+    box.appendChild(b);
+  });
+
+  modal.querySelector('#rep-note').addEventListener('input', e=>{ state.reportNote = e.target.value; });
+  modal.querySelector('#rep-send').disabled = state.reportBusy;
+  modal.querySelector('#rep-send').addEventListener('click', submitReport);
+  modal.querySelector('#rep-cancel').addEventListener('click', closeReportModal);
+
+  overlay.appendChild(modal);
+  return overlay;
+}
+
+/* ============================ الموافقة على الشروط ============================ */
+
+function needsTermsAcceptance(){
+  return !!(state.user && !state.user.termsAcceptedAt);
+}
+
+async function acceptTerms(){
+  if(!sb || !state.user) return false;
+  try{
+    const now = new Date().toISOString();
+    const { error } = await sb.from('tajammo_profiles').update({
+      terms_accepted_at: now,
+      terms_accepted_version: TERMS_VERSION
+    }).eq('id', state.user.uid);
+    if(error) throw error;
+    state.user.termsAcceptedAt = now;
+    return true;
+  }catch(e){
+    state.customError = translateCustomError(e);
+    return false;
+  }
+}
+
+function renderTermsOverlay(){
+  const overlay = el(`<div class="overlay"></div>`);
+  const modal = el(`<div class="q-modal" style="max-width:460px; text-align:right;">
+    <div class="section-title">قبل ما تنشر فئتك</div>
+    <div class="section-sub" style="margin-bottom:14px;">
+      فئتك راح تكون متاحة لأي شخص يوصله الكود. بالنشر إنت توافق على:
+    </div>
+    <div class="panel" style="text-align:right; margin-bottom:16px;">
+      <div style="color:var(--muted); font-size:13.5px; line-height:2.1;">
+        • ما تنشر محتوى مسيء، جنسي، عنيف، أو يحرّض على الكراهية<br>
+        • ما تنشر معلومات شخصية عن أحد بلا إذنه<br>
+        • ما تنشر إعلانات أو سبام<br>
+        • تتحمل مسؤولية المحتوى اللي تكتبه<br>
+        • المحتوى المخالف ينحذف، والحساب المتكرر ينحظر
+      </div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <a href="${TERMS_URL}" target="_blank" rel="noopener"
+         style="color:var(--gold); font-size:13px;">اقرأ شروط الاستخدام وسياسة الخصوصية ↗</a>
+    </div>
+    ${state.termsError ? `<div style="color:var(--rose); font-size:13px; margin-bottom:10px;">${escapeAttr(state.termsError)}</div>` : ''}
+    <div class="btn-row" style="justify-content:center; margin-top:0;">
+      <button class="btn btn-gold" id="terms-ok">${state.termsBusy ? '...' : 'أوافق وانشر'}</button>
+      <button class="btn btn-ghost" id="terms-no">رجوع</button>
+    </div>
+  </div>`);
+
+  modal.querySelector('#terms-ok').disabled = state.termsBusy;
+  modal.querySelector('#terms-ok').addEventListener('click', async ()=>{
+    state.termsBusy = true; state.termsError = ''; render();
+    const ok = await acceptTerms();
+    state.termsBusy = false;
+    if(ok){
+      state.showTermsModal = false;
+      render();
+      saveCustomTopicToCloud();     // نكمل الحفظ اللي وقفناه
+    } else {
+      state.termsError = 'تعذّر حفظ الموافقة — جرب مرة ثانية.';
+      render();
+    }
+  });
+  modal.querySelector('#terms-no').addEventListener('click', ()=>{
+    state.showTermsModal = false;
+    render();
+  });
+
   overlay.appendChild(modal);
   return overlay;
 }
