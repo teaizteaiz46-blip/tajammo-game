@@ -336,31 +336,75 @@ function wireHelpButtons(modal, topic, q){
   });
 }
 
+/* تطبيع عربي: يوحّد الألف والهمزة والتاء المربوطة ويشيل التشكيل،
+   حتى مطابقة اسم المطرب ما تفشل بسبب اختلاف الرسم */
+function normalizeArabic(s){
+  return (s || '')
+    .toLowerCase()
+    .replace(/[ً-ْٰـ]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function artistLooksRight(expected, got){
+  const e = normalizeArabic(expected), g = normalizeArabic(got);
+  if(!e || !g) return false;
+  if(g.indexOf(e) !== -1 || e.indexOf(g) !== -1) return true;
+  const tokens = e.split(' ').filter(t => t.length >= 3 && t !== 'عبد');
+  if(!tokens.length) return false;
+  return tokens.filter(t => g.indexOf(t) !== -1).length / tokens.length >= 0.5;
+}
+
 function wireSongPlayer(modal, q){
   if(q.mediaType !== 'song' || !q.image) return;
   const container = modal.querySelector('#song-player');
   if(!container) return;
-  fetch('https://itunes.apple.com/search?term=' + encodeURIComponent(q.image) + '&entity=song&limit=1')
+
+  // المطرب المتوقع يجي من الجواب بصيغة "اسم الأغنية - المطرب"
+  const dash = (q.answer || '').lastIndexOf(' - ');
+  const expectedArtist = dash > -1 ? q.answer.slice(dash + 3) : '';
+
+  // limit=5 مو 1: أول نتيجة مو دائماً الصح، وتشغيل أغنية غلط أسوأ من
+  // عدم تشغيل أي شي لأن اللاعب يحسب الجواب غلط
+  fetch('https://itunes.apple.com/search?term=' + encodeURIComponent(q.image) + '&entity=song&limit=5')
     .then(r=>r.json())
     .then(data=>{
-      const track = data.results && data.results[0];
-      if(!track || !track.previewUrl){
-        container.innerHTML = '<div class="section-sub">تعذّر تحميل المقطع</div>';
+      const withPreview = (data.results || []).filter(r => r.previewUrl);
+      const track = (expectedArtist && withPreview.find(r => artistLooksRight(expectedArtist, r.artistName)))
+                 || withPreview[0];
+      if(!track){
+        // ما نترك اللاعب معلّق: نحوّله لسؤال نصي يقدر يلعبه
+        container.innerHTML = '<div class="section-sub">ماكو مقطع متاح — اسأل الفريق: منو يغني هذي الأغنية؟</div>';
         return;
       }
+      // الوقت اللي يسمعه اللاعب، محدد لكل أغنية من قاعدة البيانات
+      const start = Math.max(0, Number(q.clipStart) || 0);
+      const secs  = Math.min(30, Math.max(3, Number(q.clipSeconds) || 10));
+      const arNum = n => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+
       container.innerHTML = `
         <audio id="song-audio" src="${escapeAttr(track.previewUrl)}" preload="auto"></audio>
-        <button class="btn btn-gold btn-sm" id="song-play">▶ شغّل المقطع (١٠ ثواني)</button>
+        <button class="btn btn-gold btn-sm" id="song-play">▶ شغّل المقطع (${arNum(secs)} ثواني)</button>
+        <button class="btn btn-ghost btn-sm" id="song-again" style="margin-inline-start:8px;">↻ عيدها</button>
         <div style="margin-top:8px;"><a href="${escapeAttr(track.trackViewUrl||'#')}" target="_blank" rel="noopener" style="color:var(--muted); font-size:12px;">استمع كامل على Apple Music ↗</a></div>
       `;
       const audio = container.querySelector('#song-audio');
       let stopHandle = null;
-      container.querySelector('#song-play').addEventListener('click', ()=>{
+
+      const playClip = ()=>{
         if(stopHandle) clearTimeout(stopHandle);
-        audio.currentTime = 0;
-        audio.play();
-        stopHandle = setTimeout(()=>{ audio.pause(); }, 10000);
-      });
+        // لو المقطع أقصر من نقطة البداية، نرجع للصفر بدل ما ما يشتغل شي
+        const from = (audio.duration && start >= audio.duration) ? 0 : start;
+        try{ audio.currentTime = from; }catch(e){ /* ما تحمّل بعد */ }
+        audio.play().catch(()=>{});
+        stopHandle = setTimeout(()=>{ audio.pause(); }, secs * 1000);
+      };
+
+      container.querySelector('#song-play').addEventListener('click', playClip);
+      container.querySelector('#song-again').addEventListener('click', playClip);
     })
     .catch(()=>{ container.innerHTML = '<div class="section-sub">تعذّر تحميل المقطع — تأكد من اتصال الإنترنت</div>'; });
 }

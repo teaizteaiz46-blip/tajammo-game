@@ -12,7 +12,7 @@ async function loadCategoryDatabase(){
   for(let from = 0; ; from += CATEGORY_PAGE_SIZE){
     const to = from + CATEGORY_PAGE_SIZE - 1;
     const res = await fetch(
-      SUPABASE_URL + '/rest/v1/category_questions?select=topic,points,question,answer,image,media_type&order=id.asc',
+      SUPABASE_URL + '/rest/v1/category_questions?select=topic,points,question,answer,image,media_type,clip_start,clip_seconds&order=id.asc',
       { headers: {
           'apikey': SUPABASE_ANON_KEY,
           'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
@@ -32,7 +32,7 @@ async function loadCategoryDatabase(){
   rows.forEach(row=>{
         if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
         const tier = grouped[row.topic][row.points] ? row.points : 200;
-        grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type });
+        grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type, clipStart:row.clip_start, clipSeconds:row.clip_seconds });
   });
   CATEGORY_DATA = grouped;
   CATEGORY_TOPICS = Object.keys(grouped);
@@ -58,7 +58,7 @@ function pickQuestionsForBankTopic(topicName){
   const result = [];
   [100,200,400,600].forEach(pts=>{
     const picked = pickFromTier(bank[pts], bankUsage[topicName][pts], counts[pts]);
-    picked.forEach(q=> result.push({ id:nextId(), text:q.text, answer:q.answer, points:pts, image:q.image, mediaType:q.mediaType }));
+    picked.forEach(q=> result.push({ id:nextId(), text:q.text, answer:q.answer, points:pts, image:q.image, mediaType:q.mediaType, clipStart:q.clipStart, clipSeconds:q.clipSeconds }));
   });
   return result;
 }
