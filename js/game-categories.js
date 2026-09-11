@@ -72,10 +72,15 @@ function renderEditor(){
     const customPanel = el(`<div class="panel"><div class="section-title" style="font-size:16px;">مواضيعك الخاصة</div></div>`);
     const list = customPanel.querySelector('.section-title');
     customTopics.forEach(t=>{
-      const row = el(`<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 4px; border-top:1px solid var(--line);">
-        <span>${escapeAttr(t.name)}</span>
-        <button class="remove-x" title="حذف">✕</button>
+      const row = el(`<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 4px; border-top:1px solid var(--line); flex-wrap:wrap;">
+        <span style="flex:1; min-width:120px;">${escapeAttr(t.name)}</span>
+        <div style="display:flex; gap:8px; align-items:center;">
+          ${t.sharedCode ? `<button class="btn btn-ghost btn-sm report-btn" title="بلّغ عن محتوى مسيء">⚑ بلّغ</button>` : ''}
+          <button class="remove-x" title="حذف">✕</button>
+        </div>
       </div>`);
+      const rep = row.querySelector('.report-btn');
+      if(rep) rep.addEventListener('click', ()=> openReportModal(t));
       row.querySelector('.remove-x').addEventListener('click', ()=>{
         state.pool = state.pool.filter(x=>x.id!==t.id);
         render();
