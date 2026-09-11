@@ -295,3 +295,12 @@
   .empty{
     text-align:center; color:var(--muted); padding:40px 10px; font-size:14px;
   }
+
+  /* ---------- زر التبليغ داخل شاشة السؤال ---------- */
+  .q-report{
+    background:transparent; border:1px solid var(--line); color:var(--muted);
+    border-radius:6px; padding:1px 8px; font-size:13px; cursor:pointer;
+    margin-inline-start:8px; vertical-align:middle; line-height:1.6;
+  }
+  .q-report:hover{ border-color:var(--rose-dim); color:var(--rose); }
+  .q-report:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
