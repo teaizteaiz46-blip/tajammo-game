@@ -454,7 +454,11 @@ function renderQuestionOverlay(){
   }
 
   const modal = el(`<div class="q-modal">
-    <div class="q-topic">${escapeAttr(topic.name)}</div>
+    <div class="q-topic">${escapeAttr(topic.name)}${
+      topic.sharedCode
+        ? ` <button class="q-report" title="بلّغ عن محتوى مسيء" aria-label="بلّغ عن محتوى مسيء">⚑</button>`
+        : ''
+    }</div>
     <div class="q-points">${q.points} نقطة</div>
     ${q.mediaType === 'flag' && q.image ? `<img src="https://flagcdn.com/w320/${q.image}.png" style="width:180px; max-width:70%; border-radius:8px; margin-bottom:14px; box-shadow:0 4px 14px rgba(0,0,0,0.4);" alt=""/>` : ''}
     ${q.mediaType === 'song' && q.image ? `<div class="song-player" id="song-player"><div class="section-sub">...جاري تحميل المقطع</div></div>` : ''}
@@ -477,6 +481,12 @@ function renderQuestionOverlay(){
       </div>
     `}
   </div>`);
+
+  const repBtn = modal.querySelector('.q-report');
+  if(repBtn) repBtn.addEventListener('click', ()=>{
+    stopTimer();
+    openReportModal(topic);
+  });
 
   wireSongPlayer(modal, q);
 
