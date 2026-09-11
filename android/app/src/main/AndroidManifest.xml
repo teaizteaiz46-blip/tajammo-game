@@ -42,4 +42,12 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      معرّف الإعلانات: مكتبة AdMob تضيف هذي الصلاحية تلقائياً بالدمج،
+      بس نعلنها صراحة لأن Play Console يمنع أي رفع ما فيها بعد ما أعلنّا
+      إن التطبيق يستخدم Advertising ID. إعلانها هنا يشيل أي احتمال
+      إن الدمج ما يشتغل بنسخة مكتبة معينة.
+    -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
 </manifest>
