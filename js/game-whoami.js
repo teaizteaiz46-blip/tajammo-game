@@ -1,145 +1,156 @@
-/* ============================ الحلفاء والشياطين (simplified Secret-Hitler-style) ============================ */
-function shdEvilCountFor(n){
-  const table = {5:2,6:2,7:3,8:3,9:4,10:4};
-  return table[n] || 2;
-}
-function shdBuildDeck(){
-  const deck = [];
-  for(let i=0;i<6;i++) deck.push('good');
-  for(let i=0;i<11;i++) deck.push('evil');
-  return shuffled(deck);
-}
-function shdDrawThree(){
-  if(state.shdDeck.length < 3){
-    state.shdDeck = shuffled([...state.shdDeck, ...state.shdDiscard]);
-    state.shdDiscard = [];
-  }
-  const drawn = state.shdDeck.splice(0,3);
-  return drawn;
-}
-function shdEligibleChancellors(){
-  const n = state.shdPlayers.length;
-  return state.shdPlayers.map((p,i)=>i).filter(i=>{
-    if(i === state.shdPresidentIdx) return false;
-    if(n > 5 && i === state.shdLastPresidentIdx) return false;
-    if(i === state.shdLastChancellorIdx) return false;
-    return true;
-  });
+/* ============================ من أنا؟ ============================
+ *
+ * استُرجع من www/index.html الأصلي (commit 0d9dd57). الملف كان يحتوي
+ * بالغلط نسخة ثانية من لعبة الحلفاء والشياطين، فدوال renderWhoami*
+ * كانت مفقودة تماماً وrender() يرمي ReferenceError عند فتح اللعبة —
+ * فتطلع شاشة فاضية تحت الشريط العلوي.
+ */
+
+/* ============================ WHO AM I? (من أنا؟) ============================ */
+async function fetchRandomCharacters(n){
+  const { data, error } = await sb
+    .from('whoami_characters')
+    .select('name')
+    .limit(500);
+  if(error) throw error;
+  const shuffled = data.map(r=>r.name).sort(()=> Math.random()-0.5);
+  if(shuffled.length < n) throw new Error('not enough characters');
+  return shuffled.slice(0, n);
 }
 
-function renderShdSetup(){
+function renderWhoamiSetup(){
   const wrap = el(`<div></div>`);
 
   const intro = el(`<div class="panel">
-    <div class="section-title">الحلفاء والشياطين</div>
-    <div class="section-sub">فريقين بالسر: أغلبية "حلفاء" وأقلية "شياطين" تعرف بعضها. انتخاب رئيس ووزير كل جولة، وتمرير قانون واحد. الحلفاء يفوزون بتمرير ٥ قوانين صالحة، والشياطين يفوزون بتمرير ٦ قوانين شريرة.</div>
+    <div class="section-title">من أنا؟</div>
+    <div class="section-sub">كل لاعب تنحط له شخصية بالسر — يشوفها كل الحاضرين إلا هو، ويحاول يخمنها بأسئلة نعم/لا. الشخصيات تنجلب أونلاين من قاعدة بيانات، فلازم اتصال إنترنت.</div>
   </div>`);
   wrap.appendChild(intro);
 
   const countPanel = el(`<div class="panel">
-    <div class="section-title" style="font-size:16px;">عدد اللاعبين (٥-١٠)</div>
+    <div class="section-title" style="font-size:16px;">عدد اللاعبين</div>
     <div style="display:flex; align-items:center; gap:16px; margin-top:10px;">
-      <button class="btn btn-ghost btn-sm" id="shd-count-minus">−</button>
-      <span class="display" style="font-size:26px; min-width:30px; text-align:center;">${state.shdPlayerCount}</span>
-      <button class="btn btn-ghost btn-sm" id="shd-count-plus">+</button>
+      <button class="btn btn-ghost btn-sm" id="count-minus">−</button>
+      <span class="display" style="font-size:26px; min-width:30px; text-align:center;">${state.whoamiPlayerCount}</span>
+      <button class="btn btn-ghost btn-sm" id="count-plus">+</button>
     </div>
-    <div class="section-sub" style="margin-top:10px;">عدد الشياطين بهذا العدد: ${shdEvilCountFor(state.shdPlayerCount)}</div>
   </div>`);
-  countPanel.querySelector('#shd-count-minus').addEventListener('click', ()=>{
-    if(state.shdPlayerCount > 5){ state.shdPlayerCount--; render(); }
+  countPanel.querySelector('#count-minus').addEventListener('click', ()=>{
+    if(state.whoamiPlayerCount > 3){ state.whoamiPlayerCount--; render(); }
   });
-  countPanel.querySelector('#shd-count-plus').addEventListener('click', ()=>{
-    if(state.shdPlayerCount < 10){ state.shdPlayerCount++; render(); }
+  countPanel.querySelector('#count-plus').addEventListener('click', ()=>{
+    if(state.whoamiPlayerCount < 10){ state.whoamiPlayerCount++; render(); }
   });
   wrap.appendChild(countPanel);
 
   const namesPanel = el(`<div class="panel">
     <div class="section-title" style="font-size:16px;">أسماء اللاعبين (اختياري)</div>
-    <div id="shd-names-list" style="display:grid; gap:10px;"></div>
+    <div class="section-sub">لو تركتها فاضية، بنسميهم "اللاعب ١"، "اللاعب ٢"...</div>
+    <div id="names-list" style="display:grid; gap:10px;"></div>
   </div>`);
-  const namesList = namesPanel.querySelector('#shd-names-list');
-  for(let i=0;i<state.shdPlayerCount;i++){
-    const row = el(`<input type="text" placeholder="اللاعب ${i+1}" value="${escapeAttr(state.shdPlayerNames[i]||'')}"/>`);
-    row.addEventListener('input', e=>{ state.shdPlayerNames[i] = e.target.value; });
+  const namesList = namesPanel.querySelector('#names-list');
+  for(let i=0;i<state.whoamiPlayerCount;i++){
+    const row = el(`<input type="text" placeholder="اللاعب ${i+1}" value="${escapeAttr(state.whoamiPlayerNames[i]||'')}"/>`);
+    row.addEventListener('input', e=>{ state.whoamiPlayerNames[i] = e.target.value; });
     namesList.appendChild(row);
   }
   wrap.appendChild(namesPanel);
 
-  const actions = el(`<div class="btn-row">
-    <button class="btn btn-gold" id="shd-start">ابدأ التوزيع</button>
-    <button class="btn btn-ghost" id="shd-back">رجوع</button>
+  const timerPanel = el(`<div class="panel">
+    <div class="section-title" style="font-size:16px;">المؤقت</div>
+    <div class="toggle-row">
+      <span>تفعيل مؤقت لكل دور</span>
+      <div class="switch ${state.whoamiTimerEnabled?'on':''}" id="wa-timer-switch"><div class="knob"></div></div>
+    </div>
+    <div class="field" style="margin-top:16px; ${state.whoamiTimerEnabled?'':'display:none;'}" id="wa-timer-field">
+      <label>مدة كل دور (بالثواني)</label>
+      <input type="number" id="wa-timer-seconds" min="10" max="180" value="${state.whoamiTimerSeconds}"/>
+    </div>
   </div>`);
-  actions.querySelector('#shd-back').addEventListener('click', ()=> goto('hub'));
-  actions.querySelector('#shd-start').addEventListener('click', ()=>{
-    const n = state.shdPlayerCount;
-    const evilCount = shdEvilCountFor(n);
-    const roles = [];
-    for(let i=0;i<evilCount;i++) roles.push('evil');
-    for(let i=evilCount;i<n;i++) roles.push('good');
-    const shuffledRoles = shuffled(roles);
-    state.shdPlayers = shuffledRoles.map((role,i)=>({
-      name: state.shdPlayerNames[i]?.trim() || `اللاعب ${i+1}`,
-      role
-    }));
-    state.shdRevealIndex = 0;
-    state.shdRevealShown = false;
-    state.shdDeck = shdBuildDeck();
-    state.shdDiscard = [];
-    state.shdGoodCount = 0;
-    state.shdEvilCount = 0;
-    state.shdPresidentIdx = 0;
-    state.shdChancellorIdx = null;
-    state.shdLastPresidentIdx = null;
-    state.shdLastChancellorIdx = null;
-    state.shdWinner = null;
-    goto('shd-reveal');
+  timerPanel.querySelector('#wa-timer-switch').addEventListener('click', ()=>{
+    state.whoamiTimerEnabled = !state.whoamiTimerEnabled;
+    render();
+  });
+  const waSec = timerPanel.querySelector('#wa-timer-seconds');
+  if(waSec) waSec.addEventListener('input', e=>{
+    state.whoamiTimerSeconds = Math.max(5, parseInt(e.target.value||'30',10));
+  });
+  wrap.appendChild(timerPanel);
+
+  if(state.whoamiError){
+    wrap.appendChild(el(`<div class="section-sub" style="color:var(--rose);">${escapeAttr(state.whoamiError)}</div>`));
+  }
+
+  const actions = el(`<div class="btn-row">
+    <button class="btn btn-gold" id="wa-start" ${state.whoamiLoading?'disabled':''}>${state.whoamiLoading?'...جاري الجلب':'ابدأ التوزيع'}</button>
+    <button class="btn btn-ghost" id="wa-back">رجوع</button>
+  </div>`);
+  actions.querySelector('#wa-back').addEventListener('click', ()=> goto('hub'));
+  actions.querySelector('#wa-start').addEventListener('click', async ()=>{
+    state.whoamiLoading = true; state.whoamiError=''; render();
+    try{
+      const names = await fetchRandomCharacters(state.whoamiPlayerCount);
+      state.whoamiPlayers = names.map((character, i)=>({
+        name: state.whoamiPlayerNames[i]?.trim() || `اللاعب ${i+1}`,
+        character,
+        guessed: false
+      }));
+      state.whoamiRevealIndex = 0;
+      state.whoamiRevealShown = false;
+      state.whoamiTurn = 0;
+      state.whoamiFinishOrder = [];
+      state.whoamiLoading = false;
+      goto('whoami-reveal');
+    } catch(e){
+      state.whoamiLoading = false;
+      state.whoamiError = 'تعذّر جلب الشخصيات — تأكد من اتصال الإنترنت وحاول مرة ثانية.';
+      render();
+    }
   });
   wrap.appendChild(actions);
 
   return wrap;
 }
 
-function renderShdReveal(){
+function renderWhoamiReveal(){
   const wrap = el(`<div></div>`);
-  const idx = state.shdRevealIndex;
-  const player = state.shdPlayers[idx];
+  const idx = state.whoamiRevealIndex;
+  const player = state.whoamiPlayers[idx];
 
   if(!player){
     const done = el(`<div class="panel" style="text-align:center;">
-      <div class="section-title">كل اللاعبين عرفوا أدوارهم ✓</div>
+      <div class="section-title">كل الشخصيات اتوزعت ✓</div>
+      <div class="section-sub">جاهزين نبدأ اللعب</div>
       <div class="btn-row" style="justify-content:center;">
-        <button class="btn btn-gold" id="shd-play-start">ابدأ اللعبة</button>
+        <button class="btn btn-gold" id="wa-play-start">ابدأ اللعبة</button>
       </div>
     </div>`);
-    done.querySelector('#shd-play-start').addEventListener('click', ()=> goto('shd-nominate'));
+    done.querySelector('#wa-play-start').addEventListener('click', ()=> goto('whoami-play'));
     wrap.appendChild(done);
     return wrap;
   }
 
   const panel = el(`<div class="panel" style="text-align:center;">
-    <div class="section-title">🙈 الكل غير ${escapeAttr(player.name)} يبعدون نظرهم</div>
-    <div class="section-sub">بس ${escapeAttr(player.name)} يشوف الشاشة الحين</div>
-    ${state.shdRevealShown ? `
-      <div class="q-points" style="font-size:22px; padding:16px 26px;">
-        ${player.role === 'good' ? 'أنت من الحلفاء 😇' : 'أنت من الشياطين 😈'}
-      </div>
-      ${player.role === 'evil' ? `<div class="section-sub">زملاؤك: ${state.shdPlayers.filter((p,i)=>p.role==='evil' && i!==idx).map(p=>escapeAttr(p.name)).join('، ')}</div>` : ''}
+    <div class="section-title">🙈 ${escapeAttr(player.name)} يبعد نظره عن الشاشة</div>
+    <div class="section-sub">باقي كل اللاعبين ينطرون ويشوفون — بس مو هو</div>
+    ${state.whoamiRevealShown ? `
+      <div class="q-points" style="font-size:26px; padding:16px 26px;">${escapeAttr(player.character)}</div>
       <div class="btn-row" style="justify-content:center;">
-        <button class="btn btn-gold" id="shd-next">التالي</button>
+        <button class="btn btn-gold" id="wa-next">التالي</button>
       </div>
     ` : `
       <div class="btn-row" style="justify-content:center;">
-        <button class="btn btn-gold" id="shd-reveal-role">إظهار دوري (لو الباقي مو ناظرين)</button>
+        <button class="btn btn-gold" id="wa-reveal">إظهار الشخصية (لو ${escapeAttr(player.name)} مو ناظر)</button>
       </div>
     `}
   </div>`);
 
-  const revealBtn = panel.querySelector('#shd-reveal-role');
-  if(revealBtn) revealBtn.addEventListener('click', ()=>{ state.shdRevealShown = true; render(); });
-  const nextBtn = panel.querySelector('#shd-next');
+  const revealBtn = panel.querySelector('#wa-reveal');
+  if(revealBtn) revealBtn.addEventListener('click', ()=>{ state.whoamiRevealShown = true; render(); });
+  const nextBtn = panel.querySelector('#wa-next');
   if(nextBtn) nextBtn.addEventListener('click', ()=>{
-    state.shdRevealIndex++;
-    state.shdRevealShown = false;
+    state.whoamiRevealIndex++;
+    state.whoamiRevealShown = false;
     render();
   });
 
@@ -147,226 +158,111 @@ function renderShdReveal(){
   return wrap;
 }
 
-function renderShdNominate(){
-  const wrap = el(`<div></div>`);
-  wrap.appendChild(el(`<div class="section-sub" style="margin-bottom:14px;">الحلفاء: ${state.shdGoodCount}/٥ · الشياطين: ${state.shdEvilCount}/٦</div>`));
-
-  const president = state.shdPlayers[state.shdPresidentIdx];
-  const banner = el(`<div class="turn-banner">الرئيس هذي الجولة: <b>${escapeAttr(president.name)}</b> — يختار وزير</div>`);
-  wrap.appendChild(banner);
-
-  const eligible = shdEligibleChancellors();
-  const grid = el(`<div class="pick-grid"></div>`);
-  state.shdPlayers.forEach((p, i)=>{
-    const ok = eligible.includes(i);
-    const card = el(`<div class="pick-card ${ok?'':'taken'}">${escapeAttr(p.name)}</div>`);
-    if(ok){
-      card.addEventListener('click', ()=>{
-        state.shdChancellorIdx = i;
-        state.shdVotes = {};
-        state.shdVoteStep = 0;
-        state.shdVoteOrder = state.shdPlayers.map((_,idx)=>idx);
-        goto('shd-vote');
-      });
-    }
-    grid.appendChild(card);
-  });
-  wrap.appendChild(grid);
-  return wrap;
+function activeWhoamiPlayers(){
+  return state.whoamiPlayers.filter(p=>!p.guessed);
 }
 
-function renderShdVote(){
+function renderWhoamiPlay(){
   const wrap = el(`<div></div>`);
-  const president = state.shdPlayers[state.shdPresidentIdx];
-  const chancellor = state.shdPlayers[state.shdChancellorIdx];
 
-  wrap.appendChild(el(`<div class="panel" style="text-align:center;">
-    <div class="section-title">هل توافقون على هذي الحكومة؟</div>
-    <div class="section-sub">الرئيس: ${escapeAttr(president.name)} — الوزير المرشّح: ${escapeAttr(chancellor.name)}</div>
-  </div>`));
-
-  const step = state.shdVoteStep;
-  if(step >= state.shdVoteOrder.length){
-    const yes = Object.values(state.shdVotes).filter(v=>v).length;
-    const no = Object.values(state.shdVotes).filter(v=>!v).length;
-    const passed = yes > no;
-    const goBtn = el(`<div class="panel" style="text-align:center;">
-      <div class="section-title">${passed? 'الحكومة موافق عليها ✓' : 'الحكومة مرفوضة ✕'}</div>
-      <div class="section-sub">نعم: ${yes} — لا: ${no}</div>
-      <div class="btn-row" style="justify-content:center;">
-        <button class="btn btn-gold" id="shd-vote-continue">متابعة</button>
-      </div>
-    </div>`);
-    goBtn.querySelector('#shd-vote-continue').addEventListener('click', ()=>{
-      if(passed){
-        state.shdLastPresidentIdx = state.shdPresidentIdx;
-        state.shdLastChancellorIdx = state.shdChancellorIdx;
-        state.shdDrawnPolicies = shdDrawThree();
-        state.shdRevealShown = false;
-        goto('shd-president-policy');
-      } else {
-        state.shdPresidentIdx = (state.shdPresidentIdx + 1) % state.shdPlayers.length;
-        state.shdChancellorIdx = null;
-        goto('shd-nominate');
-      }
-    });
-    wrap.appendChild(goBtn);
+  const remaining = activeWhoamiPlayers();
+  if(remaining.length === 0){
+    goto('whoami-end');
     return wrap;
   }
 
-  const voterIdx = state.shdVoteOrder[step];
-  const voter = state.shdPlayers[voterIdx];
+  if(state.whoamiTurn >= state.whoamiPlayers.length) state.whoamiTurn = 0;
+  while(state.whoamiPlayers[state.whoamiTurn].guessed){
+    state.whoamiTurn = (state.whoamiTurn + 1) % state.whoamiPlayers.length;
+  }
+  const player = state.whoamiPlayers[state.whoamiTurn];
+
+  const scoreStrip = el(`<div class="section-sub" style="margin-bottom:14px;">فازوا: ${state.whoamiFinishOrder.map(n=>escapeAttr(n)).join('، ') || '—'}</div>`);
+  wrap.appendChild(scoreStrip);
+
   const panel = el(`<div class="panel" style="text-align:center;">
-    <div class="section-title">تصويت: ${escapeAttr(voter.name)}</div>
+    <div class="section-title">دور: ${escapeAttr(player.name)}</div>
+    <div class="section-sub">يسأل سؤال نعم/لا بصوته، والباقي يردون بصوتهم</div>
+    ${state.whoamiTimerEnabled ? `<div class="timer" id="wa-timer-display">${state.whoamiTimerLeft}</div>` : ''}
     <div class="award-row">
-      <button class="btn btn-gold btn-sm" id="shd-yes">نعم</button>
-      <button class="btn btn-sm" style="background:var(--rose); color:#fff;" id="shd-no">لا</button>
+      <button class="btn btn-gold btn-sm" id="wa-yes">نعم (استمر)</button>
+      <button class="btn btn-sm" style="background:var(--rose); color:#fff;" id="wa-no">لا (الدور التالي)</button>
+    </div>
+    <div class="btn-row" style="justify-content:center;">
+      <button class="btn btn-gold" id="wa-correct">خمّنت صح ✅</button>
     </div>
   </div>`);
-  panel.querySelector('#shd-yes').addEventListener('click', ()=>{
-    state.shdVotes[voterIdx] = true;
-    state.shdVoteStep++;
+
+  panel.querySelector('#wa-yes').addEventListener('click', ()=>{
+    if(state.whoamiTimerEnabled) startWhoamiTimer();
     render();
   });
-  panel.querySelector('#shd-no').addEventListener('click', ()=>{
-    state.shdVotes[voterIdx] = false;
-    state.shdVoteStep++;
+  panel.querySelector('#wa-no').addEventListener('click', ()=>{
+    stopWhoamiTimer();
+    state.whoamiTurn = (state.whoamiTurn + 1) % state.whoamiPlayers.length;
     render();
   });
-  wrap.appendChild(panel);
-  return wrap;
-}
-
-function renderShdVoteResult(){
-  return renderShdVote();
-}
-
-function renderShdPresidentPolicy(){
-  const wrap = el(`<div></div>`);
-  const president = state.shdPlayers[state.shdPresidentIdx];
-
-  if(!state.shdRevealShown){
-    const panel = el(`<div class="panel" style="text-align:center;">
-      <div class="section-title">🙈 الكل غير ${escapeAttr(president.name)} يبعدون نظرهم</div>
-      <div class="section-sub">الرئيس بس يشوف القوانين ويستبعد وحد</div>
-      <div class="btn-row" style="justify-content:center;">
-        <button class="btn btn-gold" id="shd-show-pres">إظهار القوانين</button>
-      </div>
-    </div>`);
-    panel.querySelector('#shd-show-pres').addEventListener('click', ()=>{ state.shdRevealShown = true; render(); });
-    wrap.appendChild(panel);
-    return wrap;
-  }
-
-  const panel = el(`<div class="panel" style="text-align:center;">
-    <div class="section-title">اختر قانون تستبعده (يضل ٢ للوزير)</div>
-    <div class="pick-grid" id="pres-tiles"></div>
-  </div>`);
-  const tilesGrid = panel.querySelector('#pres-tiles');
-  state.shdDrawnPolicies.forEach((tile, i)=>{
-    const card = el(`<div class="pick-card">${tile==='good'?'قانون صالح 😇':'قانون شرير 😈'}</div>`);
-    card.addEventListener('click', ()=>{
-      state.shdDiscard.push(tile);
-      state.shdDrawnPolicies = state.shdDrawnPolicies.filter((_,idx)=>idx!==i);
-      state.shdRevealShown = false;
-      goto('shd-chancellor-policy');
-    });
-    tilesGrid.appendChild(card);
+  panel.querySelector('#wa-correct').addEventListener('click', ()=>{
+    stopWhoamiTimer();
+    player.guessed = true;
+    state.whoamiFinishOrder.push(player.name);
+    const stillLeft = activeWhoamiPlayers();
+    if(stillLeft.length === 0){
+      goto('whoami-end');
+    } else {
+      state.whoamiTurn = (state.whoamiTurn + 1) % state.whoamiPlayers.length;
+      render();
+    }
   });
+
   wrap.appendChild(panel);
   return wrap;
 }
 
-function renderShdChancellorPolicy(){
-  const wrap = el(`<div></div>`);
-  const chancellor = state.shdPlayers[state.shdChancellorIdx];
-
-  if(!state.shdRevealShown){
-    const panel = el(`<div class="panel" style="text-align:center;">
-      <div class="section-title">🙈 الكل غير ${escapeAttr(chancellor.name)} يبعدون نظرهم</div>
-      <div class="section-sub">الوزير بس يشوف القانونين ويستبعد وحد، والباقي ينطبق علناً</div>
-      <div class="btn-row" style="justify-content:center;">
-        <button class="btn btn-gold" id="shd-show-chan">إظهار القوانين</button>
-      </div>
-    </div>`);
-    panel.querySelector('#shd-show-chan').addEventListener('click', ()=>{ state.shdRevealShown = true; render(); });
-    wrap.appendChild(panel);
-    return wrap;
-  }
-
-  const panel = el(`<div class="panel" style="text-align:center;">
-    <div class="section-title">اختر قانون تستبعده (الثاني ينطبق علناً)</div>
-    <div class="pick-grid" id="chan-tiles"></div>
-  </div>`);
-  const tilesGrid = panel.querySelector('#chan-tiles');
-  state.shdDrawnPolicies.forEach((tile, i)=>{
-    const card = el(`<div class="pick-card">${tile==='good'?'قانون صالح 😇':'قانون شرير 😈'}</div>`);
-    card.addEventListener('click', ()=>{
-      state.shdDiscard.push(tile);
-      const enacted = state.shdDrawnPolicies.find((_,idx)=>idx!==i);
-      state.shdLastEnacted = enacted;
-      if(enacted === 'good') state.shdGoodCount++; else state.shdEvilCount++;
-      state.shdRevealShown = false;
-      goto('shd-policy-result');
-    });
-    tilesGrid.appendChild(card);
-  });
-  wrap.appendChild(panel);
-  return wrap;
+function startWhoamiTimer(){
+  stopWhoamiTimer();
+  state.whoamiTimerLeft = state.whoamiTimerSeconds;
+  state.whoamiTimerHandle = setInterval(()=>{
+    state.whoamiTimerLeft -= 1;
+    const disp = document.getElementById('wa-timer-display');
+    if(disp){
+      disp.textContent = state.whoamiTimerLeft;
+      disp.classList.toggle('warn', state.whoamiTimerLeft <= 5);
+    }
+    if(state.whoamiTimerLeft <= 0){ stopWhoamiTimer(); }
+  }, 1000);
+}
+function stopWhoamiTimer(){
+  if(state.whoamiTimerHandle){ clearInterval(state.whoamiTimerHandle); state.whoamiTimerHandle = null; }
 }
 
-function renderShdPolicyResult(){
-  const wrap = el(`<div></div>`);
-  const enacted = state.shdLastEnacted;
-  const panel = el(`<div class="panel" style="text-align:center;">
-    <div class="section-title">${enacted==='good' ? 'انطبق قانون صالح 😇' : 'انطبق قانون شرير 😈'}</div>
-    <div class="section-sub">الحلفاء: ${state.shdGoodCount}/٥ — الشياطين: ${state.shdEvilCount}/٦</div>
-  </div>`);
-  wrap.appendChild(panel);
-
-  if(state.shdGoodCount >= 5 || state.shdEvilCount >= 6){
-    state.shdWinner = state.shdGoodCount >= 5 ? 'good' : 'evil';
-    const btn = el(`<div class="btn-row" style="justify-content:center;"><button class="btn btn-gold" id="shd-to-end">عرض النتيجة النهائية</button></div>`);
-    btn.querySelector('#shd-to-end').addEventListener('click', ()=> goto('shd-end'));
-    wrap.appendChild(btn);
-  } else {
-    const btn = el(`<div class="btn-row" style="justify-content:center;"><button class="btn btn-gold" id="shd-next-round">الجولة التالية</button></div>`);
-    btn.querySelector('#shd-next-round').addEventListener('click', ()=>{
-      state.shdPresidentIdx = (state.shdPresidentIdx + 1) % state.shdPlayers.length;
-      state.shdChancellorIdx = null;
-      goto('shd-nominate');
-    });
-    wrap.appendChild(btn);
-  }
-  return wrap;
-}
-
-function renderShdEnd(){
+function renderWhoamiEnd(){
   if(state.user && !state.statsRecordedForThisGame){
     state.statsRecordedForThisGame = true;
     recordGameResult(0);
   }
-  const winner = state.shdWinner;
+
   const wrap = el(`<div class="end-wrap">
-    <div class="trophy">${winner==='good'?'😇':'😈'}</div>
-    <h2>${winner==='good' ? 'فاز الحلفاء' : 'فاز الشياطين'}</h2>
-    <p>الأدوار الحقيقية:</p>
+    <div class="trophy">🎉</div>
+    <h2>انتهت اللعبة</h2>
+    <p>ترتيب من خمّن شخصيته أول:</p>
     <div class="panel" style="max-width:400px; margin:0 auto 30px; text-align:right;">
-      ${state.shdPlayers.map(p=>`<div style="padding:8px 0; border-top:1px solid var(--line);">${escapeAttr(p.name)} — ${p.role==='good'?'حلفاء 😇':'شياطين 😈'}</div>`).join('')}
+      ${state.whoamiFinishOrder.map((n,i)=>`<div style="padding:8px 0; ${i? 'border-top:1px solid var(--line);':''}">${i+1}. ${escapeAttr(n)}</div>`).join('') || '<div>ما فيه نتائج</div>'}
     </div>
     <div class="btn-row" style="justify-content:center;">
-      <button class="btn btn-gold" id="shd-replay">جولة جديدة</button>
-      <button class="btn btn-ghost" id="shd-hub">رجوع للرئيسية</button>
+      <button class="btn btn-gold" id="wa-new-round">جولة جديدة — شخصيات جديدة</button>
+      <button class="btn btn-ghost" id="wa-new-hub">رجوع للرئيسية</button>
     </div>
   </div>`);
-  wrap.querySelector('#shd-replay').addEventListener('click', ()=>{
+
+  wrap.querySelector('#wa-new-round').addEventListener('click', ()=>{
     state.statsRecordedForThisGame = false;
-    goto('shd-setup');
+    goto('whoami-setup');
   });
-  wrap.querySelector('#shd-hub').addEventListener('click', ()=>{
+  wrap.querySelector('#wa-new-hub').addEventListener('click', ()=>{
     state.statsRecordedForThisGame = false;
-    showInterstitialAd();
     goto('hub');
   });
+
   return wrap;
 }
