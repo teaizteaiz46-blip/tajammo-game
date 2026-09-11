@@ -27,6 +27,17 @@ const state = {
   importError: '',
   importedNotice: '',
 
+  // الإشراف على المحتوى (متطلبات سياسة Google للـ UGC)
+  reportTopic: null,
+  reportReason: '',
+  reportNote: '',
+  reportBusy: false,
+  reportError: '',
+  reportDone: false,
+  showTermsModal: false,
+  termsBusy: false,
+  termsError: '',
+
   teams: [
     { name: 'الفريق الأول', score: 0, helps: 3 },
     { name: 'الفريق الثاني', score: 0, helps: 3 }
