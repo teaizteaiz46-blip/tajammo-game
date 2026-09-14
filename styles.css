@@ -21,7 +21,13 @@
     color:var(--ivory);
     font-family:'Tajawal', sans-serif;
     min-height:100vh;
-    padding:28px 16px 60px;
+    /* على الآيفون، النوتش والجزيرة الديناميكية تاكل أعلى الشاشة، وشريط
+       الهوم يأكل أسفلها. env() ترجع المقاس الحقيقي لكل جهاز، وترجع صفر
+       على أندرويد والمتصفح — يعني القيم تحت ما تتغير هناك. */
+    padding-top: calc(28px + env(safe-area-inset-top));
+    padding-bottom: calc(60px + env(safe-area-inset-bottom));
+    padding-left: calc(16px + env(safe-area-inset-left));
+    padding-right: calc(16px + env(safe-area-inset-right));
   }
   .wrap{max-width:980px; margin:0 auto;}
   .display{font-family:'Changa', sans-serif;}
@@ -131,12 +137,14 @@
   .section-sub{color:var(--muted); font-size:13px; margin:0 0 18px;}
 
   label{display:block; font-size:13px; color:var(--muted); margin-bottom:6px;}
-  input[type=text], input[type=number]{
+  input[type=text], input[type=number], input[type=email], input[type=password]{
     width:100%; background:var(--bg-2); border:1px solid var(--line);
     color:var(--ivory); border-radius:10px; padding:11px 13px;
     font-family:'Tajawal'; font-size:15px;
   }
-  input[type=text]:focus, input[type=number]:focus{outline:none; border-color:var(--gold-dim);}
+  input[type=text]:focus, input[type=number]:focus,
+  input[type=email]:focus, input[type=password]:focus{outline:none; border-color:var(--gold-dim);}
+
   select{
     background:var(--bg-2); border:1px solid var(--line); color:var(--ivory);
     border-radius:10px; padding:9px 10px; font-family:'Tajawal';
@@ -253,7 +261,11 @@
   /* ---------- question overlay ---------- */
   .overlay{
     position:fixed; inset:0; background:rgba(6,15,14,0.86);
-    display:flex; align-items:center; justify-content:center; padding:20px; z-index:50;
+    display:flex; align-items:center; justify-content:center; z-index:50;
+    /* ملء الشاشة يعني تحت النوتش بعد — نبعد المحتوى عنه */
+    padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
+             calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+    overflow-y:auto;
   }
   .q-modal{
     width:100%; max-width:640px; background:var(--panel);
@@ -327,3 +339,15 @@
   .cost-note .ok{ color:var(--sage); }
   .cost-note .warn{ color:var(--gold); }
   .cost-note .section-sub{ margin-top:6px; font-size:13px; color:var(--muted); }
+
+  /* ─────────────────────────────────────────────────────────────
+     iOS يكبّر الصفحة تلقائياً إذا خط حقل الكتابة أصغر من 16px،
+     ويظل مكبّر بعد ما تخلص. نفرض 16px على الأجهزة اللمسية بس —
+     الديسكتوب يبقى بحجمه المضغوط.
+
+     !important لأن قواعد مثل `.q-row input{font-size:13px}` أقوى
+     بالتخصيص وراح تغلب القاعدة العامة.
+     ───────────────────────────────────────────────────────────── */
+  @media (pointer: coarse){
+    input, select, textarea{ font-size:16px !important; }
+  }

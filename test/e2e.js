@@ -8,8 +8,45 @@
  * لأن سلوك قاعدة البيانات نفسه انتُحقق منه بـ SQL بدور anon مباشرة.
  */
 const { chromium } = require('playwright');
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
 const BASE = 'http://localhost:8099';
+const PORT = 8099;
+const WWW = path.join(__dirname, '..', 'www');
+
+/* متصفح الاختبار: بالحاويات مثبّت بمسار ثابت، وعلى ويندوز/ماك
+   ينزّله playwright بمكانه الخاص. نستخدم الثابت إذا موجود بس. */
+const PINNED = '/opt/pw-browsers/chromium';
+const LAUNCH = fs.existsSync(PINNED) ? { executablePath: PINNED } : {};
+
+const MIME = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8',
+  '.css':'text/css; charset=utf-8', '.json':'application/json; charset=utf-8',
+  '.png':'image/png', '.jpg':'image/jpeg', '.svg':'image/svg+xml', '.ico':'image/x-icon' };
+
+/* نشغّل خادم الملفات جوّا الاختبار — حتى `npm test` يشتغل بأمر واحد
+   بلا ما تحتاج تفتح نافذة ثانية وتشغّل خادم بإيدك. */
+function startServer(){
+  return new Promise((resolve)=>{
+    const srv = http.createServer((req, res)=>{
+      let p = decodeURIComponent(req.url.split('?')[0]);
+      if(p === '/' || p.endsWith('/')) p += 'index.html';
+      const file = path.join(WWW, path.normalize(p).replace(/^[\\/]+/, ''));
+      if(!file.startsWith(WWW) || !fs.existsSync(file) || fs.statSync(file).isDirectory()){
+        res.writeHead(404); return res.end('404');
+      }
+      res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream' });
+      fs.createReadStream(file).pipe(res);
+    });
+    srv.on('error', e=>{
+      // خادم شغال أصلاً على نفس المنفذ — نكمل عليه
+      if(e.code === 'EADDRINUSE'){ console.log('(خادم شغال أصلاً على ' + PORT + ')'); resolve(null); }
+      else throw e;
+    });
+    srv.listen(PORT, ()=> resolve(srv));
+  });
+}
 const GOOD_CODE = '4U6AMY';
 
 const CANNED_TOPIC = {
@@ -108,7 +145,12 @@ const CANNED_BANK = (() => {
 })();
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+  if(!fs.existsSync(path.join(WWW, 'index.html'))){
+    console.error('مجلد www فاضي — شغّل `npm run build` أول.');
+    process.exit(1);
+  }
+  const server = await startServer();
+  const browser = await chromium.launch(LAUNCH);
   const page = await browser.newPage();
 
   const pageRequests = [];

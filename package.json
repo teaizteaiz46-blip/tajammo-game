@@ -21,11 +21,14 @@
   },
   "homepage": "https://github.com/teaizteaiz46-blip/tajammo-game#readme",
   "dependencies": {
+    "@capacitor-community/admob": "^8.1.0",
     "@capacitor/android": "^8.5.1",
     "@capacitor/app": "^8.1.1",
     "@capacitor/cli": "^8.5.1",
     "@capacitor/core": "^8.5.1",
-    "@capacitor/ios": "^8.5.1",
-    "@capacitor-community/admob": "^8.1.0"
+    "@capacitor/ios": "^8.5.1"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
   }
 }

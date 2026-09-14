@@ -2,7 +2,11 @@
 <html dir="rtl" lang="ar">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- viewport-fit=cover: بدونه env(safe-area-inset-*) ترجع صفر بالآيفون
+     والشريط العلوي يندفن تحت النوتش / الجزيرة الديناميكية.
+     user-scalable=no: يمنع التكبير بالإصبعين، ويمنع iOS يكبّر الصفحة
+     تلقائياً كل ما تضغط على حقل كتابة. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
 <title>تجمّع — لعبة الفئات</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
