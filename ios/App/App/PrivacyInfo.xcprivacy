@@ -36,30 +36,17 @@
 		</dict>
 	</array>
 
-	<!-- AdMob = تتبع لأغراض الإعلان. لازم يطابق جواب App Privacy بـ App Store Connect -->
+	<!--
+	  التطبيق نفسه ما يتتبع. التتبع الإعلاني كله يصير داخل مكتبة AdMob،
+	  وهي تجيب بيان خصوصية خاص بيها يعلن تتبعها ونطاقاتها.
+	  آبل تقول صراحةً إن بيان التطبيق ما يغطي ما تجمعه مكتبات الطرف الثالث،
+	  فإعلاننا للتتبع هنا كان تكراراً لإقرار مو مالنا — وهو سبب ITMS-91064.
+	-->
 	<key>NSPrivacyTracking</key>
-	<true/>
-	<key>NSPrivacyTrackingDomains</key>
-	<array/>
+	<false/>
 
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array>
-		<dict>
-			<key>NSPrivacyCollectedDataType</key>
-			<string>NSPrivacyCollectedDataTypeDeviceID</string>
-			<key>NSPrivacyCollectedDataTypeLinked</key><false/>
-			<key>NSPrivacyCollectedDataTypeTracking</key><true/>
-			<key>NSPrivacyCollectedDataTypePurposes</key>
-			<array><string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string></array>
-		</dict>
-		<dict>
-			<key>NSPrivacyCollectedDataType</key>
-			<string>NSPrivacyCollectedDataTypeAdvertisingData</string>
-			<key>NSPrivacyCollectedDataTypeLinked</key><false/>
-			<key>NSPrivacyCollectedDataTypeTracking</key><true/>
-			<key>NSPrivacyCollectedDataTypePurposes</key>
-			<array><string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string></array>
-		</dict>
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
