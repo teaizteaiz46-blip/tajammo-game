@@ -529,6 +529,107 @@ const CANNED_BANK = (() => {
     if (!decodeURIComponent(wa).includes('K7M2QP')) throw new Error('الكود مو داخل رسالة الواتساب');
   });
 
+  console.log('\nمساعدة الخيارات');
+  await step('الجواب رقم ← كل الخيارات أرقام بنفس الوحدة', async () => {
+    const opts = await page.evaluate(() => {
+      const topic = { bankKey: 'ت', questions: [] };
+      const keep = CATEGORY_DATA;
+      CATEGORY_DATA = { 'ت': { 100:[{answer:'٨ أرجل'},{answer:'الأسد'},{answer:'فيبي'},
+                                    {answer:'الحوت الأزرق'},{answer:'الزرافة'}], 200:[],400:[],600:[] } };
+      const out = buildChoices(topic, { answer: '٨ أرجل' });
+      CATEGORY_DATA = keep;
+      return out;
+    });
+    if (!opts || opts.length !== 3) throw new Error('ما رجّع ٣ خيارات: ' + JSON.stringify(opts));
+    if (!opts.includes('٨ أرجل')) throw new Error('الجواب الصحيح مو ضمن الخيارات');
+    const noDigits = opts.filter(o => !/[٠-٩0-9]/.test(o));
+    if (noDigits.length) throw new Error('خيار بلا رقم وية جواب رقمي: ' + noDigits.join(','));
+  });
+
+  await step('الجواب اسم ← ماكو خيار رقمي ينفضح', async () => {
+    const opts = await page.evaluate(() => {
+      const topic = { bankKey: 'ت', questions: [] };
+      const keep = CATEGORY_DATA;
+      CATEGORY_DATA = { 'ت': { 100:[{answer:'فيبي (Phoebe)'},{answer:'مونيكا'},{answer:'روس'},
+                                    {answer:'١٠ مواسم'},{answer:'٦ أصدقاء'}], 200:[],400:[],600:[] } };
+      const out = buildChoices(topic, { answer: 'فيبي (Phoebe)' });
+      CATEGORY_DATA = keep;
+      return out;
+    });
+    if (!opts || opts.length !== 3) throw new Error('ما رجّع ٣ خيارات');
+    if (!opts.includes('فيبي')) throw new Error('الجواب مو ضمن الخيارات: ' + opts.join('/'));
+    const withDigits = opts.filter(o => /[٠-٩0-9]/.test(o));
+    if (withDigits.length) throw new Error('خيار رقمي وية جواب اسم: ' + withDigits.join(','));
+  });
+
+  await step('كل الخيارات بنفس الصيغة — ماكو (English) بوحدة بس', async () => {
+    const opts = await page.evaluate(() => {
+      const topic = { bankKey: 'ت', questions: [] };
+      const keep = CATEGORY_DATA;
+      CATEGORY_DATA = { 'ت': { 100:[{answer:'اليابانية (Japanese)'},{answer:'اليونانية (Greek)'},
+                                    {answer:'العربية'},{answer:'الفرنسية'}], 200:[],400:[],600:[] } };
+      const out = buildChoices(topic, { answer: 'اليابانية (Japanese)' });
+      CATEGORY_DATA = keep;
+      return out;
+    });
+    if (opts.some(o => o.includes('('))) throw new Error('بقى قوس إنكليزي يفضح الخيار: ' + opts.join('/'));
+  });
+
+  console.log('\nالتراجع عن اختيار الفئة');
+  await step('زر التراجع يرجّع الفئة والدور', async () => {
+    const r = await page.evaluate(() => {
+      state.screen = 'select';
+      state.selectedTopicIds = [];
+      state.turn = 0;
+      state.pool = [
+        { id: 1, name: 'أ', taken: false, questions: [] },
+        { id: 2, name: 'ب', taken: false, questions: [] },
+        { id: 3, name: 'ج', taken: false, questions: [] }
+      ];
+      render();
+      document.querySelectorAll('.pick-card')[0].click();   // الفريق الأول يختار «أ»
+      const afterPick = { turn: state.turn, picked: state.selectedTopicIds.slice(), taken: state.pool[0].taken };
+      const btn = document.getElementById('undo-pick');
+      const hasBtn = !!btn;
+      if (btn) btn.click();
+      return { afterPick, hasBtn, turn: state.turn, picked: state.selectedTopicIds.slice(), taken: state.pool[0].taken };
+    });
+    if (r.afterPick.turn !== 1 || r.afterPick.picked.length !== 1) throw new Error('الاختيار نفسه ما اشتغل');
+    if (!r.hasBtn) throw new Error('زر التراجع ما ظهر بعد أول اختيار');
+    if (r.picked.length !== 0) throw new Error('الفئة ظلت مختارة بعد التراجع');
+    if (r.taken !== false) throw new Error('علامة taken ما انشالت');
+    if (r.turn !== 0) throw new Error('الدور ما رجع للفريق الأول: ' + r.turn);
+  });
+
+  await step('ماكو زر تراجع قبل أي اختيار', async () => {
+    const has = await page.evaluate(() => {
+      state.screen = 'select';
+      state.selectedTopicIds = [];
+      state.turn = 0;
+      state.pool = [{ id: 1, name: 'أ', taken: false, questions: [] }];
+      render();
+      return !!document.getElementById('undo-pick');
+    });
+    if (has) throw new Error('زر التراجع ظهر وماكو شي ينتراجع عنه');
+  });
+
+  await step('التراجع متاح حتى بعد اكتمال الفئات الست', async () => {
+    const r = await page.evaluate(() => {
+      state.screen = 'select';
+      state.pool = [1,2,3,4,5,6].map(i => ({ id: i, name: 'ف'+i, taken: true, takenBy: (i+1)%2, questions: [] }));
+      state.selectedTopicIds = [1,2,3,4,5,6];
+      state.turn = 0;
+      render();
+      const hasStart = !!document.getElementById('start-board');
+      const btn = document.getElementById('undo-pick');
+      if (btn) btn.click();
+      return { hasStart, hadUndo: !!btn, picked: state.selectedTopicIds.length, taken6: state.pool[5].taken };
+    });
+    if (!r.hasStart) throw new Error('زر البدء اختفى');
+    if (!r.hadUndo) throw new Error('ماكو زر تراجع بشاشة الاكتمال');
+    if (r.picked !== 5 || r.taken6 !== false) throw new Error('التراجع ما شال الفئة السادسة');
+  });
+
   console.log('\nأخطاء جافاسكربت غير متوقعة');
   if (errors.length) { console.log('  ✗ ' + errors.join('\n  ')); fail++; }
   else console.log('  ✓ ماكو أي خطأ بالصفحة');

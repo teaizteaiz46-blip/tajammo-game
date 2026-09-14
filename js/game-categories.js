@@ -178,29 +178,54 @@ function renderTeams(){
 }
 
 /* ============================ SELECT TOPICS ============================ */
+
+/* يرجّع آخر فئة انختارت — غلطة ضغط وحدة ما لازم تخرب الجولة كلها.
+   الأسئلة تنوزّع قبل هاي الشاشة، فالتراجع بس يشيل علامة الاختيار
+   ويرجّع الدور للفريق اللي اختار. */
+function undoLastPick(){
+  if(!state.selectedTopicIds.length) return;
+  const id = state.selectedTopicIds.pop();
+  const t = state.pool.find(x => x.id === id);
+  if(t){ t.taken = false; delete t.takenBy; }
+  state.turn = state.turn === 0 ? 1 : 0;
+  render();
+}
+
 function renderSelect(){
   const wrap = el(`<div></div>`);
   const currentTeam = state.teams[state.turn];
   const pickedCount = state.selectedTopicIds.length;
 
   if(pickedCount >= 6){
+    const lastTopic = state.pool.find(x => x.id === state.selectedTopicIds[5]);
     const done = el(`<div class="panel" style="text-align:center;">
       <div class="section-title">تم اختيار كل الفئات ✓</div>
       <div class="section-sub">جاهزين نبدأ اللعب</div>
       <div class="btn-row" style="justify-content:center;">
         <button class="btn btn-gold" id="start-board">ابدأ اللعبة</button>
+        <button class="btn btn-ghost" id="undo-pick">↶ تراجع عن «${escapeAttr(lastTopic ? lastTopic.name : 'آخر فئة')}»</button>
       </div>
     </div>`);
     done.querySelector('#start-board').addEventListener('click', ()=>{
       showBreakAd('start');
       goto('board');
     });
+    done.querySelector('#undo-pick').addEventListener('click', undoLastPick);
     wrap.appendChild(done);
     return wrap;
   }
 
   const banner = el(`<div class="turn-banner">دور <b>${currentTeam.name}</b> — يختار الفئة رقم ${pickedCount+1} من ٦ (${(pickedCount%3)+1} من ٣ لهذا الفريق)</div>`);
   wrap.appendChild(banner);
+
+  if(pickedCount > 0){
+    const lastTopic = state.pool.find(x => x.id === state.selectedTopicIds[pickedCount-1]);
+    const undoRow = el(`<div class="btn-row" style="justify-content:center; margin-bottom:12px;">
+      <button class="btn btn-ghost btn-sm" id="undo-pick">↶ تراجع عن «${escapeAttr(lastTopic ? lastTopic.name : 'آخر فئة')}»</button>
+    </div>`);
+    undoRow.querySelector('#undo-pick').addEventListener('click', undoLastPick);
+    wrap.appendChild(undoRow);
+  }
 
   const grid = el(`<div class="pick-grid"></div>`);
   state.pool.forEach(topic=>{
@@ -273,6 +298,94 @@ function renderScoreboard(){
 }
 
 /* ============================ QUESTION OVERLAY ============================ */
+
+/* ─────────────────────────────────────────────────────────────────────
+   مساعدة «الخيارات»
+
+   قبل، كانت تسحب جوابين عشوائي من الموضوع كله. فيصير الجواب «١»
+   والخيارات «١ / فيبي / مونيكا» — أي واحد يعرف إن الجواب رقم.
+   هسه الخيارات لازم تكون من نفس شكل الجواب: رقم وية أرقام قريبة،
+   واسم وية أسماء بنفس الطول تقريباً.
+   ───────────────────────────────────────────────────────────────────── */
+const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+
+/* نشيل الشرح الإنكليزي والتفسير بعد الشرطة — حتى كل الخيارات تطلع
+   بنفس الشكل، وإلا صيغة الجواب بروحها تفضحه */
+function answerCore(a){
+  return String(a || '').replace(/\([^)]*\)/g, ' ')
+    .split(/\s[—–:]\s/)[0]
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function firstNumber(s){
+  const m = String(s).match(/[0-9٠-٩]+/);
+  if(!m) return null;
+  const west = m[0].replace(/[٠-٩]/g, d => String(AR_DIGITS.indexOf(d)));
+  const value = parseInt(west, 10);
+  if(!isFinite(value)) return null;
+  return { raw: m[0], value: value, index: m.index, arabic: /[٠-٩]/.test(m[0]) };
+}
+
+/* «٨ أرجل» → «٦ أرجل» و«١٠ أرجل» — نبدّل الرقم ونخلي الوحدة مثل ما هي */
+function numericDecoys(core, n){
+  const p = firstNumber(core);
+  if(!p) return [];
+  const v = p.value;
+  const step = v <= 10 ? 1 : (v <= 100 ? Math.max(2, Math.round(v * 0.1)) : Math.round(v * 0.15));
+  const cands = [];
+  for(let k = 1; k <= 4; k++){
+    [v - k * step, v + k * step].forEach(x=>{
+      if(x > 0 && x !== v && cands.indexOf(x) === -1) cands.push(x);
+    });
+  }
+  return shuffled(cands).slice(0, n).map(x=>{
+    const txt = p.arabic ? String(x).replace(/[0-9]/g, d => AR_DIGITS[+d]) : String(x);
+    return core.slice(0, p.index) + txt + core.slice(p.index + p.raw.length);
+  });
+}
+
+/* خيارات نصية: من نفس الموضوع، بنفس نوع الحروف وقريبة بعدد الكلمات والطول */
+function textDecoys(core, pool, n){
+  const isLatin = s => /^[\x20-\x7E]+$/.test(s);
+  const words   = s => s.split(/\s+/).length;
+  const tLatin = isLatin(core), tWords = words(core), tLen = core.length;
+  return pool
+    .filter(c => c && c !== core && c.indexOf(core) === -1 && core.indexOf(c) === -1)
+    .map(c => ({
+      c: c,
+      s: (isLatin(c) === tLatin ? 0 : 40)
+       + (/[0-9٠-٩]/.test(c) ? 25 : 0)          // ما ندس رقم بين أسماء
+       + Math.abs(words(c) - tWords) * 6
+       + Math.abs(c.length - tLen) * 0.6
+       + Math.random() * 4                      // حتى ما تتكرر نفس الخيارات
+    }))
+    .sort((a, b) => a.s - b.s)
+    .slice(0, n)
+    .map(x => x.c);
+}
+
+function buildChoices(topic, q){
+  const core = answerCore(q.answer);
+  if(!core) return null;
+
+  let pool;
+  if(topic.bankKey){
+    const bank = CATEGORY_DATA[topic.bankKey] || {};
+    pool = [].concat(bank[100]||[], bank[200]||[], bank[400]||[], bank[600]||[])
+             .map(x => answerCore(x.answer));
+  } else {
+    pool = (topic.questions || []).map(x => answerCore(x.answer));
+  }
+
+  let decoys = /[0-9٠-٩]/.test(core) ? numericDecoys(core, 2) : [];
+  if(decoys.length < 2){
+    decoys = decoys.concat(textDecoys(core, pool, 2 - decoys.length));
+  }
+  if(decoys.length < 2) return null;     // ما نحرق مساعدة بخيارات ناقصة
+  return shuffled([core].concat(decoys));
+}
+
 function renderHelpSection(topic, q){
   const ti = topic.takenBy;
   if(ti !== 0 && ti !== 1) return '';
@@ -283,8 +396,8 @@ function renderHelpSection(topic, q){
     <div class="help-btns" style="justify-content:center;">
       <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="letter" ${disabled?'disabled':''}>أول حرف</button>
       <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="blanks" ${disabled?'disabled':''}>عدد الأحرف</button>
-      ${topic.bankKey ? `
       <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="choices" ${disabled?'disabled':''}>خيارات</button>
+      ${topic.bankKey ? `
       <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="swap" ${disabled?'disabled':''}>تبديل السؤال</button>
       ` : ''}
     </div>
@@ -317,13 +430,9 @@ function wireHelpButtons(modal, topic, q){
         hint = 'أول حرف: ' + (q.answer.trim().charAt(0) || '؟');
       } else if(type==='blanks'){
         hint = 'عدد الأحرف: ' + q.answer.replace(/\s/g,'').length;
-      } else if(type==='choices' && topic.bankKey){
-                const bank = CATEGORY_DATA[topic.bankKey] || {};
-        const allAnswers = [].concat(bank[100]||[], bank[200]||[], bank[400]||[], bank[600]||[])
-          .map(x=>x.answer).filter(a=> a && a !== q.answer);
-        const decoys = shuffled(allAnswers).slice(0,2);
-        const options = shuffled([q.answer, ...decoys]);
-        hint = 'الخيارات: ' + options.join(' / ');
+      } else if(type==='choices'){
+        const options = buildChoices(topic, q);
+        if(options) hint = 'الخيارات: ' + options.join('  /  ');
       }
       if(hint){
         team.helps--;
