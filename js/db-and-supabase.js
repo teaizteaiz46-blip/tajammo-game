@@ -106,7 +106,7 @@ async function loadOrCreateProfile(authUser){
     const { data: inserted, error: insertErr } = await sb.from('tajammo_profiles').insert(fresh).select().single();
     if(insertErr){
       console.warn('تعذّر إنشاء الملف الشخصي', insertErr);
-      return { uid: authUser.id, name: fresh.name, photo: '', gamesPlayed: 0, totalPoints: 0, isSubscribed: false, termsAcceptedAt: null };
+      return { uid: authUser.id, name: fresh.name, photo: '', gamesPlayed: 0, totalPoints: 0, isSubscribed: false, coins: 0, termsAcceptedAt: null };
     }
     data = inserted;
   }
@@ -117,21 +117,26 @@ async function loadOrCreateProfile(authUser){
     gamesPlayed: data.games_played,
     totalPoints: data.total_points,
     isSubscribed: !!data.is_subscribed,
+    coins: data.coins || 0,
     termsAcceptedAt: data.terms_accepted_at || null
   };
 }
 
+/* الإحصائيات والكوينات تنحسب بالسيرفر مو هنا.
+   عمود coins ممنوع تعديله من المتصفح — لو كان مسموح، أي لاعب يفتح
+   أدوات المطور ويحط لنفسه رصيد بلا حدود. الدالة تحدد كم يستحق،
+   وتفرض سقف للّعبة الوحدة وسقف لليوم. */
 async function recordGameResult(totalPoints){
-  if(!sb || !state.user) return;
-  const newGamesPlayed = (state.user.gamesPlayed||0) + 1;
-  const newTotalPoints = (state.user.totalPoints||0) + totalPoints;
+  if(!sb || !state.user) return null;
   try{
-    await sb.from('tajammo_profiles').update({
-      games_played: newGamesPlayed,
-      total_points: newTotalPoints,
-      last_played_at: new Date().toISOString()
-    }).eq('id', state.user.uid);
-    state.user.gamesPlayed = newGamesPlayed;
-    state.user.totalPoints = newTotalPoints;
-  } catch(e){ console.warn('تعذّر حفظ الإحصائيات', e); }
+    const { data, error } = await sb.rpc('award_game_coins', { p_total_points: totalPoints });
+    if(error) throw error;
+    state.user.gamesPlayed = (state.user.gamesPlayed||0) + 1;
+    state.user.totalPoints = (state.user.totalPoints||0) + totalPoints;
+    if(data && typeof data.coins === 'number') state.user.coins = data.coins;
+    return data;                      // { earned, coins, reason }
+  } catch(e){
+    console.warn('تعذّر حفظ الإحصائيات', e);
+    return null;
+  }
 }

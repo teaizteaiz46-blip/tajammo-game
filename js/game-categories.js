@@ -168,6 +168,7 @@ function renderTeams(){
     state.teams[0].helps = 3;
     state.teams[1].helps = 3;
     state.statsRecordedForThisGame = false;
+    resetAdGates();
     goto('select');
   });
   actions.querySelector('#back-editor').addEventListener('click', ()=> goto('editor'));
@@ -190,7 +191,10 @@ function renderSelect(){
         <button class="btn btn-gold" id="start-board">ابدأ اللعبة</button>
       </div>
     </div>`);
-    done.querySelector('#start-board').addEventListener('click', ()=> goto('board'));
+    done.querySelector('#start-board').addEventListener('click', ()=>{
+      showBreakAd('start');
+      goto('board');
+    });
     wrap.appendChild(done);
     return wrap;
   }
@@ -283,7 +287,6 @@ function renderHelpSection(topic, q){
       <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="choices" ${disabled?'disabled':''}>خيارات</button>
       <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="swap" ${disabled?'disabled':''}>تبديل السؤال</button>
       ` : ''}
-      ${isNativeApp() ? `<button class="btn btn-gold btn-sm help-btn" data-team="${ti}" data-type="ad">🎥 شاهد إعلان (+١ مساعدة)</button>` : ''}
     </div>
     ${state.helpHints[ti] ? `<div class="help-result">${escapeAttr(state.helpHints[ti])}</div>` : ''}
   </div>`;
@@ -295,16 +298,6 @@ function wireHelpButtons(modal, topic, q){
       const ti = parseInt(btn.dataset.team,10);
       const type = btn.dataset.type;
       const team = state.teams[ti];
-
-      if(type==='ad'){
-        btn.disabled = true;
-        btn.textContent = '...جاري تحميل الإعلان';
-        showRewardedAd((earned)=>{
-          if(earned){ team.helps++; }
-          render();
-        });
-        return;
-      }
 
       if(team.helps<=0) return;
 
@@ -617,6 +610,12 @@ function awardPoints(teamIdx, topic, q){
   q.usedBy = teamIdx;
   state.activeCell = null;
   stopTimer();
+
+  // نص اللوح: ٦ مواضيع × ٦ أسئلة = ٣٦. الإعلان يطلع بالفاصل الطبيعي
+  // بين السؤال والسؤال، مو وسط دور ماشي.
+  const total = (state.pool||[]).filter(t=>t.taken).length * 6;
+  if(total && usedQuestionCount() === Math.floor(total/2)) showBreakAd('mid');
+
   render();
 }
 
@@ -641,6 +640,22 @@ function stopTimer(){
 }
 
 /* ============================ END ============================ */
+/* سطر الكوينات بشاشة النتيجة — يطلع بس للمسجّلين */
+function renderRewardLine(){
+  if(!state.user) {
+    return `<div class="reward-line muted">سجّل دخول حتى تجمع كوينات من كل لعبة وتنشر مواضيعك.</div>`;
+  }
+  const r = state.lastReward;
+  if(!r) return `<div class="reward-line muted">...جاري حساب الكوينات</div>`;
+  if(r.earned > 0){
+    return `<div class="reward-line"><b>+${r.earned} 🪙</b> — رصيدك ${r.coins} كوين</div>`;
+  }
+  if(r.reason === 'DAILY_CAP'){
+    return `<div class="reward-line muted">وصلت سقف كوينات اليوم — رصيدك ${r.coins} 🪙</div>`;
+  }
+  return `<div class="reward-line muted">رصيدك ${r.coins} 🪙</div>`;
+}
+
 function renderEnd(){
   const [a,b] = state.teams;
   let headline, sub;
@@ -653,9 +668,14 @@ function renderEnd(){
     sub = `بفارق ${Math.abs(a.score-b.score)} نقطة`;
   }
 
+  showBreakAd('end');
+
   if(state.user && !state.statsRecordedForThisGame){
     state.statsRecordedForThisGame = true;
-    recordGameResult(a.score + b.score);
+    state.lastReward = null;
+    recordGameResult(a.score + b.score).then(res=>{
+      if(res){ state.lastReward = res; render(); }
+    });
   }
 
   const wrap = el(`<div class="end-wrap">
@@ -666,6 +686,7 @@ function renderEnd(){
       <div class="score-card t0"><span class="name">${escapeAttr(a.name)}</span><span class="pts">${a.score}</span></div>
       <div class="score-card t1"><span class="name">${escapeAttr(b.name)}</span><span class="pts">${b.score}</span></div>
     </div>
+    ${renderRewardLine()}
     <div class="btn-row" style="justify-content:center;">
       <button class="btn btn-gold" id="new-round">جولة جديدة — أسئلة جديدة</button>
       <button class="btn btn-ghost" id="replay">إعادة نفس الأسئلة</button>
@@ -682,6 +703,7 @@ function renderEnd(){
     state.teams[0].helps = 3;
     state.teams[1].helps = 3;
     state.statsRecordedForThisGame = false;
+    resetAdGates();
   }
 
   wrap.querySelector('#new-round').addEventListener('click', ()=>{

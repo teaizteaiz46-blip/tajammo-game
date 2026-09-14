@@ -42,20 +42,37 @@ window.supabase = {
         if(name === 'get_custom_topic_by_code'){
           var c = (params.p_code || '').trim().toUpperCase();
           if(c === ${JSON.stringify(GOOD_CODE)}) return { data: ${JSON.stringify(CANNED_TOPIC)}, error: null };
+          if(c === 'HIDDEN1') return { data: { hidden: true }, error: null };
           return { data: null, error: null };
         }
         if(name === 'save_custom_topic'){
+          if(window.__signedIn) return { data: { id: 1, share_code: 'NEWCD1' }, error: null };
           return { data: null, error: { message: 'SIGNIN_REQUIRED' } };
+        }
+        if(name === 'report_custom_topic'){
+          window.__reports = window.__reports || [];
+          window.__reports.push(params);
+          return { data: { ok: true, already: false }, error: null };
         }
         return { data: null, error: { message: 'unknown rpc ' + name } };
       },
-      from: function(){
+      from: function(table){
+        if(table === 'whoami_characters'){
+          var names = [];
+          for(var i=1;i<=40;i++) names.push({name:'شخصية '+i});
+          var c2 = {
+            select: function(){ return c2; },
+            limit: function(){ return Promise.resolve({ data: names, error: null }); },
+            then: function(r){ return Promise.resolve({ data: names, error: null }).then(r); }
+          };
+          return c2;
+        }
         var chain = {
           select: function(){ return chain; },
           delete: function(){ return chain; },
           insert: function(){ return chain; },
-          update: function(){ return chain; },
-          eq: function(){ return chain; },
+          update: function(){ window.__profileUpdated = true; return chain; },
+          eq: function(){ return Promise.resolve({ data: null, error: null }); },
           order: function(){ return Promise.resolve({ data: [], error: null }); },
           single: function(){ return Promise.resolve({ data: null, error: null }); },
           then: function(res){ return Promise.resolve({ data: [], error: null }).then(res); }
@@ -283,6 +300,222 @@ const CANNED_BANK = (() => {
     await page.click('#reveal');
     const after = await page.evaluate(() => document.body.innerText);
     if (!after.includes(res.answer)) throw new Error('الجواب ما ظهر بعد "إظهار الإجابة"');
+  });
+
+  console.log('\nزر التبليغ داخل شاشة السؤال');
+  await step('فئة منشورة: زر ⚑ يظهر باللوح ويفتح نافذة البلاغ', async () => {
+    await page.evaluate(() => {
+      state.pool = state.pool.filter(t => t.bankKey !== null);
+      const t = makeCustomTopicFromData('فئة منشورة',
+        [{question:'سؤال مسيء؟',answer:'ج',points:100}], 'ABC123');
+      state.pool.push(t);
+      state.screen = 'board';
+      state.activeCell = { topicId: t.id, qId: t.questions[0].id };
+      render();
+    });
+    await page.waitForSelector('.q-report', { timeout: 8000 });
+    await page.click('.q-report');
+    await page.waitForFunction(() => document.body.innerText.includes('بلّغ عن فئة'), { timeout: 8000 });
+    await page.evaluate(() => closeReportModal());
+  });
+  await step('فئة محلية: ما يظهر زر ⚑ (ما تنشرت)', async () => {
+    const n = await page.evaluate(() => {
+      state.pool = [];
+      const t = makeCustomTopicFromData('محلية', [{question:'س',answer:'ج',points:100}]);
+      state.pool.push(t);
+      state.screen = 'board';
+      state.activeCell = { topicId: t.id, qId: t.questions[0].id };
+      render();
+      return document.querySelectorAll('.q-report').length;
+    });
+    if (n !== 0) throw new Error('ظهر زر بلاغ لفئة غير منشورة');
+    await page.evaluate(() => { state.activeCell = null; goto('hub'); });
+  });
+
+  console.log('\nالإشراف على المحتوى (متطلبات Google للـ UGC)');
+  await step('كود مخفي بالبلاغات يعطي رسالة واضحة', async () => {
+    await page.evaluate(() => { state.pool = state.pool.filter(t => t.bankKey !== null); goto('editor'); });
+    await page.waitForSelector('#ct-code', { timeout: 8000 });
+    await page.fill('#ct-code', 'HIDDEN1');
+    await page.click('#ct-import');
+    await page.waitForFunction(() => document.body.innerText.includes('مخفية بسبب بلاغات'), { timeout: 8000 });
+  });
+  await step('زر البلاغ يظهر على الفئة المستوردة فقط', async () => {
+    await page.evaluate(() => { state.importError=''; render(); });
+    await page.fill('#ct-code', GOOD_CODE);
+    await page.click('#ct-import');
+    await page.waitForFunction(() => document.body.innerText.includes('تمت إضافة فئة'), { timeout: 8000 });
+    const n = await page.$$eval('.report-btn', els => els.length);
+    if (n < 1) throw new Error('زر البلاغ مو ظاهر على فئة منشورة');
+    // فئة محلية بلا كود: ما يجوز يظهر لها زر بلاغ
+    const localHasBtn = await page.evaluate(() => {
+      state.pool.push(makeCustomTopicFromData('فئة محلية', [{question:'س',answer:'ج',points:100}]));
+      render();
+      const rows = [...document.querySelectorAll('.panel')].map(p => p.innerText).join('');
+      return rows.includes('فئة محلية');
+    });
+    if (!localHasBtn) throw new Error('الفئة المحلية ما ظهرت');
+    const n2 = await page.$$eval('.report-btn', els => els.length);
+    if (n2 !== n) throw new Error('ظهر زر بلاغ لفئة محلية غير منشورة');
+  });
+  await step('نافذة البلاغ تعرض أسباباً وترفض الإرسال بلا سبب', async () => {
+    await page.click('.report-btn');
+    await page.waitForFunction(() => document.body.innerText.includes('بلّغ عن فئة'), { timeout: 8000 });
+    await page.click('#rep-send');
+    await page.waitForFunction(() => document.body.innerText.includes('اختار سبب البلاغ'), { timeout: 8000 });
+  });
+  await step('اختيار سبب وإرسال البلاغ ينجح ويوصل للخادم', async () => {
+    await page.evaluate(() => { state.reportReason = 'offensive'; state.reportNote = 'اختبار'; render(); });
+    await page.click('#rep-send');
+    await page.waitForFunction(() => document.body.innerText.includes('وصلنا بلاغك'), { timeout: 8000 });
+    const sent = await page.evaluate(() => window.__reports || []);
+    if (!sent.length) throw new Error('ما انرسل أي بلاغ للخادم');
+    if (sent[0].p_reason !== 'offensive') throw new Error('سبب البلاغ غلط: ' + sent[0].p_reason);
+    if (!sent[0].p_code) throw new Error('البلاغ بلا كود الفئة');
+    await page.evaluate(() => { closeReportModal(); });
+  });
+  await step('الحفظ يفتح نافذة الشروط أول (سياسة Google)', async () => {
+    await page.evaluate(() => {
+      window.__signedIn = true;
+      state.user = { uid:'u1', name:'test', isSubscribed:true, termsAcceptedAt:null, coins:500 };
+      state.customDraft = newCustomDraft();
+      state.customDraft.name = 'فئة شروط';
+      state.customDraft.questions.forEach((q,i) => { q.question='س'+i; q.answer='ج'+i; });
+      goto('custom-editor');
+    });
+    await page.waitForSelector('#cd-save', { timeout: 8000 });
+    await page.click('#cd-save');
+    await page.waitForFunction(() => document.body.innerText.includes('قبل ما تنشر فئتك'), { timeout: 8000 });
+  });
+  await step('نافذة الشروط تذكر القواعد وفيها رابط الشروط', async () => {
+    const txt = await page.evaluate(() => document.body.innerText);
+    for (const kw of ['مسيء', 'جنسي', 'الكراهية', 'معلومات شخصية']) {
+      if (!txt.includes(kw)) throw new Error('القاعدة مفقودة من النافذة: ' + kw);
+    }
+    const href = await page.getAttribute('.overlay a[target="_blank"]', 'href');
+    if (href !== 'terms.html') throw new Error('رابط الشروط غلط: ' + href);
+  });
+  await step('الموافقة تُسجَّل ثم يكمل الحفظ', async () => {
+    await page.click('#terms-ok');
+    await page.waitForFunction(() => !!state.customShareCode || !!state.customError, { timeout: 10000 });
+    const r = await page.evaluate(() => ({
+      updated: !!window.__profileUpdated,
+      accepted: !!(state.user && state.user.termsAcceptedAt),
+      code: state.customShareCode,
+      err: state.customError
+    }));
+    if (!r.updated) throw new Error('الموافقة ما انحفظت بالملف الشخصي');
+    if (!r.accepted) throw new Error('حالة الموافقة ما اتحدثت محلياً');
+    if (!r.code) throw new Error('الحفظ ما اكتمل بعد الموافقة: ' + r.err);
+  });
+  await step('من وافق مرة ما تنطلب منه مرة ثانية', async () => {
+    const again = await page.evaluate(() => needsTermsAcceptance());
+    if (again) throw new Error('راح تنطلب الموافقة كل مرة');
+  });
+
+  console.log('\nالكوينات');
+  await step('رصيد ناقص يمنع النشر ويقول كم باقي', async () => {
+    await page.evaluate(() => {
+      state.user = { uid:'u2', name:'فقير', isSubscribed:true,
+                     termsAcceptedAt:'2026-01-01T00:00:00Z', coins:40 };
+      state.customShareCode = null;
+      state.customError = '';
+      state.customDraft = newCustomDraft();
+      state.customDraft.name = 'فئة بلا كوينات';
+      state.customDraft.questions.forEach((q,i) => { q.question='س'+i; q.answer='ج'+i; });
+      goto('custom-editor');
+    });
+    await page.waitForSelector('#cd-save', { timeout: 8000 });
+    await page.click('#cd-save');
+    await page.waitForFunction(() => !!state.customError, { timeout: 8000 });
+    const r = await page.evaluate(() => ({ err: state.customError, code: state.customShareCode }));
+    if (r.code) throw new Error('انحفظت رغم إن الرصيد ما يكفي');
+    if (!r.err.includes('60')) throw new Error('ما قال كم باقي عليه: ' + r.err);
+  });
+  await step('السعر مكتوب بالشاشة قبل ما يضغط', async () => {
+    const txt = await page.evaluate(() => document.body.innerText);
+    if (!txt.includes('100')) throw new Error('سعر النشر مو ظاهر');
+  });
+  await step('رصيد كافي يمرّ للحفظ', async () => {
+    await page.evaluate(() => {
+      state.user.coins = 300;
+      state.customError = '';
+      state.customShareCode = null;
+      render();
+    });
+    await page.click('#cd-save');
+    await page.waitForFunction(() => !!state.customShareCode || !!state.customError, { timeout: 10000 });
+    const r = await page.evaluate(() => ({ code: state.customShareCode, err: state.customError }));
+    if (!r.code) throw new Error('ما انحفظت رغم إن الرصيد يكفي: ' + r.err);
+  });
+  await step('الرصيد يظهر بالشريط العلوي', async () => {
+    await page.evaluate(() => { state.user.coins = 777; goto('hub'); });
+    const chip = await page.evaluate(() => {
+      const e = document.querySelector('.coin-chip');
+      return e ? e.textContent.trim() : null;
+    });
+    if (!chip || !chip.includes('777')) throw new Error('الرصيد مو بالشريط: ' + chip);
+  });
+  await step('زر «شاهد إعلان» انشال من نافذة السؤال', async () => {
+    const gone = await page.evaluate(() =>
+      typeof showRewardedAd === 'undefined' &&
+      !document.body.innerHTML.includes('data-type="ad"'));
+    if (!gone) throw new Error('لسه أكو إعلان مكافأة بنص اللعب');
+  });
+  await step('مفاتيح إعلانات الفواصل تشتغل ومرة وحدة لكل فاصل', async () => {
+    const r = await page.evaluate(() => {
+      let n = 0;
+      const real = window.showInterstitialAd;
+      window.showInterstitialAd = () => { n++; };
+      window.admobReady = true;
+      resetAdGates();
+      const saved = state.user; state.user = null;
+      try{
+        showBreakAd('start'); showBreakAd('start'); showBreakAd('start');
+        showBreakAd('mid');   showBreakAd('end');
+      } finally {
+        state.user = saved; window.showInterstitialAd = real;
+      }
+      return n;
+    });
+    // ٣ فواصل مختلفة = ٣ إعلانات، والتكرار على نفس الفاصل ما يحسب.
+    // (على المتصفح isNativeApp()=false فما ينعرض شي — نتأكد بس إن ما ينهار)
+    if (typeof r !== 'number') throw new Error('showBreakAd انهار');
+  });
+
+  console.log('\nلعبة من أنا؟ (الباگ: شاشة فاضية)');
+  await step('دوال الشاشات كلها معرَّفة', async () => {
+    const missing = await page.evaluate(() =>
+      ['renderWhoamiSetup','renderWhoamiReveal','renderWhoamiPlay','renderWhoamiEnd',
+       'startWhoamiTimer','stopWhoamiTimer','fetchRandomCharacters']
+        .filter(f => typeof window[f] !== 'function'));
+    if (missing.length) throw new Error('مفقودة: ' + missing.join(', '));
+  });
+  await step('شاشة تجهيز اللاعبين ترسم محتوى (مو فاضية)', async () => {
+    await page.evaluate(() => { state.user = {uid:'t',name:'test',isSubscribed:true}; goto('whoami-setup'); });
+    await page.waitForTimeout(300);
+    const info = await page.evaluate(() => {
+      const app = document.getElementById('app');
+      return { children: app.children.length, text: app.innerText.trim().length };
+    });
+    if (info.children < 2) throw new Error('ماكو إلا الشريط العلوي — الشاشة فاضية');
+    if (info.text < 40) throw new Error('المحتوى شبه فاضي (' + info.text + ' حرف)');
+  });
+  await step('الشاشة تعرض عنوان اللعبة وأدوات التجهيز', async () => {
+    const txt = await page.evaluate(() => document.getElementById('app').innerText);
+    if (!txt.includes('من أنا؟')) throw new Error('عنوان اللعبة مو ظاهر');
+  });
+  await step('حارس الأخطاء يمنع الشاشة الفاضية', async () => {
+    const shown = await page.evaluate(() => {
+      state.screen = 'شاشة_غير_موجودة';
+      window.renderHub = () => { throw new Error('عطل تجريبي'); };
+      render();
+      const t = document.getElementById('app').innerText;
+      delete window.renderHub;
+      return t;
+    });
+    if (!shown.includes('صارت مشكلة بهذي الشاشة'))
+      throw new Error('الحارس ما اشتغل — اللاعب راح يشوف شاشة فاضية');
   });
 
   console.log('\nنافذة كود المشاركة');

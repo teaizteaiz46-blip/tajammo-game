@@ -72,6 +72,14 @@ async function saveCustomTopicToCloud() {
     return;
   }
 
+  if ((state.user.coins || 0) < PUBLISH_COST) {
+    const need = PUBLISH_COST - (state.user.coins || 0);
+    state.customError = 'نشر موضوع يكلف ' + PUBLISH_COST + ' كوين، ورصيدك ' +
+      (state.user.coins || 0) + '. باقي لك ' + need + ' كوين — تجمعهن باللعب.';
+    render();
+    return;
+  }
+
   state.customSaving = true;
   state.customError = '';
   render();
@@ -91,6 +99,7 @@ async function saveCustomTopicToCloud() {
 
     state.customShareCode = data.share_code;
     state.customSaving = false;
+    if (typeof data.coins === 'number') state.user.coins = data.coins;
 
     // ضيفها للّوح فوراً حتى يقدر يلعبها بنفس الجلسة
     const already = state.pool.find(
@@ -113,6 +122,14 @@ function translateCustomError(e) {
   const msg = (e && (e.message || e.error_description || e.hint)) || '';
   if (msg.includes('SIGNIN_REQUIRED')) return 'سجّل دخول أول حتى تحفظ الفئة.';
   if (msg.includes('SIX_QUESTIONS_REQUIRED')) return 'لازم ٦ أسئلة بالضبط.';
+  if (msg.includes('NOT_ENOUGH_COINS')) {
+    const m = msg.match(/NOT_ENOUGH_COINS:(\d+):(\d+)/);
+    if (m) return 'رصيدك ' + m[1] + ' كوين والنشر يكلف ' + m[2] + '. العب وجمّع الباقي.';
+    return 'كويناتك ما تكفي لنشر موضوع.';
+  }
+  if (msg.includes('TERMS_REQUIRED')) return 'لازم توافق على الشروط قبل النشر.';
+  if (msg.includes('NAME_REQUIRED')) return 'اكتب اسم الفئة.';
+  if (msg.includes('EMPTY_QUESTION')) return 'أكو سؤال أو جواب فاضي.';
   if (msg.includes('custom_topics_name_check')) return 'اسم الفئة لازم يكون بين حرف و٦٠ حرف.';
   if (msg.toLowerCase().includes('failed to fetch')) return 'ما أكو اتصال إنترنت.';
   return msg || 'صار خطأ غير متوقع.';
@@ -299,8 +316,20 @@ function renderCustomEditor() {
     </div>`));
   }
 
+  const bal = state.user ? (state.user.coins || 0) : 0;
+  const canPay = !state.user || bal >= PUBLISH_COST;
+  wrap.appendChild(el(`<div class="panel cost-note">
+    <b>نشر الموضوع يكلف ${PUBLISH_COST} 🪙</b>
+    ${state.user
+      ? (canPay
+          ? `<span class="ok"> — رصيدك ${bal}، يكفي.</span>`
+          : `<span class="warn"> — رصيدك ${bal}، باقي ${PUBLISH_COST - bal}. تجمعهن باللعب.</span>`)
+      : ` — سجّل دخول حتى تجمع كوينات.`}
+    <div class="section-sub">تكدر دائماً تستخدم الفئة بهذي الجلسة بلا كوينات ولا حساب.</div>
+  </div>`));
+
   const actions = el(`<div class="btn-row">
-    <button class="btn btn-gold" id="cd-save">${state.customSaving ? '...جاري الحفظ' : 'احفظ واطلع لي كود'}</button>
+    <button class="btn btn-gold" id="cd-save">${state.customSaving ? '...جاري الحفظ' : `انشرها (${PUBLISH_COST} 🪙)`}</button>
     <button class="btn btn-ghost" id="cd-session">استخدمها بهذي الجلسة بس</button>
     <button class="btn btn-ghost" id="cd-back">رجوع</button>
   </div>`);
@@ -463,6 +492,10 @@ function renderShareCodeOverlay() {
  */
 
 const TERMS_VERSION = '1.0';
+
+/* سعر نشر موضوع بالكوينات. لازم يطابق public.topic_publish_cost() بالقاعدة —
+   هنا للعرض بس، الخصم الحقيقي يصير بالسيرفر. */
+const PUBLISH_COST = 100;
 const TERMS_URL = 'terms.html';
 
 const REPORT_REASONS = [

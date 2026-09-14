@@ -304,3 +304,26 @@
   }
   .q-report:hover{ border-color:var(--rose-dim); color:var(--rose); }
   .q-report:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+
+  /* ---------- الكوينات ---------- */
+  .coin-chip{
+    display:inline-flex; align-items:center; gap:4px;
+    padding:3px 9px; border-radius:999px;
+    background:var(--gold-dim); border:1px solid var(--gold);
+    color:var(--gold); font-size:13px; font-weight:700;
+    white-space:nowrap;
+  }
+  .reward-line{
+    margin:14px auto 0; padding:10px 16px; max-width:360px;
+    border:1px solid var(--gold-dim); border-radius:12px;
+    background:rgba(212,168,87,0.08); color:var(--gold);
+    font-size:15px; text-align:center;
+  }
+  .reward-line.muted{
+    border-color:var(--line); background:transparent;
+    color:var(--muted); font-size:13px;
+  }
+  .cost-note{ text-align:center; font-size:15px; }
+  .cost-note .ok{ color:var(--sage); }
+  .cost-note .warn{ color:var(--gold); }
+  .cost-note .section-sub{ margin-top:6px; font-size:13px; color:var(--muted); }

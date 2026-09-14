@@ -102,9 +102,11 @@ function renderTopbar(){
   const rightGroup = bar.querySelector('.topbar-right');
   const authArea = el(`<div style="display:flex; align-items:center; gap:10px;"></div>`);
   if(state.user){
+    const coins = state.user.coins || 0;
     const box = el(`<div style="display:flex; align-items:center; gap:8px; cursor:pointer;" id="user-box">
       ${state.user.photo ? `<img src="${escapeAttr(state.user.photo)}" style="width:28px;height:28px;border-radius:50%; border:1px solid var(--gold-dim);"/>` : ''}
       <span style="font-size:13px; color:var(--muted);">${escapeAttr(state.user.name)}</span>
+      <span class="coin-chip" title="كوينات">🪙 ${coins}</span>
     </div>`);
     box.addEventListener('click', ()=>{
       if(confirm('تسجيل الخروج؟')) signOutUser();

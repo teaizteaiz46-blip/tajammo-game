@@ -6,6 +6,7 @@ const state = {
   timerSeconds: 30,
   user: null,
   statsRecordedForThisGame: false,
+  lastReward: null,          // نتيجة award_game_coins لآخر لعبة
   showAuthModal: false,
   authMode: 'signin',
   authError: '',

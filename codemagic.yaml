@@ -31,3 +31,60 @@ workflows:
       email:
         recipients:
           - ameerazax@gmail.com
+
+  # ─────────────────────────────────────────────────────────────────────
+  # iOS — يبني على ماك سحابي، يوقّع أوتوماتيك، ويرفع لـ TestFlight.
+  #
+  # يحتاج مرة وحدة قبل أول تشغيل (شوف الرسالة):
+  #   ١) مفتاح App Store Connect API مضاف بـ Codemagic → Team settings →
+  #      Integrations → App Store Connect، باسم «tajammo_asc».
+  #   ٢) سجل التطبيق موجود بـ App Store Connect (Apps → + → New App)
+  #      بنفس الـ Bundle ID: com.azax.tajammo
+  # ─────────────────────────────────────────────────────────────────────
+  ios-release:
+    name: تجمّع - iOS
+    max_build_duration: 90
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: tajammo_asc
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.azax.tajammo
+      vars:
+        BUNDLE_ID: "com.azax.tajammo"
+        XCODE_PROJECT: "ios/App/App.xcodeproj"
+        XCODE_SCHEME: "App"
+      node: 22
+      xcode: latest
+    scripts:
+      - name: Install dependencies
+        script: npm install
+      - name: Build www from source files
+        script: npm run build
+      - name: Sync Capacitor (يضيف إضافة AdMob لحزمة SPM)
+        script: |
+          chmod +x node_modules/.bin/*
+          npx cap sync ios
+      - name: Set up signing
+        script: xcode-project use-profiles
+      - name: Set build number
+        # رقم البناء لازم يزيد بكل رفع — نربطه برقم بناء Codemagic
+        script: |
+          cd ios/App
+          agvtool new-version -all $(($BUILD_NUMBER + 1))
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      email:
+        recipients:
+          - ameerazax@gmail.com
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
