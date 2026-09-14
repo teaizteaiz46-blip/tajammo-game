@@ -2,6 +2,14 @@ workflows:
   android-release:
     name: تجمّع - Android
     max_build_duration: 60
+    # يبني لحاله مع كل push على main — قبل، كان لازم تضغط ▶ بإيدك
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
     environment:
       android_signing:
         - tajammo_keystore
@@ -44,6 +52,15 @@ workflows:
   ios-release:
     name: تجمّع - iOS
     max_build_duration: 90
+    # iOS يبني على «تاغ» بس، مو على كل push — لأن كل بناء ينرفع
+    # تلقائياً لـTestFlight، وآبل تحدد ~٢٠ رفعة باليوم (ITMS-90382).
+    # لمن تريد نسخة تجريبية:  git tag v1.4  ثم  git push origin v1.4
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
     instance_type: mac_mini_m2
     integrations:
       app_store_connect: tajammo_asc
