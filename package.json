@@ -7,7 +7,7 @@
     "build": "node build.js",
     "sync": "npm run build && npx cap sync",
     "sync:android": "npm run build && npx cap sync android",
-    "test": "node test/e2e.js"
+    "test": "node build.js && node test/e2e.js"
   },
   "repository": {
     "type": "git",

@@ -3,3 +3,4 @@ www/
 *.jks
 *.keystore
 .DS_Store
+Claude outputs/
