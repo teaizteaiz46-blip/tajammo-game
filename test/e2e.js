@@ -1042,14 +1042,32 @@ const CANNED_BANK = (() => {
     if (err) throw new Error('نص نظيف انرفض: ' + err);
   });
 
-  await step('«كسوف» و«الكسل» ما تنمسك غلط', async () => {
-    const hits = await page.evaluate(() => [
-      findBannedTerm('شنو سبب كسوف الشمس؟'),
-      findBannedTerm('الكسل صفة سيئة'),
-      findBannedTerm('كسر الرقم القياسي')
-    ]);
-    const bad = hits.filter(Boolean);
-    if (bad.length) throw new Error('إيجابيات كاذبة: ' + bad.join(', '));
+  await step('كلمات سليمة ما تنمسك غلط', async () => {
+    // كل وحدة من هذي كانت تنمسك غلط قبل ما نضبّط القائمة —
+    // وكلهن موجودات فعلاً ببنك الأسئلة
+    const clean = [
+      'شنو سبب كسوف الشمس؟',
+      'الكسل صفة سيئة',
+      'كسر الرقم القياسي',
+      'أول قمر صناعي أطلقته البشرية؟ سبوتنيك ١',
+      'طريقة العناصر المحددة بالهندسة',
+      'شنو تعني عرصة؟ ساحة بين البيوت',
+      'كمّل المثل: الجوع كافر',
+      'اقتلاع الشجرة من جذورها',
+      'fresh grape juice',
+      'دخول الطلاب للقاعة',
+      'زبدة الفستق'
+    ];
+    const hits = await page.evaluate(list => list
+      .map(t => [t, findBannedTerm(t)])
+      .filter(([, hit]) => hit), clean);
+    if (hits.length) throw new Error('إيجابيات كاذبة: ' + hits.map(([t, h]) => `«${h}» بـ"${t}"`).join(' · '));
+  });
+
+  await step('الشتائم الحقيقية لسه تنمسك', async () => {
+    const missed = await page.evaluate(() => ['يا شرمُوط', 'يلعن ابوك', 'this is fucking bad', 'كس امك']
+      .filter(t => !findBannedTerm(t)));
+    if (missed.length) throw new Error('فلتت: ' + missed.join(' · '));
   });
 
   console.log('\nحظر الناشر (App Store 1.2)');
