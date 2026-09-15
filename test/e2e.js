@@ -763,6 +763,95 @@ const CANNED_BANK = (() => {
       throw new Error('النافذة ظلت مفتوحة');
   });
 
+  console.log('\nاللوح المقسوم (منو ضد منو)');
+  const setupBoard = (owners) => page.evaluate((own) => {
+    state.customShareCode = null; state.reportTopic = null;
+    state.showAuthModal = false; state.showUpsellModal = false; state.showTermsModal = false;
+    state.pool = [];
+    const names = ['الموسيقى','الفن والرسم','الأساطير','الاختراعات','الأعلام والدول','الطبخ والأكل'];
+    names.forEach((n, i) => {
+      const t = makeCustomTopicFromData(n, [100,100,200,200,400,600].map((p, j) =>
+        ({ question:'س'+j, answer:'ج'+j, points:p })));
+      t.taken = true; t.takenBy = own[i];
+      state.pool.push(t);
+    });
+    state.selectedTopicIds = state.pool.map(t => t.id);
+    state.teams[0].score = 700; state.teams[1].score = 500;
+    state.screen = 'board'; state.activeCell = null;
+    render();
+  }, owners);
+
+  await step('اللوح ينقسم ورؤوس الأعمدة تنصبغ بلون كل فريق', async () => {
+    await setupBoard([0,1,0,1,0,1]);
+    const r = await page.evaluate(() => {
+      const b = document.querySelector('.board.split');
+      if (!b) return { split:false };
+      return {
+        split: true,
+        t0: b.querySelectorAll('.topic-head.t0').length,
+        t1: b.querySelectorAll('.topic-head.t1').length,
+        band: !!document.querySelector('.team-band'),
+        oldScore: !!document.querySelector('.scoreboard')
+      };
+    });
+    if (!r.split) throw new Error('اللوح ما انقسم');
+    if (r.t0 !== 3 || r.t1 !== 3) throw new Error('توزيع الرؤوس غلط: ' + r.t0 + '/' + r.t1);
+    if (!r.band) throw new Error('شريط «منو ضد منو» ما ظهر');
+    if (r.oldScore) throw new Error('لوحة النتيجة القديمة لسه موجودة — تكرار');
+  });
+
+  await step('الشريط يكتب كل قيمة مرة وحدة بدل ٣٦ رقم', async () => {
+    const r = await page.evaluate(() => {
+      const rails = [...document.querySelectorAll('.board.split .rail')]
+        .filter(x => !x.classList.contains('head'));
+      return {
+        vals: rails.map(x => x.textContent),
+        spans: rails.map(x => x.style.gridRow),
+        heights: rails.map(x => Math.round(x.getBoundingClientRect().height))
+      };
+    });
+    if (r.vals.join(',') !== '100,200,400,600')
+      throw new Error('قيم الشريط: ' + r.vals.join(','));
+    if (r.spans[0] !== 'span 2' || r.spans[2] !== 'span 1')
+      throw new Error('امتداد الصفوف غلط: ' + r.spans.join(' | '));
+    // ١٠٠ و٢٠٠ صفّين ← لازم أطول من ٤٠٠ و٦٠٠
+    if (!(r.heights[0] > r.heights[2]))
+      throw new Error('خانة الـ١٠٠ مو ممتدة على صفّين: ' + r.heights.join(','));
+  });
+
+  await step('الخانة المنلعبة تاخذ لون الفريق اللي كسبها', async () => {
+    const r = await page.evaluate(() => {
+      state.pool[0].questions[0].usedBy = 0;   // الفريق الأول
+      state.pool[1].questions[0].usedBy = 1;   // الفريق الثاني
+      state.pool[2].questions[0].usedBy = null; // ماكو جواب صحيح
+      render();
+      const b = document.querySelector('.board.split');
+      const none = b.querySelector('.cell.used:not(.win0):not(.win1)');
+      return {
+        w0: b.querySelectorAll('.cell.win0').length,
+        w1: b.querySelectorAll('.cell.win1').length,
+        noneVisible: none ? getComputedStyle(none).color !== 'rgba(0, 0, 0, 0)' : false,
+        dots: b.querySelectorAll('.cell .dot').length
+      };
+    });
+    if (r.w0 !== 1 || r.w1 !== 1) throw new Error('التلوين غلط: ' + r.w0 + '/' + r.w1);
+    if (!r.noneVisible) throw new Error('خانة «بدون إجابة» طالعة فاضية تماماً');
+    if (r.dots !== 33) throw new Error('عدد الخانات الفارغة: ' + r.dots + ' (المتوقع ٣٣)');
+  });
+
+  await step('توزيع غير متساوٍ يرجع للشكل القديم بلا ما ينكسر', async () => {
+    await setupBoard([0,0,0,0,1,1]);   // ٤ مقابل ٢
+    const r = await page.evaluate(() => ({
+      split: !!document.querySelector('.board.split'),
+      flat: !!document.querySelector('.board:not(.split)'),
+      score: !!document.querySelector('.scoreboard'),
+      cells: document.querySelectorAll('.cell').length
+    }));
+    if (r.split) throw new Error('انقسم مع إنه التوزيع مو ٣/٣');
+    if (!r.flat || !r.score) throw new Error('ما رجع للشكل القديم');
+    if (r.cells !== 36) throw new Error('عدد الخانات: ' + r.cells);
+  });
+
   console.log('\nأخطاء جافاسكربت غير متوقعة');
   if (errors.length) { console.log('  ✗ ' + errors.join('\n  ')); fail++; }
   else console.log('  ✓ ماكو أي خطأ بالصفحة');

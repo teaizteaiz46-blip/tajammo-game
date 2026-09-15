@@ -249,36 +249,108 @@ function renderSelect(){
 }
 
 /* ============================ BOARD ============================ */
-function renderBoard(){
-  const wrap = el(`<div></div>`);
-  wrap.appendChild(renderScoreboard());
-
-  const topics = state.selectedTopicIds.map(id => state.pool.find(t=>t.id===id));
-  const board = el(`<div class="board" style="--cols:${topics.length}"></div>`);
-
-  topics.forEach(t=>{
-    board.appendChild(el(`<div class="topic-head">${escapeAttr(t.name)}</div>`));
-  });
-
-  const maxQ = Math.max(...topics.map(t=>t.questions.length));
-  for(let r=0; r<maxQ; r++){
-    topics.forEach(t=>{
-      const q = t.questions[r];
-      if(!q){ board.appendChild(el(`<div></div>`)); return; }
-      const used = q.usedBy !== undefined;
-      const cell = el(`<div class="cell ${used?'used':''}">${used?'':q.points}</div>`);
-      if(!used){
-        cell.addEventListener('click', ()=>{
-          state.activeCell = { topicId:t.id, qId:q.id };
-          state.helpHints = {0:null, 1:null};
-          render();
-          if(state.timerEnabled && q.text.trim()) startTimer();
-        });
-      }
-      board.appendChild(cell);
+/* خانة واحدة باللوح — مشتركة بين الشكلين */
+function makeBoardCell(t, q, showPoints){
+  if(!q) return el(`<div></div>`);
+  const used = q.usedBy !== undefined;
+  const winner = used && q.usedBy !== null ? ' win' + q.usedBy : '';
+  const face = used
+    ? (q.usedBy === null ? '—' : q.points)
+    : (showPoints ? q.points : '<i class="dot"></i>');
+  const cell = el(`<div class="cell ${used?'used':''}${winner}">${face}</div>`);
+  if(!used){
+    cell.addEventListener('click', ()=>{
+      state.activeCell = { topicId:t.id, qId:q.id };
+      state.helpHints = {0:null, 1:null};
+      render();
+      if(state.timerEnabled && q.text.trim()) startTimer();
     });
   }
+  return cell;
+}
+
+/* يجمّع النقاط المتكررة: [100,100,200,200,400,600] → [{v:100,span:2},…]
+   حتى الشريط الأوسط يكتب كل قيمة مرة وحدة بدل ما تتكرر بكل صف */
+function pointTiers(questions){
+  const tiers = [];
+  questions.forEach(q=>{
+    const last = tiers[tiers.length-1];
+    if(last && last.v === q.points) last.span++;
+    else tiers.push({ v:q.points, span:1 });
+  });
+  return tiers;
+}
+
+function renderBoard(){
+  const wrap = el(`<div></div>`);
+
+  const topics = state.selectedTopicIds.map(id => state.pool.find(t=>t.id===id));
+  const maxQ = Math.max(...topics.map(t=>t.questions.length));
+
+  /* مواضيع كل فريق. اللعبة توزّع ٣ لكل فريق — إذا لأي سبب الطلعة
+     مختلفة، نرجع للشكل القديم بدل ما ينكسر اللوح. */
+  const own0 = topics.filter(t => t.takenBy === 0);
+  const own1 = topics.filter(t => t.takenBy === 1);
+  const split = own0.length === own1.length && own0.length > 0
+             && own0.length + own1.length === topics.length;
+
+  if(!split){
+    wrap.appendChild(renderScoreboard());
+    const board = el(`<div class="board" style="--cols:${topics.length}"></div>`);
+    topics.forEach(t=> board.appendChild(el(`<div class="topic-head">${escapeAttr(t.name)}</div>`)));
+    for(let r=0; r<maxQ; r++){
+      topics.forEach(t=> board.appendChild(makeBoardCell(t, t.questions[r], true)));
+    }
+    wrap.appendChild(board);
+    return finishBoard(wrap, topics);
+  }
+
+  /* شريط «منو ضد منو» — يحل محل لوحة النتيجة بهذي الشاشة */
+  wrap.appendChild(el(`<div class="team-band">
+    <div class="band t0">
+      <span class="who">${own0.length} مواضيع</span>
+      <span class="nm">${escapeAttr(state.teams[0].name)}</span>
+      <span class="pts">${state.teams[0].score}</span>
+    </div>
+    <div class="vs">ضد</div>
+    <div class="band t1">
+      <span class="who">${own1.length} مواضيع</span>
+      <span class="nm">${escapeAttr(state.teams[1].name)}</span>
+      <span class="pts">${state.teams[1].score}</span>
+    </div>
+  </div>`));
+
+  const half = own0.length;
+  const board = el(`<div class="board split" style="--half:${half}"></div>`);
+
+  /* بالعربي أول عنصر يروح لليمين — فالفريق الأول يمين والثاني يسار */
+  own0.forEach(t=> board.appendChild(el(`<div class="topic-head t0">${escapeAttr(t.name)}</div>`)));
+  board.appendChild(el(`<div class="rail head">نقاط</div>`));
+  own1.forEach(t=> board.appendChild(el(`<div class="topic-head t1">${escapeAttr(t.name)}</div>`)));
+
+  const tiers = pointTiers(topics[0].questions);
+  let ti = 0, rowsLeft = tiers.length ? tiers[0].span : 0;
+
+  for(let r=0; r<maxQ; r++){
+    own0.forEach(t=> board.appendChild(makeBoardCell(t, t.questions[r], false)));
+
+    if(tiers[ti] && rowsLeft === tiers[ti].span){
+      const rail = el(`<div class="rail">${tiers[ti].v}</div>`);
+      rail.style.gridRow = 'span ' + tiers[ti].span;
+      board.appendChild(rail);
+    }
+
+    own1.forEach(t=> board.appendChild(makeBoardCell(t, t.questions[r], false)));
+
+    rowsLeft--;
+    if(rowsLeft === 0 && ti < tiers.length - 1){ ti++; rowsLeft = tiers[ti].span; }
+  }
+
   wrap.appendChild(board);
+  return finishBoard(wrap, topics);
+}
+
+function finishBoard(wrap, topics){
 
   const allUsed = topics.every(t => t.questions.every(q => q.usedBy !== undefined));
   if(allUsed){
