@@ -717,6 +717,139 @@ function renderQuestionOverlay(){
   return overlay;
 }
 
+/* ============================ ACCOUNT OVERLAY ============================
+   شاشة الحساب: خروج، حذف الحساب (متطلب App Store 5.1.1(v))، وإدارة
+   الناشرين المحظورين (متطلب 1.2). */
+function openAccountModal(){
+  state.showAccountModal = true;
+  state.accountDeleteStep = false;
+  state.accountDeleteTyped = '';
+  state.accountError = '';
+  render();
+}
+
+function closeAccountModal(){
+  state.showAccountModal = false;
+  state.accountDeleteStep = false;
+  state.accountDeleteTyped = '';
+  state.accountError = '';
+  render();
+}
+
+async function confirmDeleteAccount(){
+  if(state.accountDeleteTyped.trim() !== 'حذف'){
+    state.accountError = 'اكتب كلمة «حذف» بالضبط حتى نتأكد.';
+    render();
+    return;
+  }
+  state.accountBusy = true;
+  state.accountError = '';
+  render();
+  try{
+    await deleteMyAccount();
+    state.accountBusy = false;
+    state.showAccountModal = false;
+    state.accountDeleteStep = false;
+    state.accountDeleteTyped = '';
+    state.myCustomTopics = [];
+    // فئاته المنشورة انمسحت من السيرفر، فنشيلها من الحوض هم
+    state.pool = state.pool.filter(t => !(t.bankKey === null && t.sharedCode));
+    state.screen = 'hub';
+    state.history = [];
+    render();
+  }catch(e){
+    state.accountBusy = false;
+    state.accountError = translateCustomError(e);
+    render();
+  }
+}
+
+function renderAccountOverlay(){
+  const overlay = el(`<div class="overlay"></div>`);
+  const u = state.user || {};
+  const blocked = loadBlockedAuthors();
+
+  if(state.accountDeleteStep){
+    const modal = el(`<div class="q-modal" style="max-width:430px; text-align:right;">
+      <div class="section-title" style="color:var(--rose);">حذف الحساب نهائياً</div>
+      <p style="color:var(--muted); font-size:14px; line-height:1.8; margin:0 0 14px;">
+        راح ينمسح حسابك وكل شي يخصه: اسمك، كويناتك، إحصائياتك،
+        والفئات الي نشرتها (وأكوادها ما تشتغل بعدها).
+        <b style="color:var(--ivory);">ما تكدر ترجعه.</b>
+      </p>
+      <div class="field">
+        <label style="font-size:13px; color:var(--muted);">اكتب كلمة «حذف» للتأكيد</label>
+        <input type="text" id="acc-del-type" value="${escapeAttr(state.accountDeleteTyped || '')}" placeholder="حذف"/>
+      </div>
+      ${state.accountError ? `<div style="color:var(--rose); font-size:13px; margin-bottom:10px;">${escapeAttr(state.accountError)}</div>` : ''}
+      <div class="btn-row" style="justify-content:center; margin-top:6px;">
+        <button class="btn btn-danger" id="acc-del-go">${state.accountBusy ? '...' : 'احذف حسابي'}</button>
+        <button class="btn btn-ghost" id="acc-del-back">تراجع</button>
+      </div>
+    </div>`);
+    const input = modal.querySelector('#acc-del-type');
+    input.addEventListener('input', e=>{ state.accountDeleteTyped = e.target.value; });
+    modal.querySelector('#acc-del-go').disabled = state.accountBusy;
+    modal.querySelector('#acc-del-go').addEventListener('click', confirmDeleteAccount);
+    modal.querySelector('#acc-del-back').addEventListener('click', ()=>{
+      state.accountDeleteStep = false; state.accountError = ''; render();
+    });
+    overlay.appendChild(modal);
+    return overlay;
+  }
+
+  const modal = el(`<div class="q-modal" style="max-width:430px; text-align:right;">
+    <div class="section-title">حسابك</div>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      ${u.photo ? `<img src="${escapeAttr(u.photo)}" style="width:44px;height:44px;border-radius:50%;border:1px solid var(--gold-dim);"/>` : ''}
+      <div>
+        <div style="font-weight:700;">${escapeAttr(u.name || 'لاعب')}</div>
+        <div style="font-size:12.5px; color:var(--muted);">
+          ${u.gamesPlayed || 0} لعبة · 🪙 ${u.coins || 0} كوين
+        </div>
+      </div>
+    </div>
+    <div id="acc-blocked"></div>
+    ${state.accountError ? `<div style="color:var(--rose); font-size:13px; margin-bottom:10px;">${escapeAttr(state.accountError)}</div>` : ''}
+    <div class="btn-row" style="justify-content:center; margin-top:6px; flex-wrap:wrap;">
+      <button class="btn btn-gold" id="acc-close">رجوع</button>
+      <button class="btn btn-ghost" id="acc-signout">تسجيل الخروج</button>
+      <button class="btn btn-ghost" id="acc-delete" style="color:var(--rose); border-color:var(--rose-dim);">حذف الحساب</button>
+    </div>
+  </div>`);
+
+  const bBox = modal.querySelector('#acc-blocked');
+  if(blocked.length){
+    bBox.appendChild(el(`<div class="section-sub" style="margin-bottom:6px;">
+      ناشرون محظورون (${blocked.length}) — فئاتهم ما توصلك</div>`));
+    blocked.forEach(a=>{
+      const row = el(`<div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
+                        padding:7px 2px; border-top:1px solid var(--line);">
+        <span style="font-size:13.5px;">${escapeAttr(a.name || 'ناشر')}</span>
+        <button class="btn btn-ghost btn-sm">ألغِ الحظر</button>
+      </div>`);
+      row.querySelector('button').addEventListener('click', ()=>{ unblockAuthor(a.key); render(); });
+      bBox.appendChild(row);
+    });
+    bBox.appendChild(el(`<div style="height:12px;"></div>`));
+  }
+
+  modal.querySelector('#acc-close').addEventListener('click', closeAccountModal);
+  modal.querySelector('#acc-signout').addEventListener('click', ()=>{
+    closeAccountModal();
+    signOutUser();
+  });
+  modal.querySelector('#acc-delete').addEventListener('click', ()=>{
+    state.accountDeleteStep = true;
+    state.accountDeleteTyped = '';
+    state.accountError = '';
+    render();
+  });
+
+  overlay.appendChild(modal);
+  return overlay;
+}
+
 /* ============================ AUTH OVERLAY ============================ */
 function renderAuthOverlay(){
   const overlay = el(`<div class="overlay"></div>`);

@@ -36,6 +36,14 @@ const state = {
   showTermsModal: false,
   termsBusy: false,
   termsError: '',
+  blockAuthorToo: false,     // يحظر الناشر مع إرسال البلاغ
+
+  // شاشة الحساب (تسجيل خروج / حذف الحساب — متطلب App Store 5.1.1(v))
+  showAccountModal: false,
+  accountDeleteStep: false,
+  accountDeleteTyped: '',
+  accountBusy: false,
+  accountError: '',
 
   teams: [
     { name: 'الفريق الأول', score: 0, helps: 3 },
@@ -115,6 +123,43 @@ function el(html){
   const t = document.createElement('template');
   t.innerHTML = html.trim();
   return t.content.firstElementChild;
+}
+
+/* ================= حظر الناشرين (متطلب App Store 1.2) =================
+   القائمة تنحفظ بالجهاز مو بالحساب، لأن الاستيراد بالكود يشتغل بلا تسجيل
+   دخول — فلو ربطناها بالحساب يبقى غير المسجّلين بلا وسيلة حظر.
+   author_key بصمة مجهولة للناشر ترجع من السيرفر، مو معرّفه الحقيقي. */
+const BLOCKED_AUTHORS_KEY = 'tajammo.blockedAuthors.v1';
+
+function loadBlockedAuthors(){
+  try{
+    const raw = localStorage.getItem(BLOCKED_AUTHORS_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  }catch(e){ return []; }
+}
+
+function saveBlockedAuthors(list){
+  try{ localStorage.setItem(BLOCKED_AUTHORS_KEY, JSON.stringify(list.slice(0, 500))); }
+  catch(e){ /* ذاكرة الجهاز ممتلئة — الحظر يضل شغال لهذي الجلسة */ }
+}
+
+function isAuthorBlocked(key){
+  if(!key) return false;
+  return loadBlockedAuthors().some(a => a.key === key);
+}
+
+function blockAuthor(key, name){
+  if(!key || isAuthorBlocked(key)) return;
+  const list = loadBlockedAuthors();
+  list.unshift({ key: key, name: name || 'ناشر', at: Date.now() });
+  saveBlockedAuthors(list);
+  // شيل فئاته الموجودة بالحوض هم — الحظر ما ينفع إذا فئته باقية قدامه
+  state.pool = state.pool.filter(t => !(t.authorKey && t.authorKey === key));
+}
+
+function unblockAuthor(key){
+  saveBlockedAuthors(loadBlockedAuthors().filter(a => a.key !== key));
 }
 
     function goto(screen){ if(state.screen!==screen) state.history.push(state.screen); state.screen = screen; render(); window.scrollTo({top:0, behavior:'smooth'}); }

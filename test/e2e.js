@@ -53,6 +53,7 @@ const CANNED_TOPIC = {
   name: 'أسئلة عن الكروب',
   share_code: GOOD_CODE,
   author_name: 'أمير',
+  author_key: 'authorkey-test-1',
   questions: [
     { question: 'منو أكثر واحد يتأخر؟', answer: 'سيف', points: 100 },
     { question: 'منو ما يرد على الرسائل؟', answer: 'علي', points: 100 },
@@ -85,6 +86,10 @@ window.supabase = {
         if(name === 'save_custom_topic'){
           if(window.__signedIn) return { data: { id: 1, share_code: 'NEWCD1' }, error: null };
           return { data: null, error: { message: 'SIGNIN_REQUIRED' } };
+        }
+        if(name === 'delete_my_account'){
+          window.__accountDeleted = true;
+          return { data: { ok: true }, error: null };
         }
         if(name === 'report_custom_topic'){
           window.__reports = window.__reports || [];
@@ -993,6 +998,142 @@ const CANNED_BANK = (() => {
     await page.waitForSelector('#ct-new', { timeout: 8000 });
     const stuck = await page.evaluate(() => state.screen === 'cat-loading');
     if (stuck) throw new Error('علق على شاشة التحميل مع إن البنك جاهز');
+  });
+
+  console.log('\nتصفية المحتوى قبل النشر (App Store 1.2)');
+  await step('كلمة بذيئة بالسؤال تمنع النشر وما توصل للخادم', async () => {
+    await page.evaluate(() => {
+      window.__signedIn = true;
+      window.__rpcCalls = [];
+      state.user = { uid:'u9', name:'test', termsAcceptedAt:'2026-01-01T00:00:00Z', coins:500 };
+      state.customShareCode = null;
+      state.customError = '';
+      state.customDraft = newCustomDraft();
+      state.customDraft.name = 'فئة عادية';
+      state.customDraft.questions.forEach((q, i) => { q.question = 'س' + i; q.answer = 'ج' + i; });
+      state.customDraft.questions[2].answer = 'يا شرمُوط';   // بتشكيل — لازم ينمسك
+      goto('custom-editor');
+    });
+    await page.waitForSelector('#cd-save', { timeout: 8000 });
+    await page.click('#cd-save');
+    await page.waitForFunction(() => (state.customError || '').includes('غير لائقة'), { timeout: 8000 });
+    const calls = await page.evaluate(() => (window.__rpcCalls || []).filter(c => c.name === 'save_custom_topic').length);
+    if (calls !== 0) throw new Error('انرسل للخادم مع إنه مرفوض محلياً — راح ينخصم كوين على الفاضي');
+  });
+
+  await step('نص نظيف يمرّ عادي', async () => {
+    await page.evaluate(() => {
+      state.customError = '';
+      state.customShareCode = null;
+      state.customDraft = newCustomDraft();
+      state.customDraft.name = 'فئة نظيفة';
+      state.customDraft.questions.forEach((q, i) => { q.question = 'س' + i; q.answer = 'ج' + i; });
+      render();
+    });
+    await page.click('#cd-save');
+    await page.waitForFunction(() => !!state.customShareCode || !!state.customError, { timeout: 10000 });
+    const err = await page.evaluate(() => state.customError);
+    if (err) throw new Error('نص نظيف انرفض: ' + err);
+  });
+
+  await step('«كسوف» و«الكسل» ما تنمسك غلط', async () => {
+    const hits = await page.evaluate(() => [
+      findBannedTerm('شنو سبب كسوف الشمس؟'),
+      findBannedTerm('الكسل صفة سيئة'),
+      findBannedTerm('كسر الرقم القياسي')
+    ]);
+    const bad = hits.filter(Boolean);
+    if (bad.length) throw new Error('إيجابيات كاذبة: ' + bad.join(', '));
+  });
+
+  console.log('\nحظر الناشر (App Store 1.2)');
+  await page.evaluate(() => { try { localStorage.removeItem('tajammo.blockedAuthors.v1'); } catch (e) {} });
+
+  await step('نافذة البلاغ بيها خيار حظر الناشر', async () => {
+    await page.evaluate(({ code, qs }) => {
+      state.customShareCode = null;
+      state.pool = state.pool.filter(t => t.bankKey !== null);
+      state.pool.push(makeCustomTopicFromData('فئة مستوردة', qs, code, 'authorkey-test-1', 'أمير'));
+      goto('editor');
+      openReportModal(state.pool.find(t => t.authorKey === 'authorkey-test-1'));
+    }, { code: GOOD_CODE, qs: CANNED_TOPIC.questions });
+    await page.waitForSelector('#rep-block', { timeout: 8000 });
+    const txt = await page.evaluate(() => document.querySelector('#rep-block-row').innerText);
+    if (!txt.includes('أمير')) throw new Error('اسم الناشر مو ظاهر بخيار الحظر');
+  });
+
+  await step('البلاغ مع الحظر يحظر الناشر فعلاً', async () => {
+    await page.check('#rep-block');
+    await page.evaluate(() => { state.reportReason = 'offensive'; render(); });
+    await page.check('#rep-block');
+    await page.click('#rep-send');
+    await page.waitForFunction(() => document.body.innerText.includes('وصلنا بلاغك'), { timeout: 8000 });
+    const r = await page.evaluate(() => {
+      closeReportModal();
+      return {
+        blocked: isAuthorBlocked('authorkey-test-1'),
+        stillInPool: state.pool.some(t => t.authorKey === 'authorkey-test-1')
+      };
+    });
+    if (!r.blocked) throw new Error('الناشر ما انحظر');
+    if (r.stillInPool) throw new Error('فئة الناشر المحظور باقية بالحوض');
+  });
+
+  await step('الاستيراد بكود من ناشر محظور ينرفض', async () => {
+    await page.waitForSelector('#ct-code', { timeout: 8000 });
+    await page.fill('#ct-code', GOOD_CODE);
+    await page.click('#ct-import');
+    await page.waitForFunction(() => (state.importError || '').includes('محظور'), { timeout: 8000 });
+  });
+
+  await step('الحظر يبقى بعد إعادة فتح التطبيق', async () => {
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#card-cat', { timeout: 10000 });
+    const still = await page.evaluate(() => isAuthorBlocked('authorkey-test-1'));
+    if (!still) throw new Error('الحظر ضاع بعد إعادة التشغيل');
+  });
+
+  console.log('\nحذف الحساب (App Store 5.1.1(v))');
+  await step('شاشة الحساب تنفتح من الشريط وفيها زر حذف الحساب', async () => {
+    await page.evaluate(() => {
+      state.user = { uid:'u9', name:'أمير', coins: 120, gamesPlayed: 4 };
+      render();
+    });
+    await page.click('#user-box');
+    await page.waitForSelector('#acc-delete', { timeout: 8000 });
+    const txt = await page.evaluate(() => document.querySelector('.overlay').innerText);
+    if (!txt.includes('تسجيل الخروج')) throw new Error('زر الخروج راح من الشاشة');
+    if (!txt.includes('محظور')) throw new Error('قائمة الناشرين المحظورين مو ظاهرة');
+  });
+
+  await step('الحذف يطلب تأكيد مكتوب ويرفض كلمة غلط', async () => {
+    await page.click('#acc-delete');
+    await page.waitForSelector('#acc-del-type', { timeout: 8000 });
+    await page.fill('#acc-del-type', 'اي');
+    await page.click('#acc-del-go');
+    await page.waitForFunction(() => (state.accountError || '').includes('حذف'), { timeout: 8000 });
+    const gone = await page.evaluate(() => !!window.__accountDeleted);
+    if (gone) throw new Error('انحذف الحساب بتأكيد غلط');
+  });
+
+  await step('التأكيد الصحيح ينادي delete_my_account ويسجّل الخروج', async () => {
+    await page.fill('#acc-del-type', 'حذف');
+    await page.click('#acc-del-go');
+    await page.waitForFunction(() => !!window.__accountDeleted, { timeout: 10000 });
+    const r = await page.evaluate(() => ({
+      user: state.user,
+      modal: state.showAccountModal,
+      screen: state.screen
+    }));
+    if (r.user) throw new Error('اللاعب باقي مسجّل بعد حذف الحساب');
+    if (r.modal) throw new Error('النافذة ما انسكرت');
+    if (r.screen !== 'hub') throw new Error('ما رجع للشاشة الرئيسية: ' + r.screen);
+  });
+
+  await step('إلغاء الحظر من شاشة الحساب يرجّع الناشر', async () => {
+    await page.evaluate(() => { unblockAuthor('authorkey-test-1'); });
+    const still = await page.evaluate(() => isAuthorBlocked('authorkey-test-1'));
+    if (still) throw new Error('إلغاء الحظر ما اشتغل');
   });
 
   console.log('\nأخطاء جافاسكربت غير متوقعة');

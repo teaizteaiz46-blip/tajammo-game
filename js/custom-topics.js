@@ -18,13 +18,45 @@ function newCustomDraft() {
 }
 
 /* يبني موضوعاً جاهزاً للّوح من بيانات فئة (مستوردة أو مسودّة) */
-function makeCustomTopicFromData(name, questions, shareCode) {
+/* ============ تصفية المحتوى المسيء قبل النشر (App Store 1.2) ============
+   الفحص الحقيقي بالسيرفر داخل save_custom_topic — هذا نسخة مختصرة بالمتصفح
+   حتى يشوف اللاعب الرسالة فوراً وما ينخصم منه كوين على طلب راح ينرفض. */
+const BANNED_PART = [
+  'طيز','نيك','شرموط','قحب','عاهر','لوطي','منيوك','زاني','سكس','اباحي','بورن',
+  'عرص','ديوث','يلعن','العن','كافر','مرتد','اقتل','نذبح',
+  'fuck','shit','bitch','whore','slut','cunt','porn','nigger','faggot','rape'
+];
+const BANNED_WORD = ['كس','زب','خول','dick'];
+
+function arNormalize(txt) {
+  return String(txt || '')
+    .replace(/[ً-ْـٰ]/g, '')
+    .replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ئ/g, 'ي')
+    .replace(/ؤ/g, 'و').replace(/ة/g, 'ه')
+    .replace(/[^a-zA-Z0-9ء-ي]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function findBannedTerm(txt) {
+  const n = arNormalize(txt);
+  if (!n) return null;
+  for (const t of BANNED_PART) if (n.indexOf(t) !== -1) return t;
+  const words = n.split(' ');
+  for (const t of BANNED_WORD) if (words.indexOf(t) !== -1) return t;
+  return null;
+}
+
+function makeCustomTopicFromData(name, questions, shareCode, authorKey, authorName) {
   return {
     id: nextId(),
     name: name,
     bankKey: null,
     // sharedCode موجود يعني الفئة منشورة ويمكن التبليغ عنها
     sharedCode: shareCode || null,
+    authorKey: authorKey || null,
+    authorName: authorName || '',
     taken: false,
     takenBy: null,
     expanded: false,
@@ -80,6 +112,17 @@ async function saveCustomTopicToCloud() {
     return;
   }
 
+  // تصفية قبل ما نرسل — حتى ما ينخصم كوين على طلب السيرفر راح يرفضه
+  const bad = findBannedTerm(
+    state.customDraft.name + ' ' +
+    state.customDraft.questions.map(q => q.question + ' ' + q.answer).join(' ')
+  );
+  if (bad) {
+    state.customError = 'أكو كلمة غير لائقة بالفئة («' + bad + '»). عدّلها وجرّب مرة ثانية.';
+    render();
+    return;
+  }
+
   state.customSaving = true;
   state.customError = '';
   render();
@@ -128,6 +171,7 @@ function translateCustomError(e) {
     return 'كويناتك ما تكفي لنشر موضوع.';
   }
   if (msg.includes('TERMS_REQUIRED')) return 'لازم توافق على الشروط قبل النشر.';
+  if (msg.includes('BANNED_CONTENT')) return 'أكو كلمة غير لائقة بالفئة. عدّل النص وجرّب مرة ثانية.';
   if (msg.includes('NAME_REQUIRED')) return 'اكتب اسم الفئة.';
   if (msg.includes('EMPTY_QUESTION')) return 'أكو سؤال أو جواب فاضي.';
   if (msg.includes('custom_topics_name_check')) return 'اسم الفئة لازم يكون بين حرف و٦٠ حرف.';
@@ -162,6 +206,12 @@ async function importCustomTopicByCode(rawCode) {
       render();
       return;
     }
+    if (isAuthorBlocked(data.author_key)) {
+      state.importBusy = false;
+      state.importError = 'ناشر هذي الفئة محظور عندك. تكدر تشيل الحظر من شاشة حسابك.';
+      render();
+      return;
+    }
     if (!data.questions || data.questions.length === 0) {
       state.importBusy = false;
       state.importError = 'هذي الفئة فاضية — صاحبها ما كمّل أسئلتها.';
@@ -177,7 +227,7 @@ async function importCustomTopicByCode(rawCode) {
       return;
     }
 
-    state.pool.push(makeCustomTopicFromData(data.name, data.questions, code));
+    state.pool.push(makeCustomTopicFromData(data.name, data.questions, code, data.author_key, data.author_name));
     state.importBusy = false;
     state.importCode = '';
     state.importedNotice = 'تمت إضافة فئة "' + data.name + '"' +
@@ -514,6 +564,7 @@ function openReportModal(topic){
   state.reportNote = '';
   state.reportError = '';
   state.reportDone = false;
+  state.blockAuthorToo = false;
   render();
 }
 
@@ -557,6 +608,10 @@ async function submitReport(){
     if(data && data.ok === false){
       state.reportError = 'ما لقيت هذي الفئة.';
     } else {
+      // الحظر محلي بالجهاز، فينفّذ حتى لو السيرفر ما رجع شي
+      if(state.blockAuthorToo && state.reportTopic && state.reportTopic.authorKey){
+        blockAuthor(state.reportTopic.authorKey, state.reportTopic.authorName);
+      }
       state.reportDone = true;
     }
     render();
@@ -577,7 +632,7 @@ function renderReportOverlay(){
       <div class="section-title" style="justify-content:center;">وصلنا بلاغك</div>
       <p style="color:var(--muted); font-size:14px; margin-bottom:18px;">
         راح تُراجع الفئة. إذا وصلتها بلاغات كافية تنخفي فوراً عن الجميع
-        لحد ما تنتهي المراجعة.
+        لحد ما تنتهي المراجعة.${state.blockAuthorToo ? '<br>وحظرنا الناشر — ما راح توصلك فئاته بعدها.' : ''}
       </p>
       <div class="btn-row" style="justify-content:center; margin-top:0;">
         <button class="btn btn-gold" id="rep-close">تم</button>
@@ -598,6 +653,14 @@ function renderReportOverlay(){
       <input type="text" id="rep-note" maxlength="500"
              placeholder="تفاصيل إضافية (اختياري)" value="${escapeAttr(state.reportNote || '')}"/>
     </div>
+    ${t && t.authorKey ? `
+    <label id="rep-block-row" style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;
+           font-size:13px; color:var(--muted); margin:2px 0 12px; line-height:1.6;">
+      <input type="checkbox" id="rep-block" ${state.blockAuthorToo ? 'checked' : ''}
+             style="margin-top:3px; width:auto; accent-color:var(--gold);"/>
+      <span>احظر <b style="color:var(--ivory);">${escapeAttr(t.authorName || 'ناشر هذي الفئة')}</b>
+      — ما توصلك أي فئة منه بعدها، وتنشال فئاته من عندك. تكدر تلغي الحظر من شاشة حسابك.</span>
+    </label>` : ''}
     ${state.reportError ? `<div style="color:var(--rose); font-size:13px; margin-bottom:10px;">${escapeAttr(state.reportError)}</div>` : ''}
     <div class="btn-row" style="justify-content:center; margin-top:6px;">
       <button class="btn btn-gold" id="rep-send">${state.reportBusy ? '...' : 'أرسل البلاغ'}</button>
@@ -615,6 +678,8 @@ function renderReportOverlay(){
   });
 
   modal.querySelector('#rep-note').addEventListener('input', e=>{ state.reportNote = e.target.value; });
+  const blockBox = modal.querySelector('#rep-block');
+  if(blockBox) blockBox.addEventListener('change', e=>{ state.blockAuthorToo = e.target.checked; });
   modal.querySelector('#rep-send').disabled = state.reportBusy;
   modal.querySelector('#rep-send').addEventListener('click', submitReport);
   modal.querySelector('#rep-cancel').addEventListener('click', closeReportModal);

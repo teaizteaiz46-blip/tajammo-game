@@ -36,6 +36,9 @@ function render(){
   if(state.showTermsModal){
     app.appendChild(renderTermsOverlay());
   }
+  if(state.showAccountModal && state.user){
+    app.appendChild(renderAccountOverlay());
+  }
 }
 
 function renderScreen(){
@@ -105,9 +108,9 @@ function renderTopbar(){
       <span style="font-size:13px; color:var(--muted);">${escapeAttr(state.user.name)}</span>
       <span class="coin-chip" title="كوينات">🪙 ${coins}</span>
     </div>`);
-    box.addEventListener('click', ()=>{
-      if(confirm('تسجيل الخروج؟')) signOutUser();
-    });
+    // قبل: confirm('تسجيل الخروج؟') — هسه تفتح شاشة الحساب، وبيها الخروج
+    // وحذف الحساب وإدارة الناشرين المحظورين
+    box.addEventListener('click', openAccountModal);
     authArea.appendChild(box);
   } else {
     const btn = el(`<button class="btn btn-ghost btn-sm" id="open-auth">تسجيل الدخول</button>`);

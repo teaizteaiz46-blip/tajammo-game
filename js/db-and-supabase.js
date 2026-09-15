@@ -195,6 +195,17 @@ function signOutUser(){
   sb.auth.signOut();
 }
 
+/* حذف الحساب من داخل التطبيق — متطلب إلزامي بـ App Store (5.1.1(v)).
+   الدالة بالسيرفر تمسح الملف الشخصي والفئات والأسئلة وسجل الكوينات
+   وصف المصادقة نفسه. عملية نهائية ما ترجع. */
+async function deleteMyAccount(){
+  if(!sb) throw new Error('لا يوجد اتصال بالإنترنت');
+  const { error } = await sb.rpc('delete_my_account');
+  if(error) throw error;
+  try{ await sb.auth.signOut(); }catch(e){ /* الحساب انمسح أصلاً */ }
+  state.user = null;
+}
+
 async function loadOrCreateProfile(authUser){
   let { data } = await sb.from('tajammo_profiles').select('*').eq('id', authUser.id).single();
   if(!data){

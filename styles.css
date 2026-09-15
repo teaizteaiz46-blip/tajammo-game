@@ -175,6 +175,8 @@
   .btn-gold:hover{filter:brightness(1.08);}
   .btn-ghost{background:transparent; color:var(--ivory); border:1px solid var(--line);}
   .btn-ghost:hover{border-color:var(--gold-dim);}
+  .btn-danger{background:var(--rose); color:#FFF3F1;}
+  .btn-danger:hover{filter:brightness(1.08);}
   .btn:disabled{opacity:.4; cursor:not-allowed;}
   .btn-sm{padding:9px 14px; font-size:13px; border-radius:9px;}
   .btn-row{display:flex; gap:12px; margin-top:26px; flex-wrap:wrap;}
