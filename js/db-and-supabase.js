@@ -155,14 +155,38 @@ function pickFromTier(tier, usedSet, n){
   chosen.forEach(i=>usedSet.add(i));
   return chosen.map(i=>tier[i]);
 }
+/* أسئلة الأغاني تشتغل بتشغيل مقطع ٣٠ ثانية من متجر آبل (iTunes Search API).
+   شروط آبل تسمح بهذا المحتوى للترويج لمتجرها فقط — مو كمحتوى ترفيهي داخل
+   لعبة. فعلى الآيفون نحوّل السؤال لصيغة نصية بدل ما نشغّل المقطع:
+   الجواب بالبنك «اسم الأغنية - المطرب»، فنسأل عن المطرب ونعطي الاسم.
+   أندرويد يبقى مثل ما هو. */
+function songQuestionToText(q){
+  if(q.mediaType !== 'song') return q;
+  const dash = String(q.answer || '').lastIndexOf(' - ');
+  if(dash < 0) return q;                       // صيغة غير متوقعة — نتركه
+  const title  = q.answer.slice(0, dash).trim();
+  const artist = q.answer.slice(dash + 3).trim();
+  if(!title || !artist) return q;
+  return Object.assign({}, q, {
+    text: 'منو يغني «' + title + '»؟',
+    answer: artist,
+    mediaType: null,                            // يلغي مشغّل المقطع
+    image: null
+  });
+}
+
 function pickQuestionsForBankTopic(topicName){
   if(!bankUsage[topicName]) bankUsage[topicName] = { 100:new Set(), 200:new Set(), 400:new Set(), 600:new Set() };
   const bank = CATEGORY_DATA[topicName] || {};
   const counts = { 100:2, 200:2, 400:1, 600:1 };
+  const noSongClips = (typeof currentPlatform === 'function') && currentPlatform() === 'ios';
   const result = [];
   [100,200,400,600].forEach(pts=>{
     const picked = pickFromTier(bank[pts], bankUsage[topicName][pts], counts[pts]);
-    picked.forEach(q=> result.push({ id:nextId(), text:q.text, answer:q.answer, points:pts, image:q.image, mediaType:q.mediaType, clipStart:q.clipStart, clipSeconds:q.clipSeconds }));
+    picked.forEach(raw=>{
+      const q = noSongClips ? songQuestionToText(raw) : raw;
+      result.push({ id:nextId(), text:q.text, answer:q.answer, points:pts, image:q.image, mediaType:q.mediaType, clipStart:q.clipStart, clipSeconds:q.clipSeconds });
+    });
   });
   return result;
 }

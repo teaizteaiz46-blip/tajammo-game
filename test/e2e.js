@@ -142,6 +142,12 @@ const CANNED_BANK = (() => {
     const i = rows.length;
     rows.push({ topic: 'حشو كبير', points: [100,200,400,600][i % 4], question: 'سؤال حشو ' + i, answer: 'جواب ' + i, image: null, media_type: null });
   }
+  // موضوع أغاني: أسئلته تعتمد مقطع صوتي من متجر آبل
+  [100,100,100,200,200,200,400,400,600,600].forEach((p, i) => {
+    rows.push({ topic: 'أغاني تجريبية', points: p, question: 'خمّن اسم هذي الأغنية',
+                answer: 'أغنية ' + i + ' - مطرب ' + i, image: 'أغنية ' + i,
+                media_type: 'song', clip_start: 0, clip_seconds: 10 });
+  });
   // الموضوع الحصري بالآخر → يطلع بالصفحة الثانية فقط
   [100,100,100,200,200,200,400,400,600,600].forEach((p, i) => {
     rows.push({ topic: PAGE2_ONLY_TOPIC, points: p, question: 'سؤال صفحة٢ ' + i, answer: 'جواب ' + i, image: null, media_type: null });
@@ -1134,6 +1140,68 @@ const CANNED_BANK = (() => {
     await page.evaluate(() => { unblockAuthor('authorkey-test-1'); });
     const still = await page.evaluate(() => isAuthorBlocked('authorkey-test-1'));
     if (still) throw new Error('إلغاء الحظر ما اشتغل');
+  });
+
+  console.log('\nمقاطع الأغاني — شروط متجر آبل');
+  await step('على أندرويد: السؤال يبقى صوتي ويستعمل مقطع المتجر', async () => {
+    const r = await page.evaluate(() => {
+      const real = window.Capacitor;
+      window.Capacitor = { getPlatform: () => 'android' };
+      try {
+        const qs = pickQuestionsForBankTopic('أغاني تجريبية');
+        return { media: qs.map(q => q.mediaType), text: qs[0].text, answer: qs[0].answer };
+      } finally { window.Capacitor = real; }
+    });
+    if (!r.media.every(m => m === 'song')) throw new Error('انشال الصوت من أندرويد: ' + r.media.join(','));
+    if (r.text !== 'خمّن اسم هذي الأغنية') throw new Error('تغيّر نص السؤال بأندرويد: ' + r.text);
+    if (!r.answer.includes(' - ')) throw new Error('تغيّر الجواب بأندرويد: ' + r.answer);
+  });
+
+  await step('على الآيفون: يتحوّل لسؤال نصي «منو يغني…؟» بلا مقطع', async () => {
+    const r = await page.evaluate(() => {
+      const real = window.Capacitor;
+      window.Capacitor = { getPlatform: () => 'ios' };
+      try {
+        const qs = pickQuestionsForBankTopic('أغاني تجريبية');
+        return {
+          media: qs.map(q => q.mediaType),
+          images: qs.map(q => q.image),
+          text: qs[0].text,
+          answer: qs[0].answer,
+          count: qs.length
+        };
+      } finally { window.Capacitor = real; }
+    });
+    if (r.count !== 6) throw new Error('عدد الأسئلة تغيّر: ' + r.count);
+    if (r.media.some(m => m === 'song')) throw new Error('بقي سؤال صوتي بالآيفون');
+    if (r.images.some(Boolean)) throw new Error('بقيت بيانات المقطع بالآيفون');
+    if (!/^منو يغني «.+»؟$/.test(r.text)) throw new Error('صيغة السؤال غلط: ' + r.text);
+    if (r.answer.includes(' - ')) throw new Error('الجواب لازم يكون اسم المطرب بس: ' + r.answer);
+    if (!r.answer.startsWith('مطرب')) throw new Error('الجواب مو اسم المطرب: ' + r.answer);
+  });
+
+  await step('الآيفون ما ينادي متجر آبل إطلاقاً', async () => {
+    const hits = await page.evaluate(async () => {
+      const realFetch = window.fetch;
+      const realCap = window.Capacitor;
+      const calls = [];
+      window.fetch = (u, o) => { calls.push(String(u)); return realFetch(u, o); };
+      window.Capacitor = { getPlatform: () => 'ios' };
+      try {
+        const qs = pickQuestionsForBankTopic('أغاني تجريبية');
+        // نجرّب المشغّل مباشرة على سؤال صوتي — حزام الأمان لازم يوقفه
+        const modal = document.createElement('div');
+        modal.innerHTML = '<div id="song-player"></div>';
+        wireSongPlayer(modal, { mediaType: 'song', image: 'أي أغنية', answer: 'أ - ب' });
+        await new Promise(r => setTimeout(r, 200));
+        return { calls: calls.filter(u => u.includes('itunes.apple.com')),
+                 note: modal.querySelector('#song-player').innerText,
+                 songs: qs.filter(q => q.mediaType === 'song').length };
+      } finally { window.fetch = realFetch; window.Capacitor = realCap; }
+    });
+    if (hits.songs !== 0) throw new Error('بقيت أسئلة صوتية');
+    if (hits.calls.length) throw new Error('انطلب متجر آبل بالآيفون: ' + hits.calls.join(' | '));
+    if (!hits.note.includes('منو يغني')) throw new Error('ماكو بديل نصي بالمشغّل: ' + hits.note);
   });
 
   console.log('\nأخطاء جافاسكربت غير متوقعة');

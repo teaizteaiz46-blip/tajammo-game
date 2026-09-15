@@ -552,6 +552,14 @@ function wireSongPlayer(modal, q){
   const container = modal.querySelector('#song-player');
   if(!container) return;
 
+  /* حزام أمان: على الآيفون ما ننادي متجر آبل إطلاقاً.
+     المفروض أسئلة الأغاني تنحوّل لنص قبل ما توصل هنا
+     (songQuestionToText)، بس لو وصلت لأي سبب نوقف هنا. */
+  if(typeof currentPlatform === 'function' && currentPlatform() === 'ios'){
+    container.innerHTML = '<div class="section-sub">اسألوا الفريق: منو يغني هذي الأغنية؟</div>';
+    return;
+  }
+
   // المطرب المتوقع يجي من الجواب بصيغة "اسم الأغنية - المطرب"
   const dash = (q.answer || '').lastIndexOf(' - ');
   const expectedArtist = dash > -1 ? q.answer.slice(dash + 3) : '';
