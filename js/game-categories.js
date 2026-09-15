@@ -1,4 +1,27 @@
 /* ============================ EDITOR (choose topics) ============================ */
+
+/* مدخل واحد للعبة الفئات — يستعمله زر اللعبة بالشاشة الرئيسية وزر «حاول مرة ثانية».
+   لو البنك جاهز (تحميل مسبق أو كاش) يفتح المحرر فوراً بلا شاشة انتظار. */
+async function openCategoryGame(){
+  state.categoryDataError = '';
+  if(!bankIsReady()){
+    goto('cat-loading');
+    try{
+      await ensureCategoryDatabase();
+    }catch(e){
+      console.error('loadCategoryDatabase failed:', e);
+      state.categoryDataError = 'تعذّر تحميل بنك الأسئلة — ' + (e && (e.message || e.error_description || JSON.stringify(e)) || 'خطأ غير معروف');
+      render();
+      return;
+    }
+  }
+  state.categoryDataLoaded = true;
+  if(state.pool.length === 0){
+    CATEGORY_TOPICS.forEach(t=> state.pool.push(makeBankTopic(t)));
+  }
+  goto('editor');
+}
+
 function renderCatLoading(){
   const wrap = el(`<div></div>`);
   if(state.categoryDataError){
@@ -9,21 +32,10 @@ function renderCatLoading(){
         <button class="btn btn-ghost" id="back-hub-load">رجوع</button>
       </div>
     </div>`);
-    panel.querySelector('#retry-load').addEventListener('click', async ()=>{
+    panel.querySelector('#retry-load').addEventListener('click', ()=>{
       state.categoryDataError = '';
       render();
-      try{
-        await loadCategoryDatabase();
-        state.categoryDataLoaded = true;
-        if(state.pool.length === 0){
-          CATEGORY_TOPICS.forEach(t=> state.pool.push(makeBankTopic(t)));
-        }
-        goto('editor');
-      } catch(e){
-        console.error('loadCategoryDatabase failed:', e);
-        state.categoryDataError = 'تعذّر تحميل بنك الأسئلة — ' + (e && (e.message || e.error_description || JSON.stringify(e)) || 'خطأ غير معروف');
-        render();
-      }
+      openCategoryGame();
     });
     panel.querySelector('#back-hub-load').addEventListener('click', ()=> goto('hub'));
     wrap.appendChild(panel);

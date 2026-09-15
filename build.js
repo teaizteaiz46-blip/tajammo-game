@@ -14,7 +14,7 @@ const ROOT = __dirname;
 const OUT = path.join(ROOT, 'www');
 
 const FILES = ['index.html', 'styles.css', 'privacy.html', 'terms.html'];
-const DIRS = ['js'];
+const DIRS = ['js', 'img'];
 
 function fail(msg) {
   console.error('✗ ' + msg);

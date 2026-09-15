@@ -7,35 +7,139 @@ const bankUsage = {};
    البنك بصمت وتضيع مواضيع كاملة. نجيبه على صفحات لحد ما يخلص. */
 const CATEGORY_PAGE_SIZE = 1000;
 
-async function loadCategoryDatabase(){
-  const rows = [];
-  for(let from = 0; ; from += CATEGORY_PAGE_SIZE){
-    const to = from + CATEGORY_PAGE_SIZE - 1;
-    const res = await fetch(
-      SUPABASE_URL + '/rest/v1/category_questions?select=topic,points,question,answer,image,media_type,clip_start,clip_seconds&order=id.asc',
-      { headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
-          'Range-Unit': 'items',
-          'Range': from + '-' + to
-      } }
-    );
-    if(!res.ok && res.status !== 206) throw new Error('فشل تحميل الأسئلة (HTTP ' + res.status + ')');
-    const page = await res.json();
-    if(!Array.isArray(page) || page.length === 0) break;
-    rows.push.apply(rows, page);
-    if(page.length < CATEGORY_PAGE_SIZE) break;
-    if(from > 100000) break; // صمام أمان ضد حلقة لا نهائية
-  }
+const BANK_SELECT =
+  'select=topic,points,question,answer,image,media_type,clip_start,clip_seconds&order=id.asc';
 
+/* البنك ينحفظ بالجهاز بعد أول تحميل، فالمرات الجاية تفتح فوراً بلا انتظار.
+   النسخة (v1) بالمفتاح: لو غيّرنا شكل البيانات، نرفع الرقم ويُهمل الكاش القديم. */
+const BANK_CACHE_KEY = 'tajammo.bank.v1';
+const BANK_CACHE_TTL = 24 * 60 * 60 * 1000;   // بعد يوم نجدّده بالخلفية
+
+/* طلب صفحة وحدة. Prefer: count=exact يخلي السيرفر يرجّع العدد الكلي
+   بترويسة Content-Range (مثال: 0-999/3091)، وبيها نعرف كم صفحة باقية
+   ونجيبهن كلهن بالتوازي بدل وحدة ورا وحدة. */
+async function fetchBankRange(from, to){
+  const res = await fetch(
+    SUPABASE_URL + '/rest/v1/category_questions?' + BANK_SELECT,
+    { headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+        'Range-Unit': 'items',
+        'Range': from + '-' + to,
+        'Prefer': 'count=exact'
+    } }
+  );
+  if(!res.ok && res.status !== 206) throw new Error('فشل تحميل الأسئلة (HTTP ' + res.status + ')');
+  const page = await res.json();
+  const cr = res.headers.get('content-range') || '';
+  const total = parseInt(cr.split('/')[1], 10);
+  return { rows: Array.isArray(page) ? page : [], total: isFinite(total) ? total : null };
+}
+
+function groupBankRows(rows){
   const grouped = {};
   rows.forEach(row=>{
-        if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
-        const tier = grouped[row.topic][row.points] ? row.points : 200;
-        grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type, clipStart:row.clip_start, clipSeconds:row.clip_seconds });
+    if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
+    const tier = grouped[row.topic][row.points] ? row.points : 200;
+    grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type, clipStart:row.clip_start, clipSeconds:row.clip_seconds });
   });
+  return grouped;
+}
+
+async function fetchWholeBank(){
+  const first = await fetchBankRange(0, CATEGORY_PAGE_SIZE - 1);
+  let rows = first.rows;
+
+  if(first.total && first.total > CATEGORY_PAGE_SIZE){
+    const jobs = [];
+    for(let from = CATEGORY_PAGE_SIZE; from < first.total; from += CATEGORY_PAGE_SIZE){
+      jobs.push(fetchBankRange(from, from + CATEGORY_PAGE_SIZE - 1));
+    }
+    (await Promise.all(jobs)).forEach(p=>{ rows = rows.concat(p.rows); });
+  } else if(first.total === null && first.rows.length === CATEGORY_PAGE_SIZE){
+    /* السيرفر ما رجّع العدد الكلي — نرجع للطريقة القديمة المتسلسلة */
+    for(let from = CATEGORY_PAGE_SIZE; ; from += CATEGORY_PAGE_SIZE){
+      const p = await fetchBankRange(from, from + CATEGORY_PAGE_SIZE - 1);
+      if(!p.rows.length) break;
+      rows = rows.concat(p.rows);
+      if(p.rows.length < CATEGORY_PAGE_SIZE) break;
+      if(from > 100000) break; // صمام أمان ضد حلقة لا نهائية
+    }
+  }
+
+  const grouped = groupBankRows(rows);
+  const topics = Object.keys(grouped);
+  if(!topics.length) throw new Error('بنك الأسئلة رجع فارغ');
+  return { grouped: grouped, topics: topics, total: first.total || rows.length };
+}
+
+function readBankCache(){
+  try{
+    const raw = localStorage.getItem(BANK_CACHE_KEY);
+    if(!raw) return null;
+    const c = JSON.parse(raw);
+    if(!c || !c.data || !Array.isArray(c.topics) || !c.topics.length) return null;
+    return c;
+  }catch(e){ return null; }
+}
+
+function writeBankCache(bank){
+  try{
+    localStorage.setItem(BANK_CACHE_KEY, JSON.stringify({
+      at: Date.now(), total: bank.total, topics: bank.topics, data: bank.grouped
+    }));
+  }catch(e){ /* ذاكرة الجهاز ممتلئة — نكمل بدون كاش، مو مشكلة حرجة */ }
+}
+
+function applyBank(grouped, topics){
   CATEGORY_DATA = grouped;
-  CATEGORY_TOPICS = Object.keys(grouped);
+  CATEGORY_TOPICS = topics;
+}
+
+let bankLoadPromise = null;
+let bankRefreshing = false;
+
+function refreshBankInBackground(){
+  if(bankRefreshing) return;
+  bankRefreshing = true;
+  fetchWholeBank()
+    .then(bank=>{ applyBank(bank.grouped, bank.topics); writeBankCache(bank); })
+    .catch(e=> console.warn('تعذّر تحديث بنك الأسئلة بالخلفية:', e))
+    .then(()=>{ bankRefreshing = false; });
+}
+
+async function loadCategoryDatabase(){
+  if(CATEGORY_TOPICS.length) return;
+
+  const cached = readBankCache();
+  if(cached){
+    applyBank(cached.data, cached.topics);
+    if(Date.now() - (cached.at || 0) > BANK_CACHE_TTL) refreshBankInBackground();
+    return;
+  }
+
+  const bank = await fetchWholeBank();
+  applyBank(bank.grouped, bank.topics);
+  writeBankCache(bank);
+}
+
+/* نقطة الدخول الوحيدة: لو التحميل شغّال أصلاً (تحميل مسبق مثلاً)،
+   كل النداءات تنتظر نفس الوعد بدل ما يصير تحميل مكرر. */
+function ensureCategoryDatabase(){
+  if(CATEGORY_TOPICS.length) return Promise.resolve();
+  if(!bankLoadPromise){
+    bankLoadPromise = loadCategoryDatabase().catch(e=>{ bankLoadPromise = null; throw e; });
+  }
+  return bankLoadPromise;
+}
+
+function bankIsReady(){ return CATEGORY_TOPICS.length > 0; }
+
+/* يُنادى أول ما يفتح التطبيق: البنك ينزل بالخلفية بينما اللاعب
+   يتفرج على الشاشة الرئيسية، فلمن يضغط اللعبة يكون جاهز. */
+function prefetchCategoryDatabase(){
+  ensureCategoryDatabase()
+    .catch(e=> console.warn('تعذّر التحميل المسبق لبنك الأسئلة:', e));
 }
 
 function shuffled(arr){

@@ -916,6 +916,85 @@ const CANNED_BANK = (() => {
     if (r.cells !== 36) throw new Error('عدد الخانات: ' + r.cells);
   });
 
+  console.log('\nسرعة تحميل بنك الأسئلة');
+  await step('صفحات البنك تنطلب بالتوازي مو وحدة ورا وحدة', async () => {
+    const r = await page.evaluate(async () => {
+      const real = window.fetch;
+      let inFlight = 0, maxConcurrent = 0;
+      const calls = [];
+      window.fetch = (url, opts) => {
+        const range = (opts && opts.headers && opts.headers.Range) || '';
+        calls.push(range);
+        inFlight++; maxConcurrent = Math.max(maxConcurrent, inFlight);
+        return new Promise(res => setTimeout(() => {
+          inFlight--;
+          const m = /^(\d+)-(\d+)$/.exec(range);
+          const from = m ? +m[1] : 0;
+          const end = Math.min(from + 1000, 2500);
+          const rows = [];
+          for (let i = from; i < end; i++) rows.push({ topic: 'تجريبي', points: 100, question: 'س' + i, answer: 'ج' + i });
+          res({
+            ok: true, status: 206,
+            headers: { get: h => h.toLowerCase() === 'content-range' ? from + '-' + (end - 1) + '/2500' : null },
+            json: async () => rows
+          });
+        }, 40));
+      };
+      try { await fetchWholeBank(); } finally { window.fetch = real; }
+      return { calls, maxConcurrent };
+    });
+    if (r.calls.length !== 3) throw new Error('المتوقع ٣ طلبات لـ٢٥٠٠ صف، صار: ' + r.calls.length);
+    if (r.maxConcurrent < 2) throw new Error('الطلبات صارت متسلسلة — التوازي مو شغال');
+  });
+
+  await step('البنك ينحفظ بالجهاز ويُستعمل بدل الشبكة بعد إعادة الفتح', async () => {
+    const saved = await page.evaluate(() => {
+      try { return !!localStorage.getItem('tajammo.bank.v1'); } catch (e) { return false; }
+    });
+    if (!saved) throw new Error('الكاش ما انحفظ بـ localStorage');
+
+    const before = pageRequests.length;
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#card-cat', { timeout: 10000 });
+    await page.waitForFunction(() => CATEGORY_TOPICS.length > 0, null, { timeout: 8000 });
+    if (pageRequests.length !== before)
+      throw new Error('نزّل ' + (pageRequests.length - before) + ' طلب من الشبكة مع إن الكاش موجود');
+  });
+
+  console.log('\nالشاشة الرئيسية الجديدة');
+  await step('بطاقة مميزة + شبكة + خانتين «قريباً»', async () => {
+    const r = await page.evaluate(() => ({
+      feature: !!document.querySelector('.feature-card#card-cat'),
+      cta: !!document.querySelector('.feature-cta'),
+      tiles: document.querySelectorAll('.game-grid .game-tile').length,
+      soon: document.querySelectorAll('.game-grid .game-tile.soon').length,
+      whoami: !!document.querySelector('.game-tile#card-whoami'),
+      shd: !!document.querySelector('.game-tile#card-shd')
+    }));
+    if (!r.feature) throw new Error('البطاقة المميزة مو موجودة');
+    if (!r.cta) throw new Error('زر «العب الآن» مو موجود');
+    if (r.tiles !== 4) throw new Error('عدد خانات الشبكة: ' + r.tiles);
+    if (r.soon !== 2) throw new Error('عدد خانات «قريباً»: ' + r.soon);
+    if (!r.whoami || !r.shd) throw new Error('لعبة ناقصة من الشبكة');
+  });
+
+  await step('رسمة البطاقة المميزة تنحمّل فعلاً', async () => {
+    const ok = await page.evaluate(async () => {
+      const img = document.querySelector('.feature-art img');
+      if (!img) return 'ماكو صورة بالبطاقة';
+      if (!img.complete) await new Promise(res => { img.onload = res; img.onerror = res; });
+      return img.naturalWidth > 0 ? true : 'الصورة ما انحمّلت: ' + img.getAttribute('src');
+    });
+    if (ok !== true) throw new Error(ok);
+  });
+
+  await step('الضغط على البطاقة المميزة يفتح المواضيع بلا شاشة انتظار', async () => {
+    await page.click('#card-cat');
+    await page.waitForSelector('#ct-new', { timeout: 8000 });
+    const stuck = await page.evaluate(() => state.screen === 'cat-loading');
+    if (stuck) throw new Error('علق على شاشة التحميل مع إن البنك جاهز');
+  });
+
   console.log('\nأخطاء جافاسكربت غير متوقعة');
   if (errors.length) { console.log('  ✗ ' + errors.join('\n  ')); fail++; }
   else console.log('  ✓ ماكو أي خطأ بالصفحة');
