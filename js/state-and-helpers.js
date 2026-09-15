@@ -4,6 +4,10 @@ const state = {
   history: [],
   timerEnabled: false,
   timerSeconds: 30,
+  /* أي مساعدة تظهر باللعبة — تنضبط من شاشة الإعدادات قبل ما تبدي الجولة.
+     «تبديل السؤال» تشتغل بمواضيع البنك بس (الفئات الخاصة ماكو منها بديل). */
+  helpsEnabled: { letter:true, blanks:true, choices:true, swap:true },
+  helpsPerTeam: 3,
   user: null,
   statsRecordedForThisGame: false,
   lastReward: null,          // نتيجة award_game_coins لآخر لعبة

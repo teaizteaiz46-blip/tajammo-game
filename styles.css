@@ -243,6 +243,10 @@
   .team-card.t1{border-color:var(--rose-dim); background:rgba(193,68,58,0.06);}
 
   .toggle-row{display:flex; align-items:center; justify-content:space-between; gap:14px;}
+  /* لمن تتكدس عدة صفوف بنفس اللوحة (مثل مفاتيح المساعدات) تحتاج فسحة
+     وخط فاصل، وإلا المفاتيح تلتصق ببعض وتصير غير مقروءة */
+  .toggle-row + .toggle-row{margin-top:4px; padding-top:12px; border-top:1px solid var(--line);}
+  .toggle-row{padding:4px 0;}
   .switch{
     width:46px; height:26px; border-radius:20px; background:var(--bg-2);
     border:1px solid var(--line); position:relative; cursor:pointer; flex:none;

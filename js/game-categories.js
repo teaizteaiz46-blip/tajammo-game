@@ -165,6 +165,40 @@ function renderTeams(){
   });
   wrap.appendChild(timerPanel);
 
+  /* ---- المساعدات: أي وحدة تظهر، وكم مساعدة لكل فريق ---- */
+  const anyOn = HELP_TYPES.some(h => helpIsOn(h.key));
+  const helpsPanel = el(`<div class="panel">
+    <div class="section-title">المساعدات</div>
+    <div class="section-sub">شنو المساعدات الي تظهر للفرق داخل السؤال</div>
+    <div id="helps-toggles"></div>
+    <div class="field" style="margin-top:16px; ${anyOn?'':'display:none;'}" id="helps-count-field">
+      <label>عدد المساعدات لكل فريق بالجولة</label>
+      <input type="number" id="helps-count" min="0" max="10" value="${state.helpsPerTeam}"/>
+    </div>
+    ${anyOn ? '' : '<div class="section-sub" style="margin-top:14px; color:var(--rose);">كل المساعدات مطفّاة — ما راح يظهر صندوق المساعدات إطلاقاً.</div>'}
+  </div>`);
+
+  const togglesBox = helpsPanel.querySelector('#helps-toggles');
+  HELP_TYPES.forEach(h=>{
+    const on = helpIsOn(h.key);
+    const row = el(`<div class="toggle-row">
+      <span>${h.label}${h.bankOnly ? ' <small style="color:var(--muted);">(مواضيع البنك فقط)</small>' : ''}</span>
+      <div class="switch ${on?'on':''}" data-help="${h.key}"><div class="knob"></div></div>
+    </div>`);
+    row.querySelector('.switch').addEventListener('click', ()=>{
+      state.helpsEnabled[h.key] = !helpIsOn(h.key);
+      render();
+    });
+    togglesBox.appendChild(row);
+  });
+
+  const cntInput = helpsPanel.querySelector('#helps-count');
+  if(cntInput) cntInput.addEventListener('input', e=>{
+    const n = parseInt(e.target.value, 10);
+    state.helpsPerTeam = isFinite(n) ? Math.max(0, Math.min(10, n)) : 3;
+  });
+  wrap.appendChild(helpsPanel);
+
   const actions = el(`<div class="btn-row">
     <button class="btn btn-gold" id="to-select">التالي: اختيار الفئات</button>
     <button class="btn btn-ghost" id="back-editor">رجوع</button>
@@ -175,8 +209,8 @@ function renderTeams(){
     state.turn = 0;
     state.teams[0].score = 0;
     state.teams[1].score = 0;
-    state.teams[0].helps = 3;
-    state.teams[1].helps = 3;
+    state.teams[0].helps = state.helpsPerTeam;
+    state.teams[1].helps = state.helpsPerTeam;
     state.statsRecordedForThisGame = false;
     resetAdGates();
     goto('select');
@@ -468,20 +502,32 @@ function buildChoices(topic, q){
   return shuffled([core].concat(decoys));
 }
 
+/* المساعدات المتاحة بالترتيب. swap تنفع بمواضيع البنك بس. */
+const HELP_TYPES = [
+  { key:'letter',  label:'أول حرف',      bankOnly:false },
+  { key:'blanks',  label:'عدد الأحرف',   bankOnly:false },
+  { key:'choices', label:'خيارات',       bankOnly:false },
+  { key:'swap',    label:'تبديل السؤال', bankOnly:true  }
+];
+
+function helpIsOn(key){
+  return !state.helpsEnabled || state.helpsEnabled[key] !== false;
+}
+
 function renderHelpSection(topic, q){
   const ti = topic.takenBy;
   if(ti !== 0 && ti !== 1) return '';
+
+  const available = HELP_TYPES.filter(h => helpIsOn(h.key) && (!h.bankOnly || topic.bankKey));
+  // كل المساعدات مطفّاة من الإعدادات — ما نعرض صندوق فاضي
+  if(!available.length) return '';
+
   const team = state.teams[ti];
   const disabled = team.helps<=0;
   return `<div class="help-wrap">
     <div class="help-title">مساعدات ${escapeAttr(team.name)} — متبقي ${team.helps}</div>
     <div class="help-btns" style="justify-content:center;">
-      <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="letter" ${disabled?'disabled':''}>أول حرف</button>
-      <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="blanks" ${disabled?'disabled':''}>عدد الأحرف</button>
-      <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="choices" ${disabled?'disabled':''}>خيارات</button>
-      ${topic.bankKey ? `
-      <button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="swap" ${disabled?'disabled':''}>تبديل السؤال</button>
-      ` : ''}
+      ${available.map(h => `<button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="${h.key}" ${disabled?'disabled':''}>${h.label}</button>`).join('')}
     </div>
     ${state.helpHints[ti] ? `<div class="help-result">${escapeAttr(state.helpHints[ti])}</div>` : ''}
   </div>`;
@@ -495,6 +541,7 @@ function wireHelpButtons(modal, topic, q){
       const team = state.teams[ti];
 
       if(team.helps<=0) return;
+      if(!helpIsOn(type)) return;   // مطفّاة من الإعدادات
 
       if(type==='swap'){
         if(topic.bankKey){
@@ -1032,8 +1079,8 @@ function renderEnd(){
     state.turn = 0;
     state.teams[0].score = 0;
     state.teams[1].score = 0;
-    state.teams[0].helps = 3;
-    state.teams[1].helps = 3;
+    state.teams[0].helps = state.helpsPerTeam;
+    state.teams[1].helps = state.helpsPerTeam;
     state.statsRecordedForThisGame = false;
     resetAdGates();
   }
