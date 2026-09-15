@@ -672,6 +672,97 @@ const CANNED_BANK = (() => {
     if (r.picked !== 5 || r.taken6 !== false) throw new Error('التراجع ما شال الفئة السادسة');
   });
 
+  console.log('\nنافذة السؤال: رجوع وإخفاء الإجابة');
+  const setupQ = () => page.evaluate(() => {
+    // اختبارات قبلها تخلي نوافذ ثانية مفتوحة، وهي تنرسم فوق نافذة
+    // السؤال وتغطي أزرارها — ننظّفها أول
+    state.customShareCode = null;
+    state.reportTopic = null;
+    state.showAuthModal = false;
+    state.showUpsellModal = false;
+    state.showTermsModal = false;
+    state.pool = state.pool.filter(t => t.bankKey !== null);
+    const t = makeCustomTopicFromData('فئة اختبار',
+      [{question:'ما هي عاصمة اليابان؟', answer:'طوكيو', points:100}]);
+    state.pool.push(t);
+    state.selectedTopicIds = [t.id];
+    state.teams[0].helps = 3; state.teams[1].helps = 3;
+    t.taken = true; t.takenBy = 0;
+    state.screen = 'board';
+    state.activeCell = { topicId: t.id, qId: t.questions[0].id };
+    delete t.questions[0].revealed;
+    delete t.questions[0].usedBy;
+    render();
+    return { tid: t.id, qid: t.questions[0].id };
+  });
+
+  await step('زر الرجوع يسكّر النافذة والسؤال يبقى متاح', async () => {
+    await setupQ();
+    if (!(await page.$('#q-close'))) throw new Error('زر الرجوع مو موجود بالنافذة');
+    await page.click('#q-close');
+    const r = await page.evaluate(() => {
+      const t = state.pool.find(x => x.bankKey === null);
+      return { active: state.activeCell, used: t.questions[0].usedBy, overlay: !!document.querySelector('.overlay') };
+    });
+    if (r.overlay) throw new Error('النافذة ظلت مفتوحة');
+    if (r.active !== null) throw new Error('activeCell ما انصفّر');
+    if (r.used !== undefined) throw new Error('السؤال انحرق — المفروض يبقى متاح');
+  });
+
+  await step('الرجوع بعد كشف الإجابة يرجّعها مخفية', async () => {
+    await setupQ();
+    await page.click('#reveal');
+    let txt = await page.evaluate(() => document.body.innerText);
+    if (!txt.includes('طوكيو')) throw new Error('الجواب ما انكشف أصلاً');
+    await page.click('#q-close');
+    // نفتحه من جديد
+    await page.evaluate(() => {
+      const t = state.pool.find(x => x.bankKey === null);
+      state.activeCell = { topicId: t.id, qId: t.questions[0].id };
+      render();
+    });
+    txt = await page.evaluate(() => document.body.innerText);
+    if (txt.includes('طوكيو')) throw new Error('الجواب ظل مكشوف بعد ما رجع وفتح من جديد');
+    if (!(await page.$('#reveal'))) throw new Error('زر «إظهار الإجابة» ما رجع');
+  });
+
+  await step('زر «إخفاء الإجابة» يخفيها ويرجّع زر الإظهار', async () => {
+    await setupQ();
+    await page.click('#reveal');
+    if (!(await page.$('#hide-answer'))) throw new Error('زر الإخفاء مو موجود بعد الكشف');
+    await page.click('#hide-answer');
+    const r = await page.evaluate(() => {
+      const t = state.pool.find(x => x.bankKey === null);
+      return { txt: document.body.innerText, revealed: !!t.questions[0].revealed,
+               open: !!state.activeCell, used: t.questions[0].usedBy };
+    });
+    if (r.txt.includes('طوكيو')) throw new Error('الجواب بعده ظاهر');
+    if (r.revealed) throw new Error('revealed ما انصفّر');
+    if (!r.open) throw new Error('النافذة انسكّرت — المفروض تظل مفتوحة');
+    if (r.used !== undefined) throw new Error('السؤال انحرق بالغلط');
+    if (!(await page.$('#reveal'))) throw new Error('زر «إظهار الإجابة» ما رجع');
+  });
+
+  await step('نافذة كتابة السؤال اليدوي بيها رجوع هي بعد', async () => {
+    await page.evaluate(() => {
+      state.customShareCode = null; state.reportTopic = null;
+      state.showAuthModal = false; state.showUpsellModal = false; state.showTermsModal = false;
+      state.pool = state.pool.filter(t => t.bankKey !== null);
+      const t = makeCustomTopic('فئة فاضية');   // أسئلتها بلا نص
+      state.pool.push(t);
+      state.selectedTopicIds = [t.id];
+      state.screen = 'board';
+      state.activeCell = { topicId: t.id, qId: t.questions[0].id };
+      render();
+    });
+    const txt = await page.evaluate(() => document.body.innerText);
+    if (!txt.includes('اكتب السؤال الآن')) throw new Error('مو شاشة الكتابة اليدوية');
+    if (!(await page.$('#q-close-live'))) throw new Error('ماكو زر رجوع بشاشة الكتابة');
+    await page.click('#q-close-live');
+    if (await page.evaluate(() => !!document.querySelector('.overlay')))
+      throw new Error('النافذة ظلت مفتوحة');
+  });
+
   console.log('\nأخطاء جافاسكربت غير متوقعة');
   if (errors.length) { console.log('  ✗ ' + errors.join('\n  ')); fail++; }
   else console.log('  ✓ ماكو أي خطأ بالصفحة');

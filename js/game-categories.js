@@ -527,6 +527,7 @@ function renderQuestionOverlay(){
 
   if(needsContent){
     const modal = el(`<div class="q-modal">
+      <button class="q-close" id="q-close-live" title="رجوع للوح" aria-label="رجوع للوح">✕</button>
       <div class="q-topic">${escapeAttr(topic.name)}</div>
       <div class="q-points">سؤال بـ ${q.points} نقطة</div>
       <div class="field" style="text-align:right;">
@@ -551,11 +552,17 @@ function renderQuestionOverlay(){
       if(state.timerEnabled) startTimer();
     };
     modal.querySelector('#live-submit').addEventListener('click', submit);
+    modal.querySelector('#q-close-live').addEventListener('click', ()=>{
+      stopTimer();
+      state.activeCell = null;
+      render();
+    });
     overlay.appendChild(modal);
     return overlay;
   }
 
   const modal = el(`<div class="q-modal">
+    <button class="q-close" id="q-close" title="رجوع للوح" aria-label="رجوع للوح">✕</button>
     <div class="q-topic">${escapeAttr(topic.name)}${
       topic.sharedCode
         ? ` <button class="q-report" title="بلّغ عن محتوى مسيء" aria-label="بلّغ عن محتوى مسيء">⚑</button>`
@@ -577,6 +584,9 @@ function renderQuestionOverlay(){
         <button class="btn btn-sm" style="background:var(--rose); color:#fff;" id="award-1">نقطة لـ ${escapeAttr(state.teams[1].name)}</button>
         <button class="btn btn-ghost btn-sm" id="award-none">بدون إجابة صحيحة</button>
       </div>
+      <div class="btn-row" style="justify-content:center; margin-top:14px;">
+        <button class="btn btn-ghost btn-sm" id="hide-answer">🙈 إخفاء الإجابة</button>
+      </div>
     ` : `
       <div class="btn-row" style="justify-content:center;">
                   <button class="btn btn-gold" id="reveal">${q.mediaType==='acting' ? '🎭 إظهار الكلمة' : 'إظهار الإجابة'}</button>
@@ -592,6 +602,16 @@ function renderQuestionOverlay(){
 
   wireSongPlayer(modal, q);
 
+  /* رجوع للوح بلا ما ينحرق السؤال — لو ضغط خلية غلط، أو انفتحت
+     الإجابة قبل الوقت. السؤال يبقى متاح لأن ما انلمس q.usedBy. */
+  modal.querySelector('#q-close').addEventListener('click', ()=>{
+    stopTimer();
+    q.revealed = false;                    // يرجع مخفي لو فتحه مرة ثانية
+    state.helpHints = {0:null, 1:null};    // التلميحات تخص هذا السؤال بس
+    state.activeCell = null;
+    render();
+  });
+
   if(!revealed){
     modal.querySelector('#reveal').addEventListener('click', ()=>{
       q.revealed = true;
@@ -603,6 +623,12 @@ function renderQuestionOverlay(){
     modal.querySelector('#award-0').addEventListener('click', ()=> awardPoints(0, topic, q));
     modal.querySelector('#award-1').addEventListener('click', ()=> awardPoints(1, topic, q));
     modal.querySelector('#award-none').addEventListener('click', ()=> awardPoints(null, topic, q));
+    /* يخفي الإجابة ويرجّع زر «إظهار الإجابة» — لو انكشفت والفريق
+       لسه يفكر، أو الكل ما شافها وتريد تعيدها */
+    modal.querySelector('#hide-answer').addEventListener('click', ()=>{
+      q.revealed = false;
+      render();
+    });
   }
 
   overlay.appendChild(modal);

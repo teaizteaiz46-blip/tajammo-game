@@ -272,7 +272,20 @@
     border:1px solid var(--gold-dim); border-radius:20px; padding:34px 30px;
     text-align:center; position:relative;
   }
-  .q-topic{color:var(--muted); font-size:14px; margin-bottom:6px;}
+  /* زر الرجوع — بالزاوية اليسرى العليا للنافذة (الواجهة RTL).
+     مساحة اللمس ٤٤px حسب توصية آبل حتى ما يضغطه غلط. */
+  .q-close{
+    position:absolute; top:12px; left:12px;
+    width:44px; height:44px; padding:0;
+    display:flex; align-items:center; justify-content:center;
+    background:transparent; border:1px solid var(--line); border-radius:12px;
+    color:var(--muted); font-size:18px; line-height:1; cursor:pointer;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .q-close:hover{border-color:var(--gold-dim); color:var(--ivory);}
+  .q-close:active{transform:scale(.94);}
+
+  .q-topic{color:var(--muted); font-size:14px; margin-bottom:6px; padding:0 56px;}
   .q-points{
     font-family:'Changa'; font-size:15px; color:#22190A; background:var(--gold);
     display:inline-block; padding:4px 16px; border-radius:20px; margin-bottom:20px;
