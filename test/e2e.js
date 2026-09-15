@@ -227,18 +227,82 @@ const CANNED_BANK = (() => {
       throw new Error('وصل ' + n + ' سؤال من ' + CANNED_BANK.length);
   });
 
-  console.log('\nالباقة المجانية عراقية');
-  await step('مواضيع الباقة المجانية كلها موجودة بالبنك', async () => {
+  console.log('\nماكو اشتراك — كل شي مفتوح');
+  await step('المواضيع العراقية كلها موجودة بالبنك', async () => {
     const missing = await page.evaluate(
       free => free.filter(t => !CATEGORY_TOPICS.includes(t)), FREE
     );
-    if (missing.length) throw new Error('مواضيع مجانية مفقودة من البنك: ' + missing.join(', '));
+    if (missing.length) throw new Error('مواضيع مفقودة من البنك: ' + missing.join(', '));
   });
-  await step('أغلب الباقة المجانية عراقي (٦ من ٨ على الأقل)', async () => {
-    const iraqi = await page.evaluate(() => FREE_TOPICS.filter(t => /عراق|بغداد|أمثال|لهجة/.test(t)).length);
-    const total = await page.evaluate(() => FREE_TOPICS.length);
-    if (iraqi < 6) throw new Error(`فقط ${iraqi} من ${total} مواضيع عراقية`);
+
+  await step('ماكو أي أثر لنظام الاشتراك بالكود', async () => {
+    const left = await page.evaluate(() => ({
+      isSub:  typeof isSubscribed,
+      free:   typeof FREE_TOPICS,
+      upsell: typeof openUpsell,
+      modal:  typeof renderUpsellOverlay
+    }));
+    const alive = Object.keys(left).filter(k => left[k] !== 'undefined');
+    if (alive.length) throw new Error('بقايا اشتراك: ' + alive.join(', '));
   });
+
+  await step('كل مواضيع البنك تنحط بالحوض بلا قفل', async () => {
+    const r = await page.evaluate(() => {
+      state.pool = [];
+      CATEGORY_TOPICS.forEach(t => state.pool.push(makeBankTopic(t)));
+      state.screen = 'editor'; render();
+      const txt = document.body.innerText;
+      return { pool: state.pool.length, bank: CATEGORY_TOPICS.length,
+               lock: txt.includes('🔒') || txt.includes('للمشتركين') };
+    });
+    if (r.pool !== r.bank) throw new Error('الحوض ' + r.pool + ' من ' + r.bank);
+    if (r.lock) throw new Error('لسه أكو قفل بشاشة المواضيع');
+  });
+
+  await step('الألعاب الثلاث تنفتح بلا حساب ولا قفل', async () => {
+    const r = await page.evaluate(() => {
+      state.user = null;
+      state.screen = 'hub'; render();
+      const txt = document.body.innerText;
+      const out = { lock: txt.includes('🔒') || txt.includes('للمشتركين'), opened: [] };
+      ['card-whoami','card-shd'].forEach(id => {
+        state.screen = 'hub'; render();
+        document.getElementById(id).click();
+        out.opened.push(state.screen);
+      });
+      return out;
+    });
+    if (r.lock) throw new Error('لسه أكو قفل بالصفحة الرئيسية');
+    if (r.opened[0] !== 'whoami-setup') throw new Error('«من أنا؟» ما انفتحت: ' + r.opened[0]);
+    if (r.opened[1] !== 'shd-setup')    throw new Error('«الحلفاء والشياطين» ما انفتحت: ' + r.opened[1]);
+  });
+
+  await step('الإعلانات ما تنتجاوز لأي لاعب', async () => {
+    const r = await page.evaluate(() => {
+      resetAdGates();
+      let shown = 0;
+      const real = window.showInterstitialAd;
+      window.showInterstitialAd = () => { shown++; };
+      const nativeReal = window.isNativeApp;
+      window.isNativeApp = () => true;
+      window.admobReady = true;
+      state.user = { uid:'x', name:'مشترك قديم', isSubscribed:true };
+      showBreakAd('start');
+      window.showInterstitialAd = real; window.isNativeApp = nativeReal;
+      return { shown };
+    });
+    // admobReady متغيّر داخلي ما ينكتب من برا، فالمهم إن ماكو شرط اشتراك يمنع
+    const src = await page.evaluate(() => showBreakAd.toString());
+    if (/isSubscribed/.test(src)) throw new Error('لسه أكو شرط اشتراك يمنع الإعلان');
+  });
+
+  /* هذي الاختبارات نقلت الشاشة — نرجّعها لشاشة المواضيع
+     لأن اللي بعدها يشتغل عليها */
+  await page.evaluate(() => {
+    state.user = null;               // اختبار الإعلانات خلّى لاعب مسجّل
+    state.screen = 'editor'; state.history = []; render();
+  });
+  await page.waitForSelector('#ct-code', { timeout: 8000 });
 
   console.log('\nالاستيراد بالكود');
   await step('كود غلط → رسالة واضحة', async () => {
@@ -419,7 +483,7 @@ const CANNED_BANK = (() => {
   await step('الحفظ يفتح نافذة الشروط أول (سياسة Google)', async () => {
     await page.evaluate(() => {
       window.__signedIn = true;
-      state.user = { uid:'u1', name:'test', isSubscribed:true, termsAcceptedAt:null, coins:500 };
+      state.user = { uid:'u1', name:'test', termsAcceptedAt:null, coins:500 };
       state.customDraft = newCustomDraft();
       state.customDraft.name = 'فئة شروط';
       state.customDraft.questions.forEach((q,i) => { q.question='س'+i; q.answer='ج'+i; });
@@ -458,7 +522,7 @@ const CANNED_BANK = (() => {
   console.log('\nالكوينات');
   await step('رصيد ناقص يمنع النشر ويقول كم باقي', async () => {
     await page.evaluate(() => {
-      state.user = { uid:'u2', name:'فقير', isSubscribed:true,
+      state.user = { uid:'u2', name:'فقير',
                      termsAcceptedAt:'2026-01-01T00:00:00Z', coins:40 };
       state.customShareCode = null;
       state.customError = '';
@@ -534,7 +598,7 @@ const CANNED_BANK = (() => {
     if (missing.length) throw new Error('مفقودة: ' + missing.join(', '));
   });
   await step('شاشة تجهيز اللاعبين ترسم محتوى (مو فاضية)', async () => {
-    await page.evaluate(() => { state.user = {uid:'t',name:'test',isSubscribed:true}; goto('whoami-setup'); });
+    await page.evaluate(() => { state.user = {uid:'t',name:'test'}; goto('whoami-setup'); });
     await page.waitForTimeout(300);
     const info = await page.evaluate(() => {
       const app = document.getElementById('app');

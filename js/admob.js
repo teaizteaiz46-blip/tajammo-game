@@ -96,7 +96,6 @@ function resetAdGates(){
 function showBreakAd(slot){
   if(!isNativeApp() || !admobReady) return;
   if(adShown[slot]) return;
-  if(state.user && state.user.isSubscribed) return;   // المشترك ما يشوف إعلانات
   adShown[slot] = true;
   showInterstitialAd();
 }

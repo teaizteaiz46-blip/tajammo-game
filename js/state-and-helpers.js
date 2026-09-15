@@ -11,8 +11,6 @@ const state = {
   authMode: 'signin',
   authError: '',
   authBusy: false,
-  showUpsellModal: false,
-  upsellMessage: '',
   categoryDataLoaded: false,
   categoryDataError: '',
 
@@ -81,28 +79,8 @@ let uid = 1;
 const nextId = () => 'id' + (uid++);
 
 /* ============================ SUBSCRIPTION ============================ */
-/* الباقة المجانية مقصود تكون عراقية بالأغلب: هذا اللي يميّزنا عن التطبيقات
-   الخليجية، فلازم يشوفه اللاعب قبل ما يدفع — مو نخبّيه وراء الاشتراك. */
-const FREE_TOPICS = [
-  'أمثال عراقية',
-  'لهجة عراقية',
-  'أكل عراقي',
-  'بغداد',
-  'محافظات العراق',
-  'تاريخ العراق',
-  'معلومات عامة',
-  'رياضة'
-];
-
-function isSubscribed(){
-  return !!(state.user && state.user.isSubscribed);
-}
-
-function openUpsell(message){
-  state.upsellMessage = message;
-  state.showUpsellModal = true;
-  render();
-}
+/* ماكو اشتراك ولا قفل: كل المواضيع وكل الألعاب مفتوحة للجميع،
+   والدخل كله من الإعلانات. */
 
 /* ============================ HELPERS ============================ */
 function makeCustomTopic(name){
