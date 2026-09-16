@@ -166,6 +166,30 @@ function unblockAuthor(key){
   saveBlockedAuthors(loadBlockedAuthors().filter(a => a.key !== key));
 }
 
+/* ================= تنظيف حالة الحساب عند الخروج =================
+   بلا هذا تضل «فئاتي المحفوظة» ظاهرة وأزرارها شغّالة بعد تسجيل الخروج،
+   لأن الشاشة ترسم من state.myCustomTopics مو من state.user.
+   الفئات المستوردة بكود من ناشر ثاني تبقى — الاستيراد ما يحتاج حساب. */
+function clearUserScopedState(){
+  const myCodes = (state.myCustomTopics || []).map(t => t.share_code).filter(Boolean);
+  if(myCodes.length){
+    state.pool = state.pool.filter(t => !(t.sharedCode && myCodes.indexOf(t.sharedCode) !== -1));
+  }
+  state.myCustomTopics = [];
+  state.myCustomLoading = false;
+  state.customDraft = null;
+  state.customShareCode = '';
+  state.customError = '';
+  state.customSaving = false;
+  state.showAccountModal = false;
+  state.accountDeleteStep = false;
+  state.accountDeleteTyped = '';
+  state.accountError = '';
+  state.accountBusy = false;
+  state.lastReward = null;
+  state.statsRecordedForThisGame = false;
+}
+
     function goto(screen){ if(state.screen!==screen) state.history.push(state.screen); state.screen = screen; render(); window.scrollTo({top:0, behavior:'smooth'}); }
     function goBack(){ if(state.history.length){ state.screen = state.history.pop(); render(); window.scrollTo({top:0, behavior:'smooth'}); } }
 

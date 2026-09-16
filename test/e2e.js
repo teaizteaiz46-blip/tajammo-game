@@ -1160,6 +1160,58 @@ const CANNED_BANK = (() => {
     if (still) throw new Error('إلغاء الحظر ما اشتغل');
   });
 
+  console.log('\nتسجيل الخروج ينظّف بيانات الحساب');
+  await step('قبل الخروج: «فئاتي المحفوظة» ظاهرة', async () => {
+    await page.evaluate(() => {
+      state.user = { uid:'u10', name:'أمير', coins: 50, gamesPlayed: 1 };
+      state.myCustomTopics = [
+        { id:'t1', name:'شباب تجربة', share_code:'PZVDBA', plays_count:0,
+          custom_topic_questions:[{question:'س',answer:'ج',points:100,sort_order:1}] }
+      ];
+      // فئة مالته بالحوض + فئة مستوردة من ناشر ثاني
+      state.pool.push(makeCustomTopicFromData('شباب تجربة',
+        [{question:'س',answer:'ج',points:100}], 'PZVDBA'));
+      state.pool.push(makeCustomTopicFromData('فئة ضيف',
+        [{question:'س',answer:'ج',points:100}], 'GUEST1', 'author-other', 'ناشر ثاني'));
+      state.screen = 'editor'; state.history = []; render();
+    });
+    const txt = await page.evaluate(() => document.body.innerText);
+    if (!txt.includes('فئاتي المحفوظة')) throw new Error('القائمة مو ظاهرة وهو مسجّل دخول');
+  });
+
+  await step('بعد الخروج: القائمة تختفي وفئته تنشال من الحوض', async () => {
+    await page.evaluate(() => { state.user = null; clearUserScopedState(); render(); });
+    const r = await page.evaluate(() => ({
+      txt: document.body.innerText,
+      saved: state.myCustomTopics.length,
+      mine: state.pool.filter(t => t.sharedCode === 'PZVDBA').length,
+      guest: state.pool.filter(t => t.sharedCode === 'GUEST1').length
+    }));
+    if (r.txt.includes('فئاتي المحفوظة')) throw new Error('القائمة باقية بعد تسجيل الخروج');
+    if (r.saved !== 0) throw new Error('myCustomTopics ما انمسحت: ' + r.saved);
+    if (r.mine !== 0) throw new Error('فئة الحساب باقية بالحوض بعد الخروج');
+    if (r.guest !== 1) throw new Error('الفئة المستوردة انشالت غلط — الاستيراد ما يحتاج حساب');
+  });
+
+  await step('الرجوع لشاشة سابقة ما يرجّع القائمة (state.user هو الحارس)', async () => {
+    const shown = await page.evaluate(() => {
+      // نحاكي حالة قديمة باقية بالذاكرة مع لاعب مو مسجّل
+      state.myCustomTopics = [{ id:'t1', name:'شباب تجربة', share_code:'PZVDBA',
+        plays_count:0, custom_topic_questions:[] }];
+      state.screen = 'editor'; render();
+      const visible = document.body.innerText.includes('فئاتي المحفوظة');
+      state.myCustomTopics = [];
+      render();
+      return visible;
+    });
+    if (shown) throw new Error('القائمة طلعت بلا حساب — الحارس مو شغّال');
+  });
+
+  await page.evaluate(() => {
+    state.pool = state.pool.filter(t => t.bankKey !== null);
+    state.screen = 'editor'; state.history = []; render();
+  });
+
   console.log('\nمقاطع الأغاني — شروط متجر آبل');
   await step('على أندرويد: السؤال يبقى صوتي ويستعمل مقطع المتجر', async () => {
     const r = await page.evaluate(() => {

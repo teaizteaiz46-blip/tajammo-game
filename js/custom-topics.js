@@ -277,6 +277,7 @@ async function deleteMyCustomTopic(id) {
 }
 
 function addSavedTopicToPool(saved) {
+  if (!state.user) return;   // فئات الحساب ما تنضاف بعد الخروج
   const qs = (saved.custom_topic_questions || [])
     .slice()
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -465,10 +466,12 @@ function renderCustomTopicsPanel() {
   imp.querySelector('#ct-import').addEventListener('click', () => importCustomTopicByCode(state.importCode));
   wrap.appendChild(imp);
 
-  /* قائمة فئاتي المحفوظة */
-  if (state.myCustomLoading) {
+  /* قائمة فئاتي المحفوظة — تنعرض بس للمسجّل دخوله.
+     شرط state.user ضروري حتى لو انمسحت القائمة عند الخروج: الشاشة
+     ما تنرسم من جديد بكل خطوة رجوع، فالحارس هنا هو الضمان الأكيد. */
+  if (state.user && state.myCustomLoading) {
     wrap.appendChild(el(`<div class="panel"><div class="section-sub" style="margin:0;">...جاري تحميل فئاتك</div></div>`));
-  } else if (state.myCustomTopics && state.myCustomTopics.length) {
+  } else if (state.user && state.myCustomTopics && state.myCustomTopics.length) {
     const panel = el(`<div class="panel">
       <div class="section-title" style="font-size:16px;">فئاتي المحفوظة</div>
     </div>`);

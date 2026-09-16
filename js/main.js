@@ -4,6 +4,7 @@ if(sb){
       state.user = await loadOrCreateProfile(session.user);
     } else {
       state.user = null;
+      clearUserScopedState();
     }
     render();
   });
