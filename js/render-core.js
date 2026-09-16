@@ -132,7 +132,9 @@ function renderHub(){
   const wrap = el(`<div>
     <div class="hero">
       <div class="bulb-row">${'<i></i>'.repeat(9)}</div>
-      <h1>تجمّ<span>ع</span></h1>
+      <!-- &zwj; ضروري: ويب‌كِت (آيفون) يشكّل كل عنصر نصّي لحاله فينكسر وصل الحروف
+           بين «تجمّ» و«ع». الواصل غير المرئي يجبر الميم والعين ياخذون شكلهم الموصول. -->
+      <h1>تجمّ&zwj;<span>&zwj;ع</span></h1>
       <p>${state.user ? `أهلاً ${escapeAttr(state.user.name)} — لعبت ${state.user.gamesPlayed||0} لعبة` : 'اختاروا لعبة والعبوها سوا'}</p>
     </div>
 
