@@ -63,15 +63,16 @@
     background:radial-gradient(circle, rgba(212,168,87,0.18), transparent 70%);
     pointer-events:none;
   }
+  /* الاسم ذهبي كامل — نفس لون أيقونة التطبيق، فالعلامة وحدة بالمتجر وداخل اللعبة.
+     لا تقسّم الكلمة بـ<span> لتلوين حرف: ويب‌كِت يكسر تشكيل الحروف العربية. */
   .hero h1{
     font-family:'Changa', sans-serif;
     font-weight:800;
     font-size:clamp(42px,8vw,68px);
     margin:0 0 6px;
-    color:var(--ivory);
+    color:var(--gold);
     position:relative;
   }
-  .hero h1 span{color:var(--gold);}
   .hero p{color:var(--muted); font-size:16px; margin:0; position:relative;}
 
   .bulb-row{

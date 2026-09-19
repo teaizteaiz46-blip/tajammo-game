@@ -76,6 +76,9 @@
 	<!-- شبكات الإعلانات لتتبع التحويلات بلا تعريف المستخدم (SKAdNetwork) -->
 	<key>SKAdNetworkItems</key>
 	<array>
+		<!-- TikTok for Business — ناقصة من قائمة AdMob، ضرورية لإسناد تثبيتات حملات تيك توك -->
+		<dict><key>SKAdNetworkIdentifier</key><string>238da6jt44.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>mlmmfzh3r3.skadnetwork</string></dict>
 		<dict><key>SKAdNetworkIdentifier</key><string>cstr6suwn9.skadnetwork</string></dict>
 		<dict><key>SKAdNetworkIdentifier</key><string>4fzdc2evr5.skadnetwork</string></dict>
 		<dict><key>SKAdNetworkIdentifier</key><string>2fnua5tdw4.skadnetwork</string></dict>

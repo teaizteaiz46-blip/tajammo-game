@@ -973,6 +973,24 @@ const CANNED_BANK = (() => {
   });
 
   console.log('\nالشاشة الرئيسية الجديدة');
+  await step('اسم التطبيق نص واحد بلا تقسيم (ينكسر تشكيله على الآيفون)', async () => {
+    const r = await page.evaluate(() => {
+      const h = document.querySelector('.hero h1');
+      if (!h) return null;
+      return {
+        text: h.textContent,
+        childEls: h.children.length,
+        nodes: h.childNodes.length,
+        zwj: /‍/.test(h.textContent)
+      };
+    });
+    if (!r) throw new Error('عنوان الشاشة الرئيسية مو موجود');
+    if (r.text !== 'تجمّع') throw new Error('نص الاسم تغيّر: ' + JSON.stringify(r.text));
+    if (r.childEls !== 0) throw new Error('الاسم مقسوم على ' + r.childEls + ' عنصر — يكسر وصل الحروف بويب‌كِت');
+    if (r.nodes !== 1) throw new Error('الاسم مقسوم على ' + r.nodes + ' عقدة نصية');
+    if (r.zwj) throw new Error('بقى حرف ZWJ بالاسم — ما عاد له داعي بعد إلغاء التقسيم');
+  });
+
   await step('بطاقة مميزة + شبكة + خانتين «قريباً»', async () => {
     const r = await page.evaluate(() => ({
       feature: !!document.querySelector('.feature-card#card-cat'),
