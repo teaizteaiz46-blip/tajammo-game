@@ -545,7 +545,7 @@ function wireHelpButtons(modal, topic, q){
 
       if(type==='swap'){
         if(topic.bankKey){
-                  const fresh = pickFromTier((CATEGORY_DATA[topic.bankKey]||{})[q.points]||[], bankUsage[topic.bankKey][q.points], 1)[0];
+          const fresh = pickFromTier((CATEGORY_DATA[topic.bankKey]||{})[q.points]||[], topic.bankKey, q.points, 1)[0];
           if(fresh){ q.text = fresh.text; q.answer = fresh.answer; q.image = fresh.image; }
         }
         team.helps--;

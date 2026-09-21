@@ -1,7 +1,6 @@
 /* ============================ CATEGORY QUESTION BANK (Supabase) ============================ */
 let CATEGORY_TOPICS = [];
 let CATEGORY_DATA = {};
-const bankUsage = {};
 
 /* Supabase يحدد سقف الصفوف لكل طلب (غالباً ١٠٠٠)، فـ limit=2000 كان يقطع
    البنك بصمت وتضيع مواضيع كاملة. نجيبه على صفحات لحد ما يخلص. */
@@ -147,12 +146,54 @@ function shuffled(arr){
   for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
   return a;
 }
-function pickFromTier(tier, usedSet, n){
+/* ذاكرة الأسئلة اللي طلعت: تنحفظ بالجهاز فتبقى بين الكيمات حتى لو
+   انسدّ التطبيق. كل سؤال ينحفظ بوقت ظهوره، ويرجع يصير متاح بعد
+   USED_QUESTIONS_TTL — يعني تجمّع وحد ما تتكرر بيه الأسئلة، وباچر تنفتح من جديد.
+   المفتاح مبني على نص السؤال مو ترتيبه، فتحديث البنك ما يخربط الحساب. */
+const USED_QUESTIONS_KEY = 'tajammo.usedQuestions.v1';
+const USED_QUESTIONS_TTL = 12 * 60 * 60 * 1000;
+let usedQuestions = null;   // { مفتاح: وقت الظهور }
+
+function questionKey(topicName, pts, q){
+  const s = topicName + '|' + pts + '|' + (q.text || '') + '|' + (q.answer || '') + '|' + (q.image || '');
+  let h = 5381;
+  for(let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36) + s.length.toString(36);
+}
+
+function loadUsedQuestions(){
+  if(usedQuestions) return usedQuestions;
+  usedQuestions = {};
+  try{
+    const raw = JSON.parse(localStorage.getItem(USED_QUESTIONS_KEY) || '{}');
+    const now = Date.now();
+    Object.keys(raw).forEach(k=>{ if(now - raw[k] < USED_QUESTIONS_TTL) usedQuestions[k] = raw[k]; });
+  }catch(e){ /* ذاكرة تالفة أو ممنوعة — نبدي من الصفر */ }
+  return usedQuestions;
+}
+
+function saveUsedQuestions(){
+  try{ localStorage.setItem(USED_QUESTIONS_KEY, JSON.stringify(usedQuestions || {})); }
+  catch(e){ /* الذاكرة ممتلئة — نكمل بالذاكرة المؤقتة بس */ }
+}
+
+function pickFromTier(tier, topicName, pts, n){
   tier = tier || [];
-  let avail = tier.map((_,i)=>i).filter(i=>!usedSet.has(i));
-  if(avail.length < n){ usedSet.clear(); avail = tier.map((_,i)=>i); }
-  const chosen = shuffled(avail).slice(0,n);
-  chosen.forEach(i=>usedSet.add(i));
+  const used = loadUsedQuestions();
+  const now = Date.now();
+  const keys = tier.map(q=> questionKey(topicName, pts, q));
+  const isFresh = i => !used[keys[i]] || now - used[keys[i]] >= USED_QUESTIONS_TTL;
+
+  let chosen = shuffled(tier.map((_,i)=>i).filter(isFresh)).slice(0, n);
+  if(chosen.length < n){
+    /* الفئة خلصت أسئلتها الجديدة — نكمّل بالأقدم ظهوراً حتى يبقى التكرار أبعد ما يمكن */
+    const oldest = tier.map((_,i)=>i)
+      .filter(i=> chosen.indexOf(i) < 0)
+      .sort((a,b)=> (used[keys[a]]||0) - (used[keys[b]]||0));
+    chosen = chosen.concat(oldest.slice(0, n - chosen.length));
+  }
+  chosen.forEach(i=>{ used[keys[i]] = now; });
+  saveUsedQuestions();
   return chosen.map(i=>tier[i]);
 }
 /* أسئلة الأغاني تشتغل بتشغيل مقطع ٣٠ ثانية من متجر آبل (iTunes Search API).
@@ -176,13 +217,12 @@ function songQuestionToText(q){
 }
 
 function pickQuestionsForBankTopic(topicName){
-  if(!bankUsage[topicName]) bankUsage[topicName] = { 100:new Set(), 200:new Set(), 400:new Set(), 600:new Set() };
   const bank = CATEGORY_DATA[topicName] || {};
   const counts = { 100:2, 200:2, 400:1, 600:1 };
   const noSongClips = (typeof currentPlatform === 'function') && currentPlatform() === 'ios';
   const result = [];
   [100,200,400,600].forEach(pts=>{
-    const picked = pickFromTier(bank[pts], bankUsage[topicName][pts], counts[pts]);
+    const picked = pickFromTier(bank[pts], topicName, pts, counts[pts]);
     picked.forEach(raw=>{
       const q = noSongClips ? songQuestionToText(raw) : raw;
       result.push({ id:nextId(), text:q.text, answer:q.answer, points:pts, image:q.image, mediaType:q.mediaType, clipStart:q.clipStart, clipSeconds:q.clipSeconds });
