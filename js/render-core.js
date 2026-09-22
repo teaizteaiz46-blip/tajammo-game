@@ -60,6 +60,15 @@ function renderScreen(){
     case 'shd-reveal':    return renderShdReveal();
     case 'shd-winner':    return renderShdWinner();
     case 'shd-end':       return renderShdEnd();
+    case 'spy-setup':     return renderSpySetup();
+    case 'spy-reveal':    return renderSpyReveal();
+    case 'spy-play':      return renderSpyPlay();
+    case 'spy-vote':      return renderSpyVote();
+    case 'spy-result':    return renderSpyResult();
+    case 'bomb-setup':    return renderBombSetup();
+    case 'bomb-play':     return renderBombPlay();
+    case 'bomb-out':      return renderBombOut();
+    case 'bomb-end':      return renderBombEnd();
     default:              return renderHub();
   }
 }
@@ -75,6 +84,8 @@ function renderTopbar(){
   bar.querySelector('.brand').addEventListener('click', ()=>{
     stopTimer();
     stopWhoamiTimer();
+    stopSpyTimer();
+    stopBombTicker();
     goto('hub');
   });
     
@@ -94,8 +105,16 @@ function renderTopbar(){
     'shd-roles':'الحلفاء والشياطين · تحديد الأدوار',
     'shd-reveal':'الحلفاء والشياطين · توزيع الأدوار',
     'shd-winner':'الحلفاء والشياطين · تحديد الفائز',
-    'shd-end':'الحلفاء والشياطين · النتيجة'
-    
+    'shd-end':'الحلفاء والشياطين · النتيجة',
+    'spy-setup':'من الدخيل؟ · تجهيز',
+    'spy-reveal':'من الدخيل؟ · توزيع الأوراق',
+    'spy-play':'من الدخيل؟ · النقاش',
+    'spy-vote':'من الدخيل؟ · التصويت',
+    'spy-result':'من الدخيل؟ · النتيجة',
+    'bomb-setup':'القنبلة الموقوتة · تجهيز',
+    'bomb-play':'القنبلة الموقوتة · اللعب',
+    'bomb-out':'القنبلة الموقوتة · انفجار',
+    'bomb-end':'القنبلة الموقوتة · النتيجة'
   };
   if(crumbMap[state.screen]) bar.querySelector('.crumb').textContent = crumbMap[state.screen];
 
@@ -168,26 +187,32 @@ function renderHub(){
         <h3>الحلفاء والشياطين</h3>
         <small>٥-١٠ لاعبين<br>فريقين بالسر</small>
       </div>
-      <div class="game-tile soon">
+      <div class="game-tile" id="card-spy">
         <svg class="tile-ico" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-          <rect x="8" y="8" width="32" height="32" rx="8" stroke="#8FB3AC" stroke-width="2.4"/>
-          <path d="M24 17v14M17 24h14" stroke="#8FB3AC" stroke-width="2.8" stroke-linecap="round"/>
+          <circle cx="17" cy="21" r="7" stroke="#6FA287" stroke-width="2.4"/>
+          <circle cx="33" cy="21" r="7" stroke="#C1443A" stroke-width="2.4"/>
+          <path d="M24 21h2M4 17h6M38 17h6" stroke="#8FB3AC" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M14 35h20" stroke="#D4A857" stroke-width="2.8" stroke-linecap="round"/>
         </svg>
-        <h3>لعبة جديدة</h3>
-        <span class="soon-badge">قريباً</span>
+        <h3>من الدخيل؟</h3>
+        <small>٤-١٢ لاعب<br>واحد ما يعرف المكان</small>
       </div>
-      <div class="game-tile soon">
+      <div class="game-tile" id="card-bomb">
         <svg class="tile-ico" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-          <rect x="8" y="8" width="32" height="32" rx="8" stroke="#8FB3AC" stroke-width="2.4"/>
-          <path d="M24 17v14M17 24h14" stroke="#8FB3AC" stroke-width="2.8" stroke-linecap="round"/>
+          <circle cx="21" cy="29" r="12" stroke="#6FA287" stroke-width="2.4"/>
+          <path d="M30 20.5l4.5-4.5" stroke="#D4A857" stroke-width="2.8" stroke-linecap="round"/>
+          <path d="M34.5 16c2-2.4 5.5-1.2 5.5 1.8" stroke="#C1443A" stroke-width="2.4" stroke-linecap="round"/>
+          <circle cx="41" cy="12" r="2.6" fill="#C1443A"/>
         </svg>
-        <h3>لعبة جديدة</h3>
-        <span class="soon-badge">قريباً</span>
+        <h3>القنبلة الموقوتة</h3>
+        <small>٣-١٢ لاعب<br>فتيل مخفي وعشوائي</small>
       </div>
     </div>
   </div>`);
   wrap.querySelector('#card-cat').addEventListener('click', ()=> openCategoryGame());
   wrap.querySelector('#card-whoami').addEventListener('click', ()=> goto('whoami-setup'));
   wrap.querySelector('#card-shd').addEventListener('click', ()=> goto('shd-setup'));
+  wrap.querySelector('#card-spy').addEventListener('click', ()=> goto('spy-setup'));
+  wrap.querySelector('#card-bomb').addEventListener('click', ()=> goto('bomb-setup'));
   return wrap;
 }

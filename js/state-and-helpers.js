@@ -84,7 +84,44 @@ const state = {
   shdRevealIndex: 0,
   shdRevealShown: false,
   shdWinner: null,
-  shdScores: {}
+  shdScores: {},
+
+  // من الدخيل؟
+  spyPlayerCount: 5,
+  spyPlayerNames: [],
+  spyPlayers: [],
+  spySpyCount: 1,
+  spyPlace: '',
+  spyPool: [],
+  spyRevealIndex: 0,
+  spyRevealShown: false,
+  spyMinutes: 6,
+  spyTimerLeft: 0,
+  spyTimerHandle: null,
+  spyVotes: {},
+  spyVoteIndex: 0,
+  spyRoundResult: null,
+  spyScores: {},
+  spyLoading: false,
+  spyError: '',
+
+  // القنبلة الموقوتة
+  bombPlayerCount: 5,
+  bombPlayerNames: [],
+  bombPlayers: [],
+  bombKnockedOut: [],
+  bombCategory: '',
+  bombMinSec: 20,
+  bombMaxSec: 60,
+  bombFuseMs: 0,      // الفتيل العشوائي — ما ينعرض أبداً للاعبين
+  bombStartAt: 0,
+  bombHandle: null,
+  bombCurrent: 0,
+  bombExploded: false,
+  bombLoserIndex: null,
+  bombWinner: null,
+  bombLoading: false,
+  bombError: ''
 };
 
 let uid = 1;

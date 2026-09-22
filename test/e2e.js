@@ -99,6 +99,18 @@ window.supabase = {
         return { data: null, error: { message: 'unknown rpc ' + name } };
       },
       from: function(table){
+        if(table === 'party_items'){
+          var items = [];
+          for(var s1=1;s1<=30;s1++) items.push({game:'spy', text:'مكان '+s1});
+          for(var b1=1;b1<=20;b1++) items.push({game:'bomb', text:'اذكر شي '+b1});
+          var c3 = {
+            select: function(){ return c3; },
+            eq: function(){ return c3; },
+            limit: function(){ return Promise.resolve({ data: items, error: null }); },
+            then: function(r){ return Promise.resolve({ data: items, error: null }).then(r); }
+          };
+          return c3;
+        }
         if(table === 'whoami_characters'){
           var names = [];
           for(var i=1;i<=40;i++) names.push({name:'شخصية '+i});
@@ -991,20 +1003,37 @@ const CANNED_BANK = (() => {
     if (r.zwj) throw new Error('بقى حرف ZWJ بالاسم — ما عاد له داعي بعد إلغاء التقسيم');
   });
 
-  await step('بطاقة مميزة + شبكة + خانتين «قريباً»', async () => {
+  /* الخانتين «قريباً» انبدلوا بـ«من الدخيل؟» و«القنبلة الموقوتة»،
+     فالشبكة صارت أربع ألعاب شغّالة بلا أي خانة فاضية. */
+  await step('بطاقة مميزة + شبكة أربع ألعاب شغّالة', async () => {
     const r = await page.evaluate(() => ({
       feature: !!document.querySelector('.feature-card#card-cat'),
       cta: !!document.querySelector('.feature-cta'),
       tiles: document.querySelectorAll('.game-grid .game-tile').length,
       soon: document.querySelectorAll('.game-grid .game-tile.soon').length,
       whoami: !!document.querySelector('.game-tile#card-whoami'),
-      shd: !!document.querySelector('.game-tile#card-shd')
+      shd: !!document.querySelector('.game-tile#card-shd'),
+      spy: !!document.querySelector('.game-tile#card-spy'),
+      bomb: !!document.querySelector('.game-tile#card-bomb')
     }));
     if (!r.feature) throw new Error('البطاقة المميزة مو موجودة');
     if (!r.cta) throw new Error('زر «العب الآن» مو موجود');
     if (r.tiles !== 4) throw new Error('عدد خانات الشبكة: ' + r.tiles);
-    if (r.soon !== 2) throw new Error('عدد خانات «قريباً»: ' + r.soon);
-    if (!r.whoami || !r.shd) throw new Error('لعبة ناقصة من الشبكة');
+    if (r.soon !== 0) throw new Error('بعده أكو خانة «قريباً»: ' + r.soon);
+    if (!r.whoami || !r.shd || !r.spy || !r.bomb) throw new Error('لعبة ناقصة من الشبكة');
+  });
+
+  await step('كل مربع باللعبة يفتح شاشته', async () => {
+    const r = await page.evaluate(() => {
+      const out = {};
+      document.querySelector('#card-spy').click();  out.spy = state.screen;
+      goto('hub');
+      document.querySelector('#card-bomb').click(); out.bomb = state.screen;
+      goto('hub');
+      return out;
+    });
+    if (r.spy !== 'spy-setup') throw new Error('مربع الدخيل فتح: ' + r.spy);
+    if (r.bomb !== 'bomb-setup') throw new Error('مربع القنبلة فتح: ' + r.bomb);
   });
 
   await step('رسمة البطاقة المميزة تنحمّل فعلاً', async () => {
@@ -1380,6 +1409,230 @@ const CANNED_BANK = (() => {
       if (!keys.includes(k)) throw new Error('مفتاح ناقص: ' + k);
     const n = await page.$$eval('#helps-count', els => els.length);
     if (n !== 1) throw new Error('خانة عدد المساعدات مو موجودة');
+  });
+
+  console.log('\nألعاب القعدة الجديدة (الدخيل + القنبلة)');
+
+  await step('مربعي «قريباً» انبدلوا بلعبتين حقيقيتين', async () => {
+    const r = await page.evaluate(() => {
+      goto('hub');
+      return {
+        spy: !!document.querySelector('#card-spy'),
+        bomb: !!document.querySelector('#card-bomb'),
+        soon: document.querySelectorAll('.game-tile.soon').length
+      };
+    });
+    if (!r.spy) throw new Error('مربع «من الدخيل؟» مو موجود');
+    if (!r.bomb) throw new Error('مربع «القنبلة» مو موجود');
+    if (r.soon !== 0) throw new Error('بعده أكو ' + r.soon + ' مربع «قريباً»');
+  });
+
+  await step('كلمات اللعبتين تنزل وتنخزن بالجهاز', async () => {
+    const r = await page.evaluate(async () => {
+      localStorage.removeItem('tajammo.partyItems.v1');
+      partyItems = { spy: [], bomb: [] };
+      const ok = await ensurePartyItems('spy');
+      const cached = JSON.parse(localStorage.getItem('tajammo.partyItems.v1') || 'null');
+      return { ok, spy: partyItems.spy.length, bomb: partyItems.bomb.length,
+               cachedSpy: cached ? cached.spy.length : 0 };
+    });
+    if (!r.ok) throw new Error('ensurePartyItems رجّعت false');
+    if (r.spy !== 30 || r.bomb !== 20) throw new Error('عدد الكلمات: ' + r.spy + '/' + r.bomb);
+    if (r.cachedSpy !== 30) throw new Error('ما انخزنت بالجهاز: ' + r.cachedSpy);
+  });
+
+  await step('التحديث يستبدل النسخة المخزونة مو يضيف عليها (المحذوف يختفي)', async () => {
+    const r = await page.evaluate(async () => {
+      // نحط كلمة وهمية بالمخزون كأنها انمسحت من السيرفر
+      partyItems.spy.push('مكان انمسح من السيرفر');
+      savePartyCache();
+      const beforeN = partyItems.spy.length;
+      await fetchPartyItems();
+      return { beforeN, afterN: partyItems.spy.length,
+               stillThere: partyItems.spy.indexOf('مكان انمسح من السيرفر') !== -1 };
+    });
+    if (r.stillThere) throw new Error('الكلمة الممسوحة بقت بعد التحديث — يعني ندمج مو نستبدل');
+    if (r.afterN !== 30) throw new Error('العدد بعد التحديث: ' + r.afterN);
+  });
+
+  await step('من الدخيل: توزيع الأوراق يعطي دخيل واحد والباقي نفس المكان', async () => {
+    const r = await page.evaluate(() => {
+      state.spyPlayerCount = 6;
+      state.spySpyCount = 1;
+      state.spyPlayerNames = [];
+      startSpyRound();
+      return {
+        screen: state.screen,
+        n: state.spyPlayers.length,
+        spies: state.spyPlayers.filter(p => p.isSpy).length,
+        place: state.spyPlace,
+        poolN: state.spyPool.length,
+        placeInPool: state.spyPool.indexOf(state.spyPlace) !== -1
+      };
+    });
+    if (r.screen !== 'spy-reveal') throw new Error('ما راح لشاشة التوزيع: ' + r.screen);
+    if (r.n !== 6) throw new Error('عدد اللاعبين: ' + r.n);
+    if (r.spies !== 1) throw new Error('عدد الدخلاء: ' + r.spies);
+    if (r.poolN !== 12) throw new Error('حجم قائمة الأماكن: ' + r.poolN);
+    if (!r.placeInPool) throw new Error('المكان الحقيقي مو ضمن القائمة المعروضة — الدخيل ما عنده فرصة');
+  });
+
+  await step('من الدخيل: ورقة الدخيل ما تكشف المكان', async () => {
+    const r = await page.evaluate(() => {
+      const spyIdx = state.spyPlayers.findIndex(p => p.isSpy);
+      state.spyRevealIndex = spyIdx;
+      state.spyRevealShown = true;
+      render();
+      const txt = document.querySelector('#app').textContent;
+      return { showsSpy: txt.indexOf('أنت الدخيل') !== -1, leaks: txt.indexOf(state.spyPlace) !== -1 };
+    });
+    if (!r.showsSpy) throw new Error('ما طلعت له «أنت الدخيل»');
+    if (r.leaks) throw new Error('المكان انكشف بورقة الدخيل');
+  });
+
+  await step('من الدخيل: ورقة اللاعب العادي تكشف المكان', async () => {
+    const r = await page.evaluate(() => {
+      const norm = state.spyPlayers.findIndex(p => !p.isSpy);
+      state.spyRevealIndex = norm;
+      state.spyRevealShown = true;
+      render();
+      const txt = document.querySelector('#app').textContent;
+      return { shows: txt.indexOf(state.spyPlace) !== -1, saysSpy: txt.indexOf('أنت الدخيل') !== -1 };
+    });
+    if (!r.shows) throw new Error('المكان ما ظهر للاعب العادي');
+    if (r.saysSpy) throw new Error('طلعت له «أنت الدخيل» وهو مو دخيل');
+  });
+
+  await step('من الدخيل: ماكو أحد يصوّت على نفسه', async () => {
+    const r = await page.evaluate(() => {
+      state.spyVoteIndex = 0;
+      state.spyVotes = {};
+      goto('spy-vote');
+      const btns = [...document.querySelectorAll('#sp-vote-grid .vote-btn')].map(b => b.textContent);
+      return { count: btns.length, hasSelf: btns.indexOf(state.spyPlayers[0].name) !== -1 };
+    });
+    if (r.count !== 5) throw new Error('عدد أزرار التصويت: ' + r.count + ' (المفروض ٥)');
+    if (r.hasSelf) throw new Error('اللاعب يكدر يصوّت على نفسه');
+  });
+
+  await step('من الدخيل: النقاط تنحسب صح لمن ينكشف الدخيل', async () => {
+    const r = await page.evaluate(() => {
+      const spyIdx = state.spyPlayers.findIndex(p => p.isSpy);
+      state.spyScores = {};
+      state.spyPlayers.forEach(p => { state.spyScores[p.name] = 0; });
+      applySpyScores({ caught: true, spyGuessedRight: false });
+      return {
+        spy: state.spyScores[state.spyPlayers[spyIdx].name],
+        others: state.spyPlayers.filter(p => !p.isSpy).map(p => state.spyScores[p.name])
+      };
+    });
+    if (r.spy !== 0) throw new Error('الدخيل أخذ نقاط وهو انكشف: ' + r.spy);
+    if (r.others.some(v => v !== 1)) throw new Error('نقاط الباقين: ' + r.others.join(','));
+  });
+
+  await step('من الدخيل: الدخيل ياخذ ٤ لو نجا وخمّن المكان', async () => {
+    const r = await page.evaluate(() => {
+      const spyIdx = state.spyPlayers.findIndex(p => p.isSpy);
+      state.spyScores = {};
+      state.spyPlayers.forEach(p => { state.spyScores[p.name] = 0; });
+      applySpyScores({ caught: false, spyGuessedRight: true });
+      return state.spyScores[state.spyPlayers[spyIdx].name];
+    });
+    if (r !== 4) throw new Error('نقاط الدخيل: ' + r + ' (المفروض ٤)');
+  });
+
+  await step('القنبلة: الجولة تبدأ بفئة ولاعبين صامدين', async () => {
+    const r = await page.evaluate(async () => {
+      await ensurePartyItems('bomb');
+      state.bombPlayerCount = 4;
+      state.bombPlayerNames = ['أ','ب','ج','د'];
+      state.bombPlayers = state.bombPlayerNames.map(n => ({ name: n, out: false }));
+      state.bombKnockedOut = [];
+      startBombRound();
+      stopBombTicker();   // نوقف العدّاد حتى الاختبار يتحكم بالوقت
+      return { screen: state.screen, cat: state.bombCategory, holder: state.bombCurrent,
+               fuse: state.bombFuseMs, min: state.bombMinSec, max: state.bombMaxSec };
+    });
+    if (r.screen !== 'bomb-play') throw new Error('الشاشة: ' + r.screen);
+    if (!r.cat) throw new Error('ماكو فئة');
+    if (r.holder !== 0) throw new Error('أول حامل: ' + r.holder);
+    if (r.fuse < r.min * 1000 || r.fuse > r.max * 1000)
+      throw new Error('الفتيل برّة المدى: ' + Math.round(r.fuse) + 'ms');
+  });
+
+  await step('القنبلة: الفتيل ما ينعرض أبداً على الشاشة', async () => {
+    const r = await page.evaluate(() => {
+      const txt = document.querySelector('#app').textContent;
+      const sec = Math.round(state.bombFuseMs / 1000);
+      // الفتيل بالثواني ما لازم يطلع بأي مكان بالشاشة
+      return { leaksSec: txt.indexOf(String(sec)) !== -1 && sec > 12,
+               leaksMs: txt.indexOf(String(Math.round(state.bombFuseMs))) !== -1 };
+    });
+    if (r.leaksMs) throw new Error('قيمة الفتيل ظاهرة بالشاشة');
+  });
+
+  await step('القنبلة: زر التمرير ينقل الموبايل للي بعده', async () => {
+    const r = await page.evaluate(() => {
+      const before = state.bombCurrent;
+      document.querySelector('#bo-pass').click();
+      const after = state.bombCurrent;
+      document.querySelector('#bo-pass').click();
+      return { before, after, third: state.bombCurrent,
+               holderText: document.querySelector('#bo-holder').textContent };
+    });
+    if (r.after !== 1 || r.third !== 2) throw new Error('التسلسل: ' + [r.before, r.after, r.third].join('→'));
+    if (r.holderText !== 'ج') throw new Error('اسم الحامل المعروض: ' + r.holderText);
+  });
+
+  await step('القنبلة: الانفجار يخرّج الي بيده الموبايل', async () => {
+    const r = await page.evaluate(() => {
+      const holder = state.bombCurrent;
+      bombExplode();
+      return { screen: state.screen, loser: state.bombLoserIndex,
+               out: state.bombPlayers[holder].out,
+               alive: state.bombPlayers.filter(p => !p.out).length,
+               knocked: state.bombKnockedOut.slice() };
+    });
+    if (r.screen !== 'bomb-out') throw new Error('الشاشة: ' + r.screen);
+    if (r.loser !== 2) throw new Error('الخاسر: ' + r.loser);
+    if (!r.out) throw new Error('الخاسر ما انشال من الصامدين');
+    if (r.alive !== 3) throw new Error('الصامدين: ' + r.alive);
+    if (r.knocked.join() !== 'ج') throw new Error('قائمة الخارجين: ' + r.knocked.join());
+  });
+
+  await step('القنبلة: الجولة الجاية تتخطى الخارجين', async () => {
+    const r = await page.evaluate(() => {
+      startBombRound();
+      stopBombTicker();
+      const seq = [state.bombCurrent];
+      for (let i = 0; i < 3; i++) { bombAdvance(); seq.push(state.bombCurrent); }
+      return seq;
+    });
+    if (r.indexOf(2) !== -1) throw new Error('الخارج «ج» رجع بالدور: ' + r.join('→'));
+  });
+
+  await step('القنبلة: آخر واحد صامد يطلع فائز', async () => {
+    const r = await page.evaluate(() => {
+      state.bombPlayers.forEach((p, i) => { p.out = (i !== 1); });
+      state.bombKnockedOut = ['أ', 'ج', 'د'];
+      startBombRound();
+      stopBombTicker();
+      return { screen: state.screen, winner: state.bombWinner };
+    });
+    if (r.screen !== 'bomb-end') throw new Error('الشاشة: ' + r.screen);
+    if (r.winner !== 'ب') throw new Error('الفائز: ' + r.winner);
+  });
+
+  await step('الخروج من اللعبتين يوقّف كل المؤقتات', async () => {
+    const r = await page.evaluate(() => {
+      startSpyTimer();
+      startBombTicker();
+      goto('hub');
+      stopSpyTimer();
+      stopBombTicker();
+      return { spy: state.spyTimerHandle, bomb: state.bombHandle };
+    });
+    if (r.spy !== null || r.bomb !== null) throw new Error('بقى مؤقت شغّال');
   });
 
   console.log('\nأخطاء جافاسكربت غير متوقعة');
