@@ -111,6 +111,7 @@ const state = {
   bombPlayers: [],
   bombKnockedOut: [],
   bombCategory: '',
+  bombExamples: '',
   bombTurnSec: 8,     // ثواني كل لاعب بدوره
   bombFloorSec: 3,    // ما ينزل تحتها مهما طالت الجولة
   bombShrink: true,   // ينقص ثانية كل لفة — يمنع الجولة تدور للأبد

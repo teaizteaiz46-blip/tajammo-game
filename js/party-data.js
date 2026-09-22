@@ -22,7 +22,11 @@ function loadPartyCache(){
     if(!raw) return;
     const data = JSON.parse(raw);
     if(data && Array.isArray(data.spy) && Array.isArray(data.bomb)){
-      partyItems = { spy: data.spy, bomb: data.bomb };
+      /* نسخة قديمة خزنت فئات القنبلة كنصوص بس — نرقّيها لكائنات
+         حتى ما ينكسر الكود الي يقرأ .text */
+      const bomb = data.bomb.map(x =>
+        (x && typeof x === 'object') ? x : { text: String(x), examples: '' });
+      partyItems = { spy: data.spy, bomb: bomb };
     }
   }catch(e){ /* ذاكرة الجهاز مقفلة أو النسخة تالفة — ننزّل من جديد */ }
 }
@@ -44,13 +48,17 @@ async function fetchPartyItems(){
     try{
       const { data, error } = await sb
         .from('party_items')
-        .select('game,text')
+        .select('game,text,examples')
         .eq('is_active', true)
         .limit(2000);
       if(error) throw error;
       const fresh = { spy: [], bomb: [] };
       (data||[]).forEach(r=>{
-        if(fresh[r.game] && r.text) fresh[r.game].push(r.text);
+        if(!fresh[r.game] || !r.text) return;
+        /* الدخيل يحتاج النص بس؛ القنبلة تحتاج الأمثلة هم لشاشة النتيجة */
+        fresh[r.game].push(r.game === 'bomb'
+          ? { text: r.text, examples: r.examples || '' }
+          : r.text);
       });
       /* استبدال كامل — مو دمج. شوف التعليق فوك. */
       if(fresh.spy.length || fresh.bomb.length){

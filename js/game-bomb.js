@@ -33,7 +33,12 @@ function renderBombSetup(){
 
   wrap.appendChild(el(`<div class="panel">
     <div class="section-title">القنبلة الموقوتة</div>
-    <div class="section-sub">تطلع فئة صعبة، وكل واحد عنده ثواني معدودة يكول بيهن كلمة منها ويمرّر الموبايل. الي يخلص وقته يخرج، وآخر واحد صامد يفوز. والوقت ينقص مع كل لفة. الفئات تنزل من الإنترنت أول مرة وبعدها تشتغل بلا نت.</div>
+    <div class="section-sub">تطلع فئة، وكل واحد عنده ثواني معدودة يكول بيهن كلمة منها ويمرّر الموبايل.</div>
+    <div class="bomb-rule">
+      <strong>القاعدة الأهم: بلا تكرار.</strong>
+      كل واحد لازم يكول كلمة <em>جديدة</em> — الي انكالت ما تنعاد بنفس الجولة. هذا الي يخلي اللعبة تصعب لفة ورا لفة.
+    </div>
+    <div class="section-sub">الي يخلص وقته يخرج، وآخر واحد صامد يفوز. الفئات تنزل من الإنترنت أول مرة وبعدها تشتغل بلا نت.</div>
   </div>`));
 
   const countPanel = el(`<div class="panel">
@@ -140,7 +145,9 @@ function startBombRound(){
     goto('bomb-end');
     return;
   }
-  state.bombCategory = bombPrompt(pickPartyItems('bomb', 1)[0] || 'اذكر أكلة عراقية');
+  const picked = pickPartyItems('bomb', 1)[0];
+  state.bombCategory = bombPrompt(picked ? picked.text : 'اذكر أكلة عراقية');
+  state.bombExamples = picked ? (picked.examples || '') : '';
   state.bombLap = 0;
   state.bombPasses = 0;
   state.bombExploded = false;
@@ -235,7 +242,8 @@ function renderBombPlay(){
     <div class="bomb-timer" id="bo-timer">${Math.round(bombAllowMs()/1000)}</div>
     <div class="bomb-bar-track"><div class="bomb-bar" id="bo-bar"></div></div>
 
-    <div class="section-sub" style="margin-top:14px;">الدور على</div>
+    <div class="bomb-rule tight">كلمة <strong>جديدة</strong> — الي انكالت ما تنعاد</div>
+    <div class="section-sub" style="margin-top:10px;">الدور على</div>
     <div class="bomb-holder" id="bo-holder">${escapeAttr(holder ? holder.name : '')}</div>
 
     <button class="bomb-pass" id="bo-pass">قلتها — مرّرها</button>
@@ -271,6 +279,15 @@ function renderBombOut(){
     <h2>خلص وقت ${escapeAttr(loser ? loser.name : '')}</h2>
     <p>${alive.length > 1 ? `باقي ${alive.length} لاعبين` : 'وهذا آخر واحد خرج'}</p>
   </div>`);
+
+  /* أمثلة على الأجوبة المقبولة — تحسم الخلاف «هذا جواب صحيح لو لا؟»
+     بعد ما تنتهي الجولة، مو قبلها حتى ما تكشف أجوبة لأحد */
+  if(state.bombExamples){
+    wrap.appendChild(el(`<div class="panel" style="max-width:460px; margin:0 auto 20px;">
+      <div class="section-title" style="font-size:15px;">أمثلة على أجوبة مقبولة</div>
+      <div class="section-sub" style="line-height:1.9;">${escapeAttr(state.bombExamples)}</div>
+    </div>`));
+  }
 
   const actions = el(`<div class="btn-row" style="justify-content:center;">
     <button class="btn btn-gold" id="bo-next">${alive.length > 1 ? 'الجولة الجاية' : 'شوف الفائز'}</button>

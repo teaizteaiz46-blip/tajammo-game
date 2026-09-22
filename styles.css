@@ -603,3 +603,18 @@
     background:linear-gradient(90deg, var(--rose), var(--gold));
     transition:width 100ms linear;
   }
+
+  /* قاعدة «بلا تكرار» — هي جوهر اللعبة، فتنعرض كصندوق مميز مو كسطر
+     بين السطور. بلاها اللاعبين يعيدون نفس الكلمات وتموت اللعبة. */
+  .bomb-rule{
+    background:rgba(212,168,87,0.10);
+    border:1px solid var(--gold-dim);
+    border-radius:14px;
+    padding:14px 16px;
+    margin:14px 0;
+    font-size:14px;
+    line-height:1.9;
+    color:var(--ivory);
+  }
+  .bomb-rule strong{ color:var(--gold); }
+  .bomb-rule.tight{ margin:14px auto 0; max-width:420px; padding:10px 14px; font-size:13px; }

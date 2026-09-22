@@ -102,8 +102,8 @@ window.supabase = {
         if(table === 'party_items'){
           var items = [];
           for(var s1=1;s1<=30;s1++) items.push({game:'spy', text:'مكان '+s1});
-          for(var b1=1;b1<=20;b1++) items.push({game:'bomb', text:'اذكر شي '+b1});
-          items.push({game:'bomb', text:'اذكر بلد يبدأ بحرف {حرف}'});
+          for(var b1=1;b1<=20;b1++) items.push({game:'bomb', text:'اذكر شي '+b1, examples:'مثال أ، مثال ب، مثال ج'});
+          items.push({game:'bomb', text:'اذكر بلد يبدأ بحرف {حرف}', examples:'تونس، تركيا، تشاد'});
           var c3 = {
             select: function(){ return c3; },
             eq: function(){ return c3; },
@@ -1435,10 +1435,12 @@ const CANNED_BANK = (() => {
       const ok = await ensurePartyItems('spy');
       const cached = JSON.parse(localStorage.getItem('tajammo.partyItems.v1') || 'null');
       return { ok, spy: partyItems.spy.length, bomb: partyItems.bomb.length,
-               cachedSpy: cached ? cached.spy.length : 0 };
+               cachedSpy: cached ? cached.spy.length : 0,
+               bombHasExamples: partyItems.bomb.every(b => b && b.examples) };
     });
     if (!r.ok) throw new Error('ensurePartyItems رجّعت false');
     if (r.spy !== 30 || r.bomb !== 21) throw new Error('عدد الكلمات: ' + r.spy + '/' + r.bomb);
+    if (!r.bombHasExamples) throw new Error('فئات القنبلة انخزنت بلا أمثلة');
     if (r.cachedSpy !== 30) throw new Error('ما انخزنت بالجهاز: ' + r.cachedSpy);
   });
 
@@ -1665,6 +1667,36 @@ const CANNED_BANK = (() => {
     });
     if (r.screen !== 'bomb-end') throw new Error('الشاشة: ' + r.screen);
     if (r.winner !== 'ج') throw new Error('الفائز: ' + r.winner);
+  });
+
+  await step('القنبلة: قاعدة «بلا تكرار» ظاهرة بالتجهيز وباللعب', async () => {
+    const r = await page.evaluate(() => {
+      goto('bomb-setup');
+      const setup = document.querySelector('#app').textContent;
+      state.bombPlayers = ['أ','ب','ج'].map(n => ({ name: n, out: false }));
+      state.bombKnockedOut = [];
+      startBombRound(); stopBombTicker();
+      const play = document.querySelector('#app').textContent;
+      return { setup: setup.indexOf('بلا تكرار') !== -1,
+               play: play.indexOf('ما تنعاد') !== -1 };
+    });
+    if (!r.setup) throw new Error('القاعدة مو مذكورة بشاشة التجهيز');
+    if (!r.play) throw new Error('ماكو تذكير بالقاعدة بشاشة اللعب');
+  });
+
+  await step('القنبلة: أمثلة الأجوبة تظهر بعد الانفجار مو قبله', async () => {
+    const r = await page.evaluate(() => {
+      const duringPlay = document.querySelector('#app').textContent;
+      const leakedEarly = duringPlay.indexOf(state.bombExamples) !== -1 && !!state.bombExamples;
+      bombExplode();
+      const afterBoom = document.querySelector('#app').textContent;
+      return { leakedEarly, ex: state.bombExamples,
+               shown: afterBoom.indexOf('أمثلة على أجوبة مقبولة') !== -1,
+               hasText: !!state.bombExamples && afterBoom.indexOf(state.bombExamples) !== -1 };
+    });
+    if (!r.ex) throw new Error('الفئة انسحبت بلا أمثلة');
+    if (r.leakedEarly) throw new Error('الأمثلة انكشفت أثناء اللعب');
+    if (!r.shown || !r.hasText) throw new Error('الأمثلة ما ظهرت بشاشة الخروج');
   });
 
   await step('الخروج من اللعبتين يوقّف كل المؤقتات', async () => {
