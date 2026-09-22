@@ -205,7 +205,7 @@ function renderHub(){
           <circle cx="41" cy="12" r="2.6" fill="#C1443A"/>
         </svg>
         <h3>القنبلة الموقوتة</h3>
-        <small>٣-١٢ لاعب<br>فتيل مخفي وعشوائي</small>
+        <small>٣-١٢ لاعب<br>ثواني معدودة لكل واحد</small>
       </div>
     </div>
   </div>`);

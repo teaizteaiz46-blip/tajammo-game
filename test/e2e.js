@@ -103,6 +103,7 @@ window.supabase = {
           var items = [];
           for(var s1=1;s1<=30;s1++) items.push({game:'spy', text:'مكان '+s1});
           for(var b1=1;b1<=20;b1++) items.push({game:'bomb', text:'اذكر شي '+b1});
+          items.push({game:'bomb', text:'اذكر بلد يبدأ بحرف {حرف}'});
           var c3 = {
             select: function(){ return c3; },
             eq: function(){ return c3; },
@@ -1437,7 +1438,7 @@ const CANNED_BANK = (() => {
                cachedSpy: cached ? cached.spy.length : 0 };
     });
     if (!r.ok) throw new Error('ensurePartyItems رجّعت false');
-    if (r.spy !== 30 || r.bomb !== 20) throw new Error('عدد الكلمات: ' + r.spy + '/' + r.bomb);
+    if (r.spy !== 30 || r.bomb !== 21) throw new Error('عدد الكلمات: ' + r.spy + '/' + r.bomb);
     if (r.cachedSpy !== 30) throw new Error('ما انخزنت بالجهاز: ' + r.cachedSpy);
   });
 
@@ -1541,9 +1542,10 @@ const CANNED_BANK = (() => {
     if (r !== 4) throw new Error('نقاط الدخيل: ' + r + ' (المفروض ٤)');
   });
 
-  await step('القنبلة: الجولة تبدأ بفئة ولاعبين صامدين', async () => {
+  await step('القنبلة: الجولة تبدأ بفئة ومؤقت لكل لاعب', async () => {
     const r = await page.evaluate(async () => {
       await ensurePartyItems('bomb');
+      state.bombTurnSec = 8; state.bombFloorSec = 3; state.bombShrink = true;
       state.bombPlayerCount = 4;
       state.bombPlayerNames = ['أ','ب','ج','د'];
       state.bombPlayers = state.bombPlayerNames.map(n => ({ name: n, out: false }));
@@ -1551,82 +1553,125 @@ const CANNED_BANK = (() => {
       startBombRound();
       stopBombTicker();   // نوقف العدّاد حتى الاختبار يتحكم بالوقت
       return { screen: state.screen, cat: state.bombCategory, holder: state.bombCurrent,
-               fuse: state.bombFuseMs, min: state.bombMinSec, max: state.bombMaxSec };
+               lap: state.bombLap, allow: bombAllowMs(),
+               shown: document.querySelector('#bo-timer') ? document.querySelector('#bo-timer').textContent : null };
     });
     if (r.screen !== 'bomb-play') throw new Error('الشاشة: ' + r.screen);
     if (!r.cat) throw new Error('ماكو فئة');
     if (r.holder !== 0) throw new Error('أول حامل: ' + r.holder);
-    if (r.fuse < r.min * 1000 || r.fuse > r.max * 1000)
-      throw new Error('الفتيل برّة المدى: ' + Math.round(r.fuse) + 'ms');
+    if (r.lap !== 0) throw new Error('اللفة تبدي من: ' + r.lap);
+    if (r.allow !== 8000) throw new Error('وقت الدور الأول: ' + r.allow);
+    if (r.shown !== '8') throw new Error('العدّاد المعروض: ' + r.shown);
   });
 
-  await step('القنبلة: الفتيل ما ينعرض أبداً على الشاشة', async () => {
+  await step('القنبلة: فئة {حرف} تنبدل بحرف حقيقي', async () => {
     const r = await page.evaluate(() => {
-      const txt = document.querySelector('#app').textContent;
-      const sec = Math.round(state.bombFuseMs / 1000);
-      // الفتيل بالثواني ما لازم يطلع بأي مكان بالشاشة
-      return { leaksSec: txt.indexOf(String(sec)) !== -1 && sec > 12,
-               leaksMs: txt.indexOf(String(Math.round(state.bombFuseMs))) !== -1 };
+      const out = [];
+      for (let i = 0; i < 40; i++) out.push(bombPrompt('اذكر بلد يبدأ بحرف {حرف}'));
+      return {
+        leftover: out.filter(t => t.indexOf('{حرف}') !== -1).length,
+        distinct: new Set(out).size,
+        sample: out[0]
+      };
     });
-    if (r.leaksMs) throw new Error('قيمة الفتيل ظاهرة بالشاشة');
+    if (r.leftover) throw new Error('بقى {حرف} بلا استبدال بـ' + r.leftover + ' مرة');
+    if (r.distinct < 5) throw new Error('نفس الحرف يتكرر دائماً — عدد الصيغ: ' + r.distinct);
   });
 
-  await step('القنبلة: زر التمرير ينقل الموبايل للي بعده', async () => {
+  await step('القنبلة: التمرير ينقل الدور ويصفّر المؤقت', async () => {
     const r = await page.evaluate(() => {
       const before = state.bombCurrent;
       document.querySelector('#bo-pass').click();
       const after = state.bombCurrent;
+      const leftAfterPass = state.bombDeadline - Date.now();
+      stopBombTicker();
       document.querySelector('#bo-pass').click();
-      return { before, after, third: state.bombCurrent,
+      stopBombTicker();
+      return { before, after, third: state.bombCurrent, leftAfterPass,
                holderText: document.querySelector('#bo-holder').textContent };
     });
     if (r.after !== 1 || r.third !== 2) throw new Error('التسلسل: ' + [r.before, r.after, r.third].join('→'));
     if (r.holderText !== 'ج') throw new Error('اسم الحامل المعروض: ' + r.holderText);
+    if (r.leftAfterPass < 7000) throw new Error('المؤقت ما انصفّر بالتمرير: ' + r.leftAfterPass + 'ms');
   });
 
-  await step('القنبلة: الانفجار يخرّج الي بيده الموبايل', async () => {
+  await step('القنبلة: الوقت ينقص ثانية بعد كل لفة كاملة', async () => {
     const r = await page.evaluate(() => {
-      const holder = state.bombCurrent;
-      bombExplode();
+      state.bombPlayers = ['أ','ب','ج','د'].map(n => ({ name: n, out: false }));
+      state.bombLap = 0; state.bombPasses = 0; state.bombCurrent = 0;
+      state.bombExploded = false;
+      state.bombTurnSec = 8; state.bombFloorSec = 3; state.bombShrink = true;
+      const seq = [bombAllowMs()];
+      for (let i = 0; i < 12; i++) { bombAdvance(); stopBombTicker(); seq.push(bombAllowMs()); }
+      return { seq, lap: state.bombLap };
+    });
+    // ٤ لاعبين: بعد ٤ تمريرات تكمل لفة → ٧٠٠٠، وبعد ٨ → ٦٠٠٠، وبعد ١٢ → ٥٠٠٠
+    if (r.seq[0] !== 8000 || r.seq[4] !== 7000 || r.seq[8] !== 6000 || r.seq[12] !== 5000)
+      throw new Error('تسلسل الوقت: ' + r.seq.join(','));
+    if (r.lap !== 3) throw new Error('عدد اللفات: ' + r.lap);
+  });
+
+  await step('القنبلة: الوقت ما ينزل تحت الحد الأدنى', async () => {
+    const r = await page.evaluate(() => {
+      state.bombLap = 50;
+      const a = bombAllowMs();
+      state.bombLap = 0;
+      state.bombShrink = false;
+      state.bombLap = 50;
+      const b = bombAllowMs();
+      state.bombShrink = true; state.bombLap = 0;
+      return { shrunk: a, fixed: b };
+    });
+    if (r.shrunk !== 3000) throw new Error('بعد ٥٠ لفة: ' + r.shrunk + ' (المفروض ٣٠٠٠)');
+    if (r.fixed !== 8000) throw new Error('مع إطفاء التناقص: ' + r.fixed);
+  });
+
+  await step('القنبلة: انتهاء الوقت يفجّر على صاحب الدور', async () => {
+    const r = await page.evaluate(async () => {
+      state.bombPlayers = ['أ','ب','ج','د'].map(n => ({ name: n, out: false }));
+      state.bombKnockedOut = [];
+      state.bombCurrent = 1; state.bombExploded = false;
+      state.bombDeadline = Date.now() + 250;
+      state.bombLastTickSec = -1;
+      state.bombHandle = setInterval(bombTick, 60);
+      await new Promise(r => setTimeout(r, 900));
       return { screen: state.screen, loser: state.bombLoserIndex,
-               out: state.bombPlayers[holder].out,
-               alive: state.bombPlayers.filter(p => !p.out).length,
-               knocked: state.bombKnockedOut.slice() };
+               out: state.bombPlayers[1].out, handle: state.bombHandle };
     });
     if (r.screen !== 'bomb-out') throw new Error('الشاشة: ' + r.screen);
-    if (r.loser !== 2) throw new Error('الخاسر: ' + r.loser);
+    if (r.loser !== 1) throw new Error('الخاسر: ' + r.loser);
     if (!r.out) throw new Error('الخاسر ما انشال من الصامدين');
-    if (r.alive !== 3) throw new Error('الصامدين: ' + r.alive);
-    if (r.knocked.join() !== 'ج') throw new Error('قائمة الخارجين: ' + r.knocked.join());
+    if (r.handle !== null) throw new Error('العدّاد بعده شغّال بعد الانفجار');
   });
 
-  await step('القنبلة: الجولة الجاية تتخطى الخارجين', async () => {
+  await step('القنبلة: الجولة الجاية تتخطى الخارجين وترجّع الوقت للبداية', async () => {
     const r = await page.evaluate(() => {
       startBombRound();
       stopBombTicker();
       const seq = [state.bombCurrent];
-      for (let i = 0; i < 3; i++) { bombAdvance(); seq.push(state.bombCurrent); }
-      return seq;
+      for (let i = 0; i < 3; i++) { bombAdvance(); stopBombTicker(); seq.push(state.bombCurrent); }
+      return { seq, lapAtStart: seq.length, allow: bombAllowMs() };
     });
-    if (r.indexOf(2) !== -1) throw new Error('الخارج «ج» رجع بالدور: ' + r.join('→'));
+    if (r.seq.indexOf(1) !== -1) throw new Error('الخارج «ب» رجع بالدور: ' + r.seq.join('→'));
   });
 
   await step('القنبلة: آخر واحد صامد يطلع فائز', async () => {
     const r = await page.evaluate(() => {
-      state.bombPlayers.forEach((p, i) => { p.out = (i !== 1); });
-      state.bombKnockedOut = ['أ', 'ج', 'د'];
+      state.bombPlayers.forEach((p, i) => { p.out = (i !== 2); });
+      state.bombKnockedOut = ['أ', 'ب', 'د'];
       startBombRound();
       stopBombTicker();
       return { screen: state.screen, winner: state.bombWinner };
     });
     if (r.screen !== 'bomb-end') throw new Error('الشاشة: ' + r.screen);
-    if (r.winner !== 'ب') throw new Error('الفائز: ' + r.winner);
+    if (r.winner !== 'ج') throw new Error('الفائز: ' + r.winner);
   });
 
   await step('الخروج من اللعبتين يوقّف كل المؤقتات', async () => {
     const r = await page.evaluate(() => {
       startSpyTimer();
-      startBombTicker();
+      state.bombDeadline = Date.now() + 60000;
+      startBombTurn();
       goto('hub');
       stopSpyTimer();
       stopBombTicker();

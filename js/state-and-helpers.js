@@ -111,10 +111,13 @@ const state = {
   bombPlayers: [],
   bombKnockedOut: [],
   bombCategory: '',
-  bombMinSec: 20,
-  bombMaxSec: 60,
-  bombFuseMs: 0,      // الفتيل العشوائي — ما ينعرض أبداً للاعبين
-  bombStartAt: 0,
+  bombTurnSec: 8,     // ثواني كل لاعب بدوره
+  bombFloorSec: 3,    // ما ينزل تحتها مهما طالت الجولة
+  bombShrink: true,   // ينقص ثانية كل لفة — يمنع الجولة تدور للأبد
+  bombLap: 0,
+  bombPasses: 0,
+  bombDeadline: 0,
+  bombLastTickSec: -1,
   bombHandle: null,
   bombCurrent: 0,
   bombExploded: false,

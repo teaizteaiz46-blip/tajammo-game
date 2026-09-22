@@ -579,3 +579,27 @@
     60%{ transform:scale(1.25); opacity:1; }
     100%{ transform:scale(1); }
   }
+
+  /* عدّاد دور اللاعب بالقنبلة — لازم يكون أكبر شي بالشاشة بعد الفئة،
+     لأن اللاعب يشوفه بطرف عينه وهو يفكر */
+  .bomb-timer{
+    font-family:'Changa', sans-serif;
+    font-weight:800;
+    font-size:clamp(54px,16vw,86px);
+    line-height:1;
+    color:var(--gold);
+    margin:14px 0 6px;
+    font-variant-numeric:tabular-nums;
+  }
+  .bomb-timer.warn{ color:var(--rose); animation:bomb-pulse 500ms ease-in-out infinite; }
+  @keyframes bomb-pulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.12); } }
+
+  .bomb-bar-track{
+    height:8px; border-radius:99px; background:var(--panel-2);
+    overflow:hidden; max-width:420px; margin:0 auto;
+  }
+  .bomb-bar{
+    height:100%; width:100%; border-radius:99px;
+    background:linear-gradient(90deg, var(--rose), var(--gold));
+    transition:width 100ms linear;
+  }
