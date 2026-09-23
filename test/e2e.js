@@ -1004,50 +1004,54 @@ const CANNED_BANK = (() => {
     if (r.zwj) throw new Error('بقى حرف ZWJ بالاسم — ما عاد له داعي بعد إلغاء التقسيم');
   });
 
-  /* الخانتين «قريباً» انبدلوا بـ«من الدخيل؟» و«القنبلة الموقوتة»،
-     فالشبكة صارت أربع ألعاب شغّالة بلا أي خانة فاضية. */
-  await step('بطاقة مميزة + شبكة أربع ألعاب شغّالة', async () => {
-    const r = await page.evaluate(() => ({
-      feature: !!document.querySelector('.feature-card#card-cat'),
-      cta: !!document.querySelector('.feature-cta'),
-      tiles: document.querySelectorAll('.game-grid .game-tile').length,
-      soon: document.querySelectorAll('.game-grid .game-tile.soon').length,
-      whoami: !!document.querySelector('.game-tile#card-whoami'),
-      shd: !!document.querySelector('.game-tile#card-shd'),
-      spy: !!document.querySelector('.game-tile#card-spy'),
-      bomb: !!document.querySelector('.game-tile#card-bomb')
-    }));
-    if (!r.feature) throw new Error('البطاقة المميزة مو موجودة');
-    if (!r.cta) throw new Error('زر «العب الآن» مو موجود');
-    if (r.tiles !== 4) throw new Error('عدد خانات الشبكة: ' + r.tiles);
-    if (r.soon !== 0) throw new Error('بعده أكو خانة «قريباً»: ' + r.soon);
-    if (!r.whoami || !r.shd || !r.spy || !r.bomb) throw new Error('لعبة ناقصة من الشبكة');
+  /* الشاشة الرئيسية صارت خمس بطاقات متساوية — ماكو بطاقة «مميزة» ولا
+     مربعات صغيرة. سبب التغيير: المربعات القديمة كانت أيقونات خطية بلا زر،
+     واللاعب يقراها كروابط إعدادات مو كألعاب. */
+  await step('خمس بطاقات ألعاب متساوية، كل وحدة بصورة وزر', async () => {
+    const r = await page.evaluate(() => {
+      const cards = [...document.querySelectorAll('.game-cards .game-card')];
+      return {
+        n: cards.length,
+        ids: cards.map(c => c.id),
+        withArt: cards.filter(c => c.querySelector('.gc-art img')).length,
+        withCta: cards.filter(c => c.querySelector('.gc-cta')).length,
+        withChip: cards.filter(c => c.querySelector('.gc-chip')).length,
+        legacy: document.querySelectorAll('.feature-card, .game-tile, .game-grid').length
+      };
+    });
+    if (r.n !== 5) throw new Error('عدد البطاقات: ' + r.n);
+    for (const id of ['card-cat','card-whoami','card-shd','card-spy','card-bomb'])
+      if (!r.ids.includes(id)) throw new Error('بطاقة ناقصة: ' + id);
+    if (r.withArt !== 5) throw new Error('بطاقات بلا صورة: ' + (5 - r.withArt));
+    if (r.withCta !== 5) throw new Error('بطاقات بلا زر «العب»: ' + (5 - r.withCta));
+    if (r.withChip !== 5) throw new Error('بطاقات بلا عدد لاعبين: ' + (5 - r.withChip));
+    if (r.legacy !== 0) throw new Error('بقايا التصميم القديم بالصفحة: ' + r.legacy);
   });
 
-  await step('كل مربع باللعبة يفتح شاشته', async () => {
+  await step('كل بطاقة تفتح شاشتها', async () => {
     const r = await page.evaluate(() => {
       const out = {};
-      document.querySelector('#card-spy').click();  out.spy = state.screen;
-      goto('hub');
-      document.querySelector('#card-bomb').click(); out.bomb = state.screen;
+      [['card-whoami','whoami'],['card-shd','shd'],['card-spy','spy'],['card-bomb','bomb']]
+        .forEach(([id,k]) => { goto('hub'); document.querySelector('#'+id).click(); out[k] = state.screen; });
       goto('hub');
       return out;
     });
-    if (r.spy !== 'spy-setup') throw new Error('مربع الدخيل فتح: ' + r.spy);
-    if (r.bomb !== 'bomb-setup') throw new Error('مربع القنبلة فتح: ' + r.bomb);
+    const want = { whoami:'whoami-setup', shd:'shd-setup', spy:'spy-setup', bomb:'bomb-setup' };
+    for (const k in want)
+      if (r[k] !== want[k]) throw new Error(k + ' فتح: ' + r[k] + ' بدل ' + want[k]);
   });
 
-  await step('رسمة البطاقة المميزة تنحمّل فعلاً', async () => {
-    const ok = await page.evaluate(async () => {
-      const img = document.querySelector('.feature-art img');
-      if (!img) return 'ماكو صورة بالبطاقة';
-      if (!img.complete) await new Promise(res => { img.onload = res; img.onerror = res; });
-      return img.naturalWidth > 0 ? true : 'الصورة ما انحمّلت: ' + img.getAttribute('src');
+  await step('صور الألعاب الخمسة كلها تنحمّل فعلاً', async () => {
+    const bad = await page.evaluate(async () => {
+      const imgs = [...document.querySelectorAll('.game-card .gc-art img')];
+      await Promise.all(imgs.map(i => i.complete ? null :
+        new Promise(res => { i.onload = res; i.onerror = res; })));
+      return imgs.filter(i => !i.naturalWidth).map(i => i.getAttribute('src'));
     });
-    if (ok !== true) throw new Error(ok);
+    if (bad.length) throw new Error('صور ما انحمّلت: ' + bad.join(', '));
   });
 
-  await step('الضغط على البطاقة المميزة يفتح المواضيع بلا شاشة انتظار', async () => {
+  await step('الضغط على بطاقة الفئات يفتح المواضيع بلا شاشة انتظار', async () => {
     await page.click('#card-cat');
     await page.waitForSelector('#ct-new', { timeout: 8000 });
     const stuck = await page.evaluate(() => state.screen === 'cat-loading');
@@ -1414,18 +1418,25 @@ const CANNED_BANK = (() => {
 
   console.log('\nألعاب القعدة الجديدة (الدخيل + القنبلة)');
 
-  await step('مربعي «قريباً» انبدلوا بلعبتين حقيقيتين', async () => {
+  await step('اللعبتين الجديدتين لهن بطاقة بالشاشة الرئيسية', async () => {
     const r = await page.evaluate(() => {
       goto('hub');
+      const badge = id => {
+        const b = document.querySelector('#'+id+' .gc-badge');
+        return b ? b.textContent.trim() : '';
+      };
       return {
-        spy: !!document.querySelector('#card-spy'),
-        bomb: !!document.querySelector('#card-bomb'),
-        soon: document.querySelectorAll('.game-tile.soon').length
+        spy: !!document.querySelector('.game-card#card-spy'),
+        bomb: !!document.querySelector('.game-card#card-bomb'),
+        spyBadge: badge('card-spy'), bombBadge: badge('card-bomb'),
+        soon: document.body.innerText.includes('قريباً')
       };
     });
-    if (!r.spy) throw new Error('مربع «من الدخيل؟» مو موجود');
-    if (!r.bomb) throw new Error('مربع «القنبلة» مو موجود');
-    if (r.soon !== 0) throw new Error('بعده أكو ' + r.soon + ' مربع «قريباً»');
+    if (!r.spy) throw new Error('بطاقة «من الدخيل؟» مو موجودة');
+    if (!r.bomb) throw new Error('بطاقة «القنبلة» مو موجودة');
+    if (r.spyBadge !== 'جديد' || r.bombBadge !== 'جديد')
+      throw new Error('شارة «جديد» ناقصة: ' + r.spyBadge + ' / ' + r.bombBadge);
+    if (r.soon) throw new Error('بعدها كلمة «قريباً» بالصفحة');
   });
 
   await step('كلمات اللعبتين تنزل وتنخزن بالجهاز', async () => {

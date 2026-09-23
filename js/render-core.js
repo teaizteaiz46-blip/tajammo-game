@@ -147,6 +147,27 @@ function renderTopbar(){
 }
 
 /* ============================ HUB ============================ */
+/* خمس بطاقات متساوية: كل لعبة بصورتها وزرها. قبل، كانت بطاقة وحدة كبيرة
+   بصورة وزر «العب الآن»، وأربعة مربعات بأيقونات خطية بلا زر — فالعين
+   تقراهن كروابط إعدادات مو كألعاب تنلعب. */
+const HUB_GAMES = [
+  { id:'card-cat',    screen:null,          img:'img/friends.webp',    accent:'gold',
+    title:'لعبة الفئات', desc:'فريقين، كل فريق يختار ٣ فئات، وبكل فئة ٦ أسئلة',
+    players:'٤+ لاعبين', badge:'الأكثر لعباً' },
+  { id:'card-whoami', screen:'whoami-setup', img:'img/game-whoami.webp', accent:'sage',
+    title:'من أنا؟', desc:'شخصيتك على جبينك — خمّنها بأسئلة نعم/لا',
+    players:'٣-١٠ لاعبين', badge:'' },
+  { id:'card-shd',    screen:'shd-setup',    img:'img/game-shd.webp',    accent:'rose',
+    title:'الحلفاء والشياطين', desc:'فريقين بالسر — منو ويّاك ومنو ضدك؟',
+    players:'٥-١٠ لاعبين', badge:'' },
+  { id:'card-spy',    screen:'spy-setup',    img:'img/game-spy.webp',    accent:'sage',
+    title:'من الدخيل؟', desc:'الكل يعرف المكان إلا واحد — اكشفوه',
+    players:'٤-١٢ لاعب', badge:'جديد' },
+  { id:'card-bomb',   screen:'bomb-setup',   img:'img/game-bomb.webp',   accent:'rose',
+    title:'القنبلة الموقوتة', desc:'ثواني معدودة لكل واحد — والي يتأخر يخرج',
+    players:'٣-١٢ لاعب', badge:'جديد' }
+];
+
 function renderHub(){
   const wrap = el(`<div>
     <div class="hero">
@@ -156,63 +177,27 @@ function renderHub(){
       <h1>تجمّع</h1>
       <p>${state.user ? `أهلاً ${escapeAttr(state.user.name)} — لعبت ${state.user.gamesPlayed||0} لعبة` : 'اختاروا لعبة والعبوها سوا'}</p>
     </div>
-
-    <div class="feature-card" id="card-cat">
-      <div class="feature-art"><img src="img/friends.webp" alt="" width="560" height="386" loading="eager" decoding="async"></div>
-      <div class="feature-txt">
-        <span class="ribbon">الأكثر لعباً</span>
-        <h3>لعبة الفئات</h3>
-        <p>فريقين، كل فريق يختار ٣ فئات،<br>وبكل فئة ٦ أسئلة</p>
-        <span class="feature-cta">العب الآن ←</span>
-      </div>
-    </div>
-
-    <div class="game-grid">
-      <div class="game-tile" id="card-whoami">
-        <svg class="tile-ico" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-          <circle cx="24" cy="24" r="19" stroke="#6FA287" stroke-width="2.4"/>
-          <path d="M18 19a6 6 0 1 1 6.6 6v3.4" stroke="#D4A857" stroke-width="3" stroke-linecap="round"/>
-          <circle cx="24.6" cy="33.5" r="2.1" fill="#D4A857"/>
-        </svg>
-        <h3>من أنا؟</h3>
-        <small>٣-١٠ لاعبين<br>أسئلة نعم/لا</small>
-      </div>
-      <div class="game-tile" id="card-shd">
-        <svg class="tile-ico" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-          <path d="M8 34c0-6 4.6-9.5 9.5-9.5S27 28 27 34" stroke="#6FA287" stroke-width="2.4" stroke-linecap="round"/>
-          <circle cx="17.5" cy="17" r="5.5" stroke="#6FA287" stroke-width="2.4"/>
-          <path d="M23 34c0-5.4 4.1-8.6 8.5-8.6S40 28.6 40 34" stroke="#C1443A" stroke-width="2.4" stroke-linecap="round"/>
-          <circle cx="31.5" cy="18.5" r="5" stroke="#C1443A" stroke-width="2.4"/>
-        </svg>
-        <h3>الحلفاء والشياطين</h3>
-        <small>٥-١٠ لاعبين<br>فريقين بالسر</small>
-      </div>
-      <div class="game-tile" id="card-spy">
-        <svg class="tile-ico" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-          <circle cx="17" cy="21" r="7" stroke="#6FA287" stroke-width="2.4"/>
-          <circle cx="33" cy="21" r="7" stroke="#C1443A" stroke-width="2.4"/>
-          <path d="M24 21h2M4 17h6M38 17h6" stroke="#8FB3AC" stroke-width="2.4" stroke-linecap="round"/>
-          <path d="M14 35h20" stroke="#D4A857" stroke-width="2.8" stroke-linecap="round"/>
-        </svg>
-        <h3>من الدخيل؟</h3>
-        <small>٤-١٢ لاعب<br>واحد ما يعرف المكان</small>
-      </div>
-      <div class="game-tile" id="card-bomb">
-        <svg class="tile-ico" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-          <circle cx="21" cy="29" r="12" stroke="#6FA287" stroke-width="2.4"/>
-          <path d="M30 20.5l4.5-4.5" stroke="#D4A857" stroke-width="2.8" stroke-linecap="round"/>
-          <path d="M34.5 16c2-2.4 5.5-1.2 5.5 1.8" stroke="#C1443A" stroke-width="2.4" stroke-linecap="round"/>
-          <circle cx="41" cy="12" r="2.6" fill="#C1443A"/>
-        </svg>
-        <h3>القنبلة الموقوتة</h3>
-        <small>٣-١٢ لاعب<br>ثواني معدودة لكل واحد</small>
-      </div>
-    </div>
+    <div class="game-cards"></div>
   </div>`);
-  wrap.querySelector('#card-cat').addEventListener('click', ()=> openCategoryGame());
-  wrap.querySelector('#card-whoami').addEventListener('click', ()=> goto('whoami-setup'));
-  wrap.querySelector('#card-shd').addEventListener('click', ()=> goto('shd-setup'));
-  wrap.querySelector('#card-spy').addEventListener('click', ()=> goto('spy-setup'));
-  wrap.querySelector('#card-bomb').addEventListener('click', ()=> goto('bomb-setup'));
+
+  const list = wrap.querySelector('.game-cards');
+  HUB_GAMES.forEach(g=>{
+    const card = el(`<button class="game-card acc-${g.accent}" id="${g.id}">
+      <span class="gc-art"><img src="${g.img}" alt="" width="600" height="440" loading="eager" decoding="async"></span>
+      <span class="gc-body">
+        ${g.badge ? `<span class="gc-badge">${g.badge}</span>` : ''}
+        <span class="gc-title">${g.title}</span>
+        <span class="gc-desc">${g.desc}</span>
+        <span class="gc-foot">
+          <span class="gc-chip">${g.players}</span>
+          <span class="gc-cta">العب ←</span>
+        </span>
+      </span>
+    </button>`);
+    /* لعبة الفئات تمرّ بتحميل البنك أول، فالها مسار خاص */
+    card.addEventListener('click', ()=> g.screen ? goto(g.screen) : openCategoryGame());
+    list.appendChild(card);
+  });
+
   return wrap;
 }
