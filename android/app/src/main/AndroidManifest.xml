@@ -50,4 +50,12 @@
       إن الدمج ما يشتغل بنسخة مكتبة معينة.
     -->
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+
+    <!--
+      الاهتزاز: لعبة «القنبلة الموقوتة» تستدعي navigator.vibrate عند الانفجار.
+      بدون هاي الصلاحية الاستدعاء يفشل بصمت داخل WebView — بلا عطل، بس
+      بلا اهتزاز. صلاحية «عادية» (normal) يعني ما تطلع للمستخدم إذن،
+      وما تغيّر نموذج Data safety بـPlay Console.
+    -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 </manifest>
