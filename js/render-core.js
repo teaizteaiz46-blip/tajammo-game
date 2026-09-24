@@ -51,6 +51,7 @@ function renderScreen(){
     case 'select':        return renderSelect();
     case 'board':         return renderBoard();
     case 'end':           return renderEnd();
+    case 'leaderboard':   return renderLeaderboard();
     case 'whoami-setup':  return renderWhoamiSetup();
     case 'whoami-reveal': return renderWhoamiReveal();
     case 'whoami-play':   return renderWhoamiPlay();
@@ -97,6 +98,7 @@ function renderTopbar(){
     select:'لعبة الفئات · اختيار الفئات',
     board:'لعبة الفئات · اللعب',
     end:'لعبة الفئات · النتيجة',
+    leaderboard:'ترتيب الفرق',
     'whoami-setup':'من أنا؟ · تجهيز اللاعبين',
     'whoami-reveal':'من أنا؟ · توزيع الشخصيات',
     'whoami-play':'من أنا؟ · اللعب',
@@ -177,8 +179,12 @@ function renderHub(){
       <h1>تجمّع</h1>
       <p>${state.user ? `أهلاً ${escapeAttr(state.user.name)} — لعبت ${state.user.gamesPlayed||0} لعبة` : 'اختاروا لعبة والعبوها سوا'}</p>
     </div>
+    <div class="btn-row" style="justify-content:center; margin-bottom:18px;">
+      <button class="btn btn-ghost btn-sm" id="hub-board">🏆 ترتيب الفرق</button>
+    </div>
     <div class="game-cards"></div>
   </div>`);
+  wrap.querySelector('#hub-board').addEventListener('click', ()=> openLeaderboard());
 
   const list = wrap.querySelector('.game-cards');
   HUB_GAMES.forEach(g=>{

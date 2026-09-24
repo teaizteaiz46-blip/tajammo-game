@@ -56,6 +56,20 @@ const state = {
   pool: [],
   selectedTopicIds: [],
   turn: 0,
+
+  /* ترتيب الفرق العام: نتيجة كل سؤال تنجمع خلال اللعبة، وبالنهاية
+     اللي يحب يسجّل يكتب يوزر فرقه. التسجيل اختياري بالكامل. */
+  gameUid: null,
+  gameAnswers: [],           // [{ team:0|1, q:<bankId>, ok:<bool> }]
+  teamHandles: ['', ''],
+  boardBusy: false,
+  boardError: '',
+  boardResult: null,         // رد submit_team_results
+  boardRows: [],             // صفوف شاشة الترتيب
+  boardMine: [],             // صفوف فرق هذا الجهاز، بمركزها الحقيقي
+  boardPeriod: 'week',
+  boardLoading: false,
+
   activeCell: null,
   helpHints: {0:null, 1:null},
   timerLeft: 0,
@@ -229,6 +243,26 @@ function clearUserScopedState(){
   state.accountBusy = false;
   state.lastReward = null;
   state.statsRecordedForThisGame = false;
+  state.boardBusy = false;
+  state.boardError = '';
+  state.boardResult = null;
+}
+
+/* بداية لعبة فئات جديدة: معرّف جديد وسجل إجابات فاضي.
+   المعرّف يمنع السيرفر من حساب نفس اللعبة مرتين لو انرسلت مرتين. */
+function startTeamScoreRun(){
+  state.gameUid = (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{
+        const r = Math.random()*16|0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+  state.gameAnswers = [];
+  state.boardResult = null;
+  state.boardError = '';
+  /* يوزرات آخر مرة تجي جاهزة بالخانات — أغلب الفرق نفسها تلعب مرة ثانية.
+     تنقرأ هنا مرة وحدة مو بكل رسم، حتى لو مسح واحد منها ما ترجع تنكتب. */
+  state.teamHandles = loadSavedTeamHandles();
 }
 
     function goto(screen){ if(state.screen!==screen) state.history.push(state.screen); state.screen = screen; render(); window.scrollTo({top:0, behavior:'smooth'}); }

@@ -212,6 +212,7 @@ function renderTeams(){
     state.teams[0].helps = state.helpsPerTeam;
     state.teams[1].helps = state.helpsPerTeam;
     state.statsRecordedForThisGame = false;
+    startTeamScoreRun();
     resetAdGates();
     goto('select');
   });
@@ -546,7 +547,8 @@ function wireHelpButtons(modal, topic, q){
       if(type==='swap'){
         if(topic.bankKey){
           const fresh = pickFromTier((CATEGORY_DATA[topic.bankKey]||{})[q.points]||[], topic.bankKey, q.points, 1)[0];
-          if(fresh){ q.text = fresh.text; q.answer = fresh.answer; q.image = fresh.image; }
+          /* bankId لازم يتبدل وياه، وإلا النتيجة تنحسب على السؤال القديم */
+          if(fresh){ q.text = fresh.text; q.answer = fresh.answer; q.image = fresh.image; q.bankId = fresh.bankId; }
         }
         team.helps--;
         state.helpHints = {0:null, 1:null};
@@ -982,10 +984,26 @@ function translateAuthError(msg){
   return msg;
 }
 
+/* نتيجة السؤال لترتيب الفرق. السؤال ينحسب على صاحب الموضوع
+   (كل فريق يملك ٣ مواضيع باللوح)، وإذا خطفه الفريق الثاني ينحسب
+   للاثنين: خسارة لصاحبه وربح للخاطف. أسئلة الفئات المخصصة ما
+   تنحسب — ماكو إلها bankId لأنها مو مشتركة بين كل الفرق. */
+function recordTeamAnswer(teamIdx, topic, q){
+  if(!q || !q.bankId) return;
+  const owner = (topic && (topic.takenBy === 0 || topic.takenBy === 1)) ? topic.takenBy : null;
+  if(owner !== null){
+    state.gameAnswers.push({ team: owner, q: q.bankId, ok: teamIdx === owner });
+  }
+  if(teamIdx !== null && teamIdx !== owner){
+    state.gameAnswers.push({ team: teamIdx, q: q.bankId, ok: true });
+  }
+}
+
 function awardPoints(teamIdx, topic, q){
   if(teamIdx !== null){
     state.teams[teamIdx].score += q.points;
   }
+  recordTeamAnswer(teamIdx, topic, q);
   q.usedBy = teamIdx;
   state.activeCell = null;
   stopTimer();
@@ -1066,12 +1084,18 @@ function renderEnd(){
       <div class="score-card t1"><span class="name">${escapeAttr(b.name)}</span><span class="pts">${b.score}</span></div>
     </div>
     ${renderRewardLine()}
+    <div id="board-card-slot"></div>
     <div class="btn-row" style="justify-content:center;">
       <button class="btn btn-gold" id="new-round">جولة جديدة — أسئلة جديدة</button>
       <button class="btn btn-ghost" id="replay">إعادة نفس الأسئلة</button>
       <button class="btn btn-ghost" id="new-hub">رجوع للرئيسية</button>
     </div>
   </div>`);
+
+  /* بطاقة تسجيل النتيجة بترتيب الفرق — اختيارية، وتختفي لو اللعبة
+     كانت فئات خاصة بالكامل (ماكو أسئلة بنك تنقارن بين الفرق) */
+  const boardCard = renderTeamBoardCard();
+  if(boardCard) wrap.querySelector('#board-card-slot').appendChild(boardCard);
 
   function resetRoundState(){
     state.pool.forEach(t=>{ t.taken=false; t.takenBy=null; });
@@ -1082,6 +1106,7 @@ function renderEnd(){
     state.teams[0].helps = state.helpsPerTeam;
     state.teams[1].helps = state.helpsPerTeam;
     state.statsRecordedForThisGame = false;
+    startTeamScoreRun();
     resetAdGates();
   }
 

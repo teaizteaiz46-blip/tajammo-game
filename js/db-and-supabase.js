@@ -6,12 +6,14 @@ let CATEGORY_DATA = {};
    البنك بصمت وتضيع مواضيع كاملة. نجيبه على صفحات لحد ما يخلص. */
 const CATEGORY_PAGE_SIZE = 1000;
 
+/* id ضروري لترتيب الفرق — بيه نعرف أي سؤال انجاوب صح */
 const BANK_SELECT =
-  'select=topic,points,question,answer,image,media_type,clip_start,clip_seconds&order=id.asc';
+  'select=id,topic,points,question,answer,image,media_type,clip_start,clip_seconds&order=id.asc';
 
 /* البنك ينحفظ بالجهاز بعد أول تحميل، فالمرات الجاية تفتح فوراً بلا انتظار.
-   النسخة (v1) بالمفتاح: لو غيّرنا شكل البيانات، نرفع الرقم ويُهمل الكاش القديم. */
-const BANK_CACHE_KEY = 'tajammo.bank.v1';
+   النسخة (v2) بالمفتاح: لو غيّرنا شكل البيانات، نرفع الرقم ويُهمل الكاش القديم.
+   v2 أضافت id لكل سؤال، فكاش v1 ما ينفع. */
+const BANK_CACHE_KEY = 'tajammo.bank.v2';
 const BANK_CACHE_TTL = 24 * 60 * 60 * 1000;   // بعد يوم نجدّده بالخلفية
 
 /* طلب صفحة وحدة. Prefer: count=exact يخلي السيرفر يرجّع العدد الكلي
@@ -40,7 +42,7 @@ function groupBankRows(rows){
   rows.forEach(row=>{
     if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
     const tier = grouped[row.topic][row.points] ? row.points : 200;
-    grouped[row.topic][tier].push({ text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type, clipStart:row.clip_start, clipSeconds:row.clip_seconds });
+    grouped[row.topic][tier].push({ bankId:row.id, text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type, clipStart:row.clip_start, clipSeconds:row.clip_seconds });
   });
   return grouped;
 }
@@ -225,7 +227,7 @@ function pickQuestionsForBankTopic(topicName){
     const picked = pickFromTier(bank[pts], topicName, pts, counts[pts]);
     picked.forEach(raw=>{
       const q = noSongClips ? songQuestionToText(raw) : raw;
-      result.push({ id:nextId(), text:q.text, answer:q.answer, points:pts, image:q.image, mediaType:q.mediaType, clipStart:q.clipStart, clipSeconds:q.clipSeconds });
+      result.push({ id:nextId(), bankId:q.bankId, text:q.text, answer:q.answer, points:pts, image:q.image, mediaType:q.mediaType, clipStart:q.clipStart, clipSeconds:q.clipSeconds });
     });
   });
   return result;
@@ -316,4 +318,58 @@ async function recordGameResult(totalPoints){
     console.warn('تعذّر حفظ الإحصائيات', e);
     return null;
   }
+}
+
+/* ============================ ترتيب الفرق العام ============================ */
+/* الفريق يتعرّف بـ«يوزر» فريد بالتطبيق كله (مثل sqour_basra)، والاسم يبقى
+   حر ويتكرر. التسجيل اختياري ويصير بنهاية اللعبة.
+
+   النقاط تنحسب بالسيرفر مو هنا: كل سؤال إله وزن = صعوبته الحقيقية
+   (كم فريق جاوبه صح من كل اللي شافوه)، فسؤال قليل من يعرفه ينطي أكثر.
+   لو انحسبت هنا، أي واحد يفتح أدوات المطور ويكتب لنفسه أي رقم. */
+const TEAM_HANDLE_RE = /^[a-z0-9_ء-ي]{3,20}$/;
+
+function normalizeTeamHandle(s){
+  return String(s || '').trim().toLowerCase().replace(/^@+/, '');
+}
+
+function teamHandleError(handle){
+  const h = normalizeTeamHandle(handle);
+  if(!h) return 'اكتب يوزر الفريق';
+  if(h.length < 3)  return 'اليوزر قصير — ٣ حروف على الأقل';
+  if(h.length > 20) return 'اليوزر طويل — ٢٠ حرف كحد أعلى';
+  if(!TEAM_HANDLE_RE.test(h)) return 'اليوزر يقبل حروف وأرقام و«_» بس، بلا مسافات';
+  return '';
+}
+
+/* نتيجة اللعبة: لكل فريق يوزره وقائمة أسئلته.
+   p_game_uid يمنع الحساب المكرر لو انرسلت نفس اللعبة مرتين. */
+async function submitTeamResults(gameUid, teams){
+  if(!sb) throw new Error('لا يوجد اتصال بالإنترنت');
+  if(!state.user) throw new Error('لازم تسجل دخول حتى تدخل الترتيب');
+  const { data, error } = await sb.rpc('submit_team_results', {
+    p_game_uid: gameUid,
+    p_teams: teams
+  });
+  if(error) throw error;
+  return data;                         // { teams:[{handle,name,score,rank,gained,...}] }
+}
+
+async function fetchTeamLeaderboard(period, limit, handles){
+  if(!sb) throw new Error('لا يوجد اتصال بالإنترنت');
+  const { data, error } = await sb.rpc('team_leaderboard', {
+    p_period: period === 'week' ? 'week' : 'all',
+    p_limit: limit || 50,
+    p_handles: handles && handles.length ? handles : null
+  });
+  if(error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+function translateTeamError(msg){
+  const m = String(msg || '').toUpperCase();
+  if(m.includes('AUTH_REQUIRED')) return 'لازم تسجل دخول حتى تدخل الترتيب.';
+  if(m.includes('DAILY_LIMIT'))   return 'وصلت سقف الألعاب المسجّلة اليوم. جرب باچر.';
+  if(m.includes('BAD_TEAMS'))     return 'بيانات الفرق غير صالحة.';
+  return 'تعذّر تسجيل النتيجة — تأكد من الإنترنت وجرب مرة ثانية.';
 }

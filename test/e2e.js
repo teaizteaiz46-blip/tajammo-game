@@ -96,6 +96,21 @@ window.supabase = {
           window.__reports.push(params);
           return { data: { ok: true, already: false }, error: null };
         }
+        if(name === 'team_leaderboard'){
+          var rows = window.__boardRows || [];
+          if(params.p_handles) rows = rows.filter(function(r){ return params.p_handles.indexOf(r.handle) >= 0; });
+          return { data: rows.slice(0, params.p_limit || 50), error: null };
+        }
+        if(name === 'submit_team_results'){
+          if(!window.__signedIn) return { data: null, error: { message: 'AUTH_REQUIRED' } };
+          window.__submitted = params;
+          return { data: { teams: (params.p_teams || []).map(function(t, i){
+            var ans = t.answers || [];
+            return { handle: t.handle, name: t.name, rank: i + 1,
+                     score: 100 - i, gained: 50 - i, answered: ans.length,
+                     correct: ans.filter(function(a){ return a.ok; }).length };
+          }) }, error: null };
+        }
         return { data: null, error: { message: 'unknown rpc ' + name } };
       },
       from: function(table){
@@ -973,7 +988,8 @@ const CANNED_BANK = (() => {
 
   await step('البنك ينحفظ بالجهاز ويُستعمل بدل الشبكة بعد إعادة الفتح', async () => {
     const saved = await page.evaluate(() => {
-      try { return !!localStorage.getItem('tajammo.bank.v1'); } catch (e) { return false; }
+      /* المفتاح ينقرأ من التطبيق نفسه، حتى رفع نسخة الكاش ما يكسر التست */
+      try { return !!localStorage.getItem(BANK_CACHE_KEY); } catch (e) { return false; }
     });
     if (!saved) throw new Error('الكاش ما انحفظ بـ localStorage');
 
@@ -1721,6 +1737,148 @@ const CANNED_BANK = (() => {
       return { spy: state.spyTimerHandle, bomb: state.bombHandle };
     });
     if (r.spy !== null || r.bomb !== null) throw new Error('بقى مؤقت شغّال');
+  });
+
+  console.log('\nترتيب الفرق العام');
+
+  /* السؤال ينحسب على صاحب الموضوع، وإذا خطفه الفريق الثاني ينحسب
+     للاثنين. هاي القاعدة هي أساس التقييم كله — لو انكسرت، الترتيب
+     يصير يقيس شي ثاني بلا ما ينتبه أحد. */
+  await step('نتيجة كل سؤال تنحسب على الفريق الصحيح', async () => {
+    const r = await page.evaluate(() => {
+      state.gameAnswers = [];
+      const topic0 = { takenBy: 0 }, topic1 = { takenBy: 1 }, orphan = {};
+      recordTeamAnswer(0, topic0, { bankId: 11 });       // صاحب الموضوع جاوب
+      recordTeamAnswer(null, topic0, { bankId: 12 });    // ولا فريق جاوب
+      recordTeamAnswer(0, topic1, { bankId: 13 });       // خطف من الفريق الثاني
+      recordTeamAnswer(1, orphan, { bankId: 14 });       // موضوع بلا مالك
+      recordTeamAnswer(0, topic0, { text: 'فئة خاصة' }); // بلا bankId — ما ينحسب
+      return state.gameAnswers;
+    });
+    const key = a => a.team + ':' + a.q + ':' + (a.ok ? 1 : 0);
+    const got = r.map(key).sort().join(' | ');
+    const want = ['0:11:1', '0:12:0', '1:13:0', '0:13:1', '1:14:1'].sort().join(' | ');
+    if (got !== want) throw new Error('التوزيع غلط:\n      صار: ' + got + '\n      المتوقع: ' + want);
+  });
+
+  await step('مساعدة «تبديل السؤال» تبدّل bankId وياه', async () => {
+    const src = await page.evaluate(() => {
+      const fn = String(wireHelpButtons);
+      return fn.slice(fn.indexOf("type==='swap'"), fn.indexOf("type==='swap'") + 400);
+    });
+    if (!/q\.bankId\s*=\s*fresh\.bankId/.test(src))
+      throw new Error('السؤال ينتبدل بلا bankId — النتيجة تنحسب على السؤال القديم');
+  });
+
+  await step('اليوزر يرفض الفاضي والقصير والمسافات', async () => {
+    const r = await page.evaluate(() => ({
+      empty:  !!teamHandleError(''),
+      short:  !!teamHandleError('ab'),
+      space:  !!teamHandleError('abc def'),
+      long:   !!teamHandleError('a'.repeat(21)),
+      ok:     teamHandleError('sqour_basra'),
+      arabic: teamHandleError('صقور_البصرة'),
+      at:     normalizeTeamHandle('  @Sqour_Basra ')
+    }));
+    if (!r.empty || !r.short || !r.space || !r.long) throw new Error('قبل يوزر غير صالح');
+    if (r.ok) throw new Error('رفض يوزر صالح: ' + r.ok);
+    if (r.arabic) throw new Error('رفض يوزر عربي: ' + r.arabic);
+    if (r.at !== 'sqour_basra') throw new Error('التنظيف غلط: ' + r.at);
+  });
+
+  await step('بطاقة التسجيل تظهر بالنهاية وتختفي لو ماكو أسئلة بنك', async () => {
+    const r = await page.evaluate(() => {
+      const user = state.user;
+      state.user = { uid: 'x', name: 'تجربة', coins: 0 };
+      state.gameAnswers = [{ team: 0, q: 1, ok: true }];
+      const withBank = !!renderTeamBoardCard();
+      state.gameAnswers = [];
+      const withoutBank = !!renderTeamBoardCard();
+      state.user = user;
+      return { withBank, withoutBank };
+    });
+    if (!r.withBank) throw new Error('البطاقة ما ظهرت بلعبة فيها أسئلة بنك');
+    if (r.withoutBank) throw new Error('البطاقة ظهرت بلعبة فئات خاصة بالكامل');
+  });
+
+  await step('شاشة الترتيب تنفتح من الرئيسية وتعرض الفرق', async () => {
+    await page.evaluate(() => {
+      window.__boardRows = [
+        { rank: 1, handle: 'sqour_basra', name: 'صقور البصرة', score: 340, games: 4, answers: 20, correct: 14 },
+        { rank: 2, handle: 'nsour_mosul', name: 'نسور الموصل', score: 180, games: 3, answers: 18, correct: 7 }
+      ];
+      state.history = []; goto('hub');
+    });
+    await page.click('#hub-board');
+    await page.waitForFunction(() => state.screen === 'leaderboard' && !state.boardLoading,
+                               null, { timeout: 15000 });
+    const r = await page.evaluate(() => ({
+      err: state.boardError,
+      rows: document.querySelectorAll('.score-row').length,
+      text: document.body.innerText
+    }));
+    if (r.err) throw new Error('الترتيب ما انحمّل: ' + r.err);
+    if (r.rows !== 2) throw new Error('عدد الصفوف: ' + r.rows);
+    if (!r.text.includes('صقور البصرة')) throw new Error('اسم الفريق ما ظهر');
+    if (!r.text.includes('70٪')) throw new Error('نسبة الإجابات الصحيحة ما ظهرت');
+    await page.evaluate(() => { state.history = []; goto('hub'); });
+  });
+
+  /* أهم شي بالتسجيل: كل فريق يرسل أسئلته هو بس. لو انخلطت، الترتيب
+     ينبني على بيانات غلط من أول يوم وما ينفع ينصلح بأثر رجعي. */
+  await step('التسجيل يرسل أسئلة كل فريق لفريقه', async () => {
+    const r = await page.evaluate(async () => {
+      window.__signedIn = true;
+      window.__submitted = null;
+      state.user = { uid: 'u1', name: 'تجربة', coins: 0 };
+      state.teams[0].name = 'صقور البصرة';
+      state.teams[1].name = 'نسور الموصل';
+      state.gameUid = '33333333-3333-4333-8333-333333333333';
+      state.gameAnswers = [
+        { team: 0, q: 11, ok: true }, { team: 0, q: 12, ok: false },
+        { team: 1, q: 13, ok: true }
+      ];
+      state.teamHandles = ['sqour_basra', 'nsour_mosul'];
+      state.boardResult = null; state.boardError = '';
+      await submitBoardResult();
+      const out = {
+        sent: window.__submitted,
+        error: state.boardError,
+        result: state.boardResult,
+        saved: localStorage.getItem('tajammo.teamHandles.v1'),
+        shown: (renderTeamBoardCard() || {}).innerText || ''
+      };
+      state.user = null; window.__signedIn = false;
+      return out;
+    });
+    if (r.error) throw new Error('رجع خطأ: ' + r.error);
+    if (!r.sent) throw new Error('ما انرسل شي للسيرفر');
+    if (r.sent.p_game_uid !== '33333333-3333-4333-8333-333333333333')
+      throw new Error('معرّف اللعبة ما انرسل — الحساب المكرر ما ينمنع');
+    const t0 = r.sent.p_teams[0], t1 = r.sent.p_teams[1];
+    if (t0.handle !== 'sqour_basra' || t1.handle !== 'nsour_mosul')
+      throw new Error('اليوزرات انخلطت');
+    if (t0.answers.length !== 2 || t1.answers.length !== 1)
+      throw new Error('أسئلة الفرق انخلطت: ' + t0.answers.length + ' و' + t1.answers.length);
+    if (t0.answers.some(a => a.q === 13)) throw new Error('سؤال الفريق الثاني انحسب على الأول');
+    if (!r.shown.includes('انسجّلت النتيجة') || !r.shown.includes('المركز 1'))
+      throw new Error('بطاقة النتيجة ما بيّنت المركز: ' + r.shown);
+    if (!String(r.saved).includes('sqour_basra')) throw new Error('اليوزر ما انحفظ للمرة الجاية');
+  });
+
+  await step('التسجيل يرفض يوزر مكرر للفريقين', async () => {
+    const err = await page.evaluate(async () => {
+      window.__signedIn = true;
+      state.user = { uid: 'u1', name: 'تجربة', coins: 0 };
+      state.gameAnswers = [{ team: 0, q: 11, ok: true }];
+      state.teamHandles = ['same_team', 'same_team'];
+      state.boardResult = null; state.boardError = '';
+      await submitBoardResult();
+      const e = state.boardError;
+      state.user = null; window.__signedIn = false;
+      return e;
+    });
+    if (!err) throw new Error('قبل نفس اليوزر للفريقين');
   });
 
   console.log('\nأخطاء جافاسكربت غير متوقعة');
