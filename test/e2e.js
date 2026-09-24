@@ -1881,6 +1881,72 @@ const CANNED_BANK = (() => {
     if (!err) throw new Error('قبل نفس اليوزر للفريقين');
   });
 
+  /* آبل رفضت نسخة 1.8 (12) لأن نافذة إذن التتبع ما كانت تطلع: انطلبت
+     والتطبيق لسه مو «فعّال»، فالنظام تجاهلها بصمت. التست يثبّت الترتيب:
+     ما ننطلب إلا بعد ما يصير فعّال، ودائماً قبل تهيئة الإعلانات. */
+  console.log('\nإذن التتبع على iOS (سبب رفض آبل)');
+  await step('الإذن ينطلب بعد ما يصير التطبيق فعّال، وقبل تشغيل الإعلانات', async () => {
+    const r = await page.evaluate(async () => {
+      const calls = [];
+      let active = false, onState = null;
+      const realCap = window.Capacitor;
+      window.Capacitor = {
+        isNativePlatform: () => true,
+        getPlatform: () => 'ios',
+        Plugins: {
+          App: {
+            getState: async () => ({ isActive: active }),
+            addListener: (ev, cb) => { if (ev === 'appStateChange') onState = cb; return { remove(){} }; }
+          },
+          AdMob: {
+            trackingAuthorizationStatus: async () => ({ status: 'notDetermined' }),
+            requestTrackingAuthorization: async () => { calls.push('att'); },
+            initialize: async () => { calls.push('init'); },
+            showBanner: async () => { calls.push('banner'); }
+          },
+          BannerAdPosition: { BOTTOM_CENTER: 'b' },
+          BannerAdSize: { ADAPTIVE_BANNER: 'a' }
+        }
+      };
+      const p = initAdMob();
+      await new Promise(r => setTimeout(r, 400));
+      const beforeActive = calls.slice();          // لسه مو فعّال — المفروض ماكو ولا نداء
+      active = true;
+      if (onState) onState({ isActive: true });
+      await p;
+      window.Capacitor = realCap;
+      admobReady = false;
+      return { beforeActive, calls };
+    });
+    if (r.beforeActive.length)
+      throw new Error('انطلب شي والتطبيق لسه مو فعّال: ' + r.beforeActive.join(','));
+    if (r.calls[0] !== 'att')
+      throw new Error('إذن التتبع مو أول شي: ' + r.calls.join(','));
+    if (r.calls.indexOf('init') < r.calls.indexOf('att'))
+      throw new Error('الإعلانات انشغّلت قبل الإذن: ' + r.calls.join(','));
+  });
+
+  await step('ما نزعج اللاعب بالنافذة لو قرر قبل', async () => {
+    const r = await page.evaluate(async () => {
+      let asked = 0;
+      const realCap = window.Capacitor;
+      window.Capacitor = {
+        isNativePlatform: () => true,
+        getPlatform: () => 'ios',
+        Plugins: {
+          AdMob: {
+            trackingAuthorizationStatus: async () => ({ status: 'denied' }),
+            requestTrackingAuthorization: async () => { asked++; }
+          }
+        }
+      };
+      await requestTrackingPermission();
+      window.Capacitor = realCap;
+      return asked;
+    });
+    if (r !== 0) throw new Error('أعاد طلب الإذن مع إن اللاعب قرر قبل');
+  });
+
   console.log('\nأخطاء جافاسكربت غير متوقعة');
   if (errors.length) { console.log('  ✗ ' + errors.join('\n  ')); fail++; }
   else console.log('  ✓ ماكو أي خطأ بالصفحة');

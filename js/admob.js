@@ -31,6 +31,69 @@ function isNativeApp(){
   return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+   إذن التتبع (ATT) على iOS
+
+   نافذة الإذن ما تطلع أبداً إذا انطلبت والتطبيق لسه مو «فعّال»
+   (UIApplicationStateActive). النظام يرجّع الحالة الحالية بصمت بلا
+   ما يعرض شي، وتبقى notDetermined. وهذا اللي صار برفض آبل بنسخة
+   1.8 (12): كان يُنادى أول ما تتحمّل الصفحة، يعني قبل ما يصير
+   التطبيق فعّال، فالمراجع ما شاف ولا طلب.
+
+   فهسه ننتظر التطبيق يصير فعّال، وننطي الواجهة لحظة تظهر، وبعدها
+   نطلب — وقبل initialize، لأن آبل تشترط الإذن قبل أي جمع بيانات.
+   ───────────────────────────────────────────────────────────────────── */
+function waitUntilAppActive(){
+  return new Promise(resolve=>{
+    const App = (window.Capacitor && window.Capacitor.Plugins)
+                ? window.Capacitor.Plugins.App : null;
+    let settled = false;
+    /* نصف ثانية بعد ما يصير فعّال: النافذة تطلع فوق واجهة ظاهرة مو شاشة بيضة */
+    const done = ()=>{ if(settled) return; settled = true; setTimeout(resolve, 500); };
+
+    if(!App || !App.getState){ setTimeout(done, 800); return; }
+
+    App.getState().then(s=>{ if(s && s.isActive) done(); }).catch(()=> done());
+    try{ App.addListener('appStateChange', s=>{ if(s && s.isActive) done(); }); }
+    catch(e){ /* ما يهم — أكو صمام أمان تحت */ }
+
+    setTimeout(done, 5000);              // ما ننتظر للأبد لو ما وصلنا إشعار
+  });
+}
+
+async function requestTrackingPermission(){
+  if(currentPlatform() !== 'ios') return;
+  const { AdMob } = window.Capacitor.Plugins;
+  if(!AdMob || typeof AdMob.requestTrackingAuthorization !== 'function') return;
+  try{
+    /* لو اللاعب قرر قبل (وافق أو رفض)، النظام ما يعيد النافذة — ما نزعجه */
+    if(typeof AdMob.trackingAuthorizationStatus === 'function'){
+      const r = await AdMob.trackingAuthorizationStatus();
+      if(r && r.status && r.status !== 'notDetermined') return;
+    }
+    await AdMob.requestTrackingAuthorization();
+  }catch(e){ console.warn('إذن التتبع', e); }
+}
+
+/* شبكة أمان: لو المحاولة الأولى ما عرضت شي (الإضافة تنادي ATT بلا ما
+   تضمن الخيط الرئيسي، والنظام يتجاهل الطلب بصمت بحالات معيّنة)، نعيد
+   المحاولة أول ما يرجع التطبيق فعّال. النظام ما يعرض النافذة إلا مرة
+   وحدة بالعمر، فلو انعرضت فعلاً الحالة ما تبقى notDetermined ونوقف. */
+function watchTrackingPermission(){
+  if(currentPlatform() !== 'ios') return;
+  const App = (window.Capacitor && window.Capacitor.Plugins)
+              ? window.Capacitor.Plugins.App : null;
+  if(!App || !App.addListener) return;
+  let tries = 0;
+  try{
+    App.addListener('appStateChange', s=>{
+      if(!s || !s.isActive) return;
+      if(tries++ >= 3) return;
+      setTimeout(()=> requestTrackingPermission(), 700);
+    });
+  }catch(e){ /* بلا شبكة أمان — المحاولة الأولى تبقى شغالة */ }
+}
+
 async function initAdMob(){
   if(!isNativeApp()) return;
   if(!adIdsReady()){ console.warn('معرّفات الإعلانات لهذي المنصة ما انبدّلت — الإعلانات مطفية'); return; }
@@ -38,13 +101,11 @@ async function initAdMob(){
     const { AdMob } = window.Capacitor.Plugins;
     if(!AdMob) return;
 
-    /* iOS 14+: آبل تشترط نطلب إذن التتبع قبل ما تشتغل الإعلانات المخصصة.
-       لو رفض المستخدم، AdMob يعرض إعلانات غير مخصصة — الإعلانات تبقى شغالة.
-       النص اللي يطلع بالنافذة موجود بـ Info.plist (NSUserTrackingUsageDescription). */
-    if(currentPlatform() === 'ios' && typeof AdMob.requestTrackingAuthorization === 'function'){
-      try{ await AdMob.requestTrackingAuthorization(); }
-      catch(e){ console.warn('إذن التتبع', e); }
-    }
+    /* النص اللي يطلع بالنافذة موجود بـ Info.plist (NSUserTrackingUsageDescription).
+       لو رفض اللاعب، AdMob يعرض إعلانات غير مخصصة — الإعلانات تبقى شغالة. */
+    await waitUntilAppActive();
+    await requestTrackingPermission();
+    watchTrackingPermission();
 
     await AdMob.initialize({});
     admobReady = true;
