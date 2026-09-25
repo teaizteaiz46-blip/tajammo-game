@@ -370,6 +370,7 @@ function translateTeamError(msg){
   const m = String(msg || '').toUpperCase();
   if(m.includes('AUTH_REQUIRED')) return 'لازم تسجل دخول حتى تدخل الترتيب.';
   if(m.includes('DAILY_LIMIT'))   return 'وصلت سقف الألعاب المسجّلة اليوم. جرب باچر.';
+  if(m.includes('BANNED_TERM'))   return 'اسم الفريق أو اليوزر بيه كلمة غير مسموحة. غيّره وجرب مرة ثانية.';
   if(m.includes('BAD_TEAMS'))     return 'بيانات الفرق غير صالحة.';
   return 'تعذّر تسجيل النتيجة — تأكد من الإنترنت وجرب مرة ثانية.';
 }
