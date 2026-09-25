@@ -878,7 +878,7 @@ function renderAccountOverlay(){
   const bBox = modal.querySelector('#acc-blocked');
   if(blocked.length){
     bBox.appendChild(el(`<div class="section-sub" style="margin-bottom:6px;">
-      ناشرون محظورون (${blocked.length}) — فئاتهم ما توصلك</div>`));
+      مستخدمين محظورين (${blocked.length}) — فئاتهم وفرقهم ما توصلك</div>`));
     blocked.forEach(a=>{
       const row = el(`<div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
                         padding:7px 2px; border-top:1px solid var(--line);">

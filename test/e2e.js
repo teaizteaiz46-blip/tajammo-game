@@ -101,6 +101,11 @@ window.supabase = {
           if(params.p_handles) rows = rows.filter(function(r){ return params.p_handles.indexOf(r.handle) >= 0; });
           return { data: rows.slice(0, params.p_limit || 50), error: null };
         }
+        if(name === 'report_team'){
+          window.__teamReports = window.__teamReports || [];
+          window.__teamReports.push(params);
+          return { data: { ok: true, already: false }, error: null };
+        }
         if(name === 'submit_team_results'){
           if(!window.__signedIn) return { data: null, error: { message: 'AUTH_REQUIRED' } };
           window.__submitted = params;
@@ -1864,6 +1869,65 @@ const CANNED_BANK = (() => {
     if (!r.shown.includes('انسجّلت النتيجة') || !r.shown.includes('المركز 1'))
       throw new Error('بطاقة النتيجة ما بيّنت المركز: ' + r.shown);
     if (!String(r.saved).includes('sqour_basra')) throw new Error('اليوزر ما انحفظ للمرة الجاية');
+  });
+
+  /* آبل (Guideline 1.2): أسماء الفرق محتوى مستخدمين، فلازم يكون أكو
+     تبليغ وحظر، مو بس فلترة. هاي التستات تثبّت الثلاثة بالواجهة. */
+  await step('زر التبليغ ⚑ يطلع على فرق الغير بس، مو على فرقك', async () => {
+    const r = await page.evaluate(async () => {
+      try { localStorage.setItem('tajammo.teamHandles.v1', JSON.stringify(['my_team', ''])); } catch (e) {}
+      try { localStorage.removeItem(BLOCKED_AUTHORS_KEY); } catch (e) {}
+      window.__boardRows = [
+        { rank: 1, handle: 'bad_team', name: 'فريق مزعج', score: 300, games: 3, answers: 15, correct: 10, owner_key: 'owner_bad' },
+        { rank: 2, handle: 'my_team',  name: 'فريقي',     score: 200, games: 2, answers: 10, correct: 6,  owner_key: 'owner_me' },
+        { rank: 3, handle: 'bad_team2', name: 'فريقه الثاني', score: 100, games: 1, answers: 6, correct: 3, owner_key: 'owner_bad' }
+      ];
+      state.history = []; goto('hub');
+      openLeaderboard();
+      await new Promise(res => { const w = () => (!state.boardLoading ? res() : setTimeout(w, 30)); w(); });
+      const rows = [...document.querySelectorAll('.score-row')];
+      return rows.map(row => ({
+        text: row.innerText,
+        flag: !!row.querySelector('.team-report')
+      }));
+    });
+    const mine = r.find(x => x.text.includes('my_team'));
+    const other = r.find(x => x.text.includes('bad_team'));
+    if (!mine || !other) throw new Error('الصفوف ما ظهرت: ' + JSON.stringify(r));
+    if (mine.flag) throw new Error('زر التبليغ طالع على فريقك');
+    if (!other.flag) throw new Error('زر التبليغ مو طالع على فريق غيرك');
+  });
+
+  await step('البلاغ ينرسل، والحظر يشيل كل فرق صاحبه، وإلغاء الحظر يرجّعها', async () => {
+    const r = await page.evaluate(async () => {
+      window.__teamReports = [];
+      const row = state.boardRows.find(x => x.handle === 'bad_team');
+      openTeamReport(row);
+      const modalOpen = !!document.querySelector('#trep-send');
+      state.reportReason = 'offensive';
+      state.blockAuthorToo = true;
+      await submitTeamReport();
+      const done = state.reportDone;
+      closeTeamReport();
+
+      const afterBlock = [...document.querySelectorAll('.score-row')].map(x => x.innerText).join(' | ');
+      const panel = document.body.innerText.includes('مستخدمين محظورين');
+
+      unblockAuthor('owner_bad'); render();
+      const afterUnblock = [...document.querySelectorAll('.score-row')].map(x => x.innerText).join(' | ');
+
+      try { localStorage.removeItem('tajammo.teamHandles.v1'); } catch (e) {}
+      return { modalOpen, done, sent: window.__teamReports, afterBlock, panel, afterUnblock };
+    });
+    if (!r.modalOpen) throw new Error('نافذة البلاغ ما انفتحت');
+    if (!r.done) throw new Error('البلاغ ما خلص');
+    if (!r.sent.length || r.sent[0].p_handle !== 'bad_team' || r.sent[0].p_reason !== 'offensive')
+      throw new Error('البلاغ انرسل غلط: ' + JSON.stringify(r.sent));
+    if (r.afterBlock.includes('bad_team')) throw new Error('الحظر ما شال الفريق الأول');
+    if (r.afterBlock.includes('bad_team2')) throw new Error('الحظر ما شال فريقه الثاني — لازم يحظر الشخص مو الفريق بس');
+    if (!r.afterBlock.includes('my_team')) throw new Error('الحظر شال فريق ثاني ما إله علاقة');
+    if (!r.panel) throw new Error('قائمة المحظورين ما ظهرت بشاشة الترتيب');
+    if (!r.afterUnblock.includes('bad_team')) throw new Error('إلغاء الحظر ما رجّع الفريق');
   });
 
   await step('التسجيل يرفض يوزر مكرر للفريقين', async () => {

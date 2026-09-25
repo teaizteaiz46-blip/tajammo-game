@@ -33,6 +33,9 @@ function render(){
   if(state.reportTopic){
     app.appendChild(renderReportOverlay());
   }
+  if(state.reportTeam){
+    app.appendChild(renderTeamReportOverlay());
+  }
   if(state.showTermsModal){
     app.appendChild(renderTermsOverlay());
   }

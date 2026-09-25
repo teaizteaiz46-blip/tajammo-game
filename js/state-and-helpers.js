@@ -67,6 +67,7 @@ const state = {
   boardResult: null,         // رد submit_team_results
   boardRows: [],             // صفوف شاشة الترتيب
   boardMine: [],             // صفوف فرق هذا الجهاز، بمركزها الحقيقي
+  reportTeam: null,          // صف الفريق اللي دا ينبلّغ عنه (نافذة البلاغ)
   boardPeriod: 'week',
   boardLoading: false,
 
