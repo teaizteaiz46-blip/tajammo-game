@@ -105,7 +105,10 @@
 
 آخر تحقق: 2026-09-28 (من صور Play Console — نموذج Data safety)
 
-- **آخر تحديث للنموذج: 15 سبتمبر 2026** — قبل ترتيب الفرق (24 سبتمبر).
+- **آخر تحديث للنموذج: 28 سبتمبر 2026** — انرسل للمراجعة (In review).
+  قبلها چان 15 سبتمبر، قبل ترتيب الفرق.
+- الملخص بعد التحديث: «5 data types collected or shared» (المجموعات — زادت
+  Location).
 - **Account creation:** Username and password.
 - **Data deletion:** رابط حذف الحساب ← `privacy.html`، ورابط حذف البيانات
   (بلا حذف الحساب) ← `support.html`.
@@ -122,20 +125,20 @@ or other IDs. الأغراض: Advertising, Analytics, Fraud prevention.
 |---|---|---|
 | Personal info ← Name | الاسم المعروض | ✅ مؤشر |
 | Personal info ← Email address | الحساب | ✅ مؤشر |
-| Personal info ← **User IDs** | معرّف الحساب (آبل: User ID) | ❌ **ناقص** — Collected، Optional، App functionality + Account management |
-| **Location ← Approximate location** | AdMob من الـ IP | ❌ **ناقص** — Collected + Shared، Required، Advertising + Analytics + Fraud prevention |
+| Personal info ← User IDs | معرّف الحساب (آبل: User ID) | ✅ انضاف 28/9 (ما انشافت صورته) — Collected، Optional، App functionality + Account management |
+| Location ← Approximate location | AdMob من الـ IP | ✅ انضاف 28/9 (انشافت الصورة) — Collected + Shared، Required، Advertising + Analytics + Fraud prevention |
 | App activity ← App interactions | AdMob | ✅ مؤشر |
 | App activity ← Other user-generated content | فئات خاصة، أسماء فرق، بلاغات | ✅ مؤشر |
-| App activity ← **Other actions** | نتائج اللعب والترتيب («such as gameplay») | ❌ **ناقص** — Collected، Optional، App functionality |
+| App activity ← Other actions | نتائج اللعب والترتيب («such as gameplay») | ✅ انضاف 28/9 (ما انشافت صورته) — Collected، Optional، App functionality |
 | App info and performance ← Diagnostics | AdMob | ✅ مؤشر |
-| App info and performance ← **Crash logs** | AdMob (آبل: Crash Data) | ❌ **ناقص** — Collected + Shared، Required، Advertising + Analytics + Fraud prevention |
-| App info and performance ← **Other app performance data** | AdMob | ❌ **ناقص** — نفس Crash logs |
+| App info and performance ← Crash logs | AdMob (آبل: Crash Data) | ✅ انضاف 28/9 (انشافت الصورة) — Collected + Shared، Required، Advertising + Analytics + Fraud prevention |
+| App info and performance ← Other app performance data | AdMob | ✅ انضاف 28/9 (ما انشافت صورته) — نفس Crash logs |
 | Device or other IDs | معرّف الإعلانات | ✅ مؤشر |
 
 Supabase مزوّد خدمة يشتغل بالنيابة عنّا، فجوجل ما تحسبه «مشاركة» — البيانات
 اللي بس عندنا تنأشّر Collected بلا Shared.
 
-**لمن تنضاف الخمسة الناقصة:** حوّل ❌ لـ ✅ وحدّث تاريخ «آخر تحديث للنموذج».
+إذا كوكل رفضت أو طلبت تعديل على نموذج 28 سبتمبر، سجّل هنا شنو طلبت.
 
 ---
 
@@ -211,3 +214,4 @@ Supabase مزوّد خدمة يشتغل بالنيابة عنّا، فجوجل �
 | 2026-09-25 | ملاحظات App Review انكتبت بالإنكليزي (چانت عربي) |
 | 2026-09-28 | آبل: انضاف Gameplay Content لـ App Privacy |
 | 2026-09-28 | `privacy.html` و`terms.html`: انضاف ترتيب الفرق وخدمات المحتوى |
+| 2026-09-28 | كوكل Data safety: انضاف User IDs، Approximate location، Other actions، Crash logs، Other app performance data — In review |
