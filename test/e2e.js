@@ -1382,9 +1382,9 @@ const CANNED_BANK = (() => {
       const rows = [
         { id: 1, topic: 'مختلطة', points: 100, question: 'نص', answer: 'أ' },
         { id: 2, topic: 'مختلطة', points: 100, question: 'علم', answer: 'ب', media_type: 'flag', image: 'iq' },
-        { id: 3, topic: 'مختلطة', points: 100, question: 'منو هذا؟', answer: 'ج', media_type: 'photo', image: 'https://x/y.jpg' },
-        { id: 4, topic: 'مختلطة', points: 100, question: 'شوف المقطع', answer: 'د', media_type: 'video', image: 'https://x/v.mp4' },
-        { id: 5, topic: 'صور بس', points: 100, question: 'منو هذا؟', answer: 'هـ', media_type: 'photo', image: 'https://x/z.jpg' }
+        { id: 3, topic: 'مختلطة', points: 100, question: 'شوف المقطع', answer: 'ج', media_type: 'video', image: 'https://x/v.mp4' },
+        { id: 4, topic: 'مختلطة', points: 100, question: 'نوع من المستقبل', answer: 'د', media_type: 'hologram', image: 'x' },
+        { id: 5, topic: 'فيديو بس', points: 100, question: 'شوف المقطع', answer: 'هـ', media_type: 'video', image: 'https://x/w.mp4' }
       ];
       window.fetch = async () => ({
         ok: true, status: 206,
@@ -1398,7 +1398,7 @@ const CANNED_BANK = (() => {
       } finally { window.fetch = realFetch; }
     });
     if (r.ids.join(',') !== '1,2') throw new Error('الأسئلة اللي بقت: ' + r.ids.join(','));
-    if (r.topics.includes('صور بس')) throw new Error('فئة كلها صور طلعت فاضية بالقائمة');
+    if (r.topics.includes('فيديو بس')) throw new Error('فئة كلها فيديو طلعت فاضية بالقائمة');
   });
 
   console.log('\nالتحكم بالمساعدات');
