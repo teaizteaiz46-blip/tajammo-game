@@ -559,7 +559,9 @@ function wireHelpButtons(modal, topic, q){
 
       if(type==='swap'){
         if(topic.bankKey){
-          const fresh = pickFromTier((CATEGORY_DATA[topic.bankKey]||{})[q.points]||[], topic.bankKey, q.points, 1)[0];
+          let fresh = pickFromTier((CATEGORY_DATA[topic.bankKey]||{})[q.points]||[], topic.bankKey, q.points, 1)[0];
+          /* البديل يمر بنفس تحويل الأغاني — وإلا سؤال أغنية ينبدل ويشغّل مقطع */
+          if(fresh && !songClipsAllowed()) fresh = songQuestionToText(fresh);
           /* bankId لازم يتبدل وياه، وإلا النتيجة تنحسب على السؤال القديم */
           if(fresh){ q.text = fresh.text; q.answer = fresh.answer; q.image = fresh.image; q.bankId = fresh.bankId; }
           /* ماكو سؤال بديل بنفس المستوى — ما نحرق المساعدة على لا شي */
@@ -615,10 +617,10 @@ function wireSongPlayer(modal, q){
   const container = modal.querySelector('#song-player');
   if(!container) return;
 
-  /* حزام أمان: على الآيفون ما ننادي متجر آبل إطلاقاً.
-     المفروض أسئلة الأغاني تنحوّل لنص قبل ما توصل هنا
-     (songQuestionToText)، بس لو وصلت لأي سبب نوقف هنا. */
-  if(typeof currentPlatform === 'function' && currentPlatform() === 'ios'){
+  /* حزام أمان: على الآيفون (أو لو المقاطع مطفّية بـ SONG_CLIPS_ENABLED)
+     ما ننادي متجر آبل إطلاقاً. المفروض أسئلة الأغاني تنحوّل لنص قبل ما
+     توصل هنا (songQuestionToText)، بس لو وصلت لأي سبب نوقف هنا. */
+  if(!songClipsAllowed()){
     container.innerHTML = '<div class="section-sub">اسألوا الفريق: منو يغني هذي الأغنية؟</div>';
     return;
   }

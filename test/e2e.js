@@ -1347,6 +1347,60 @@ const CANNED_BANK = (() => {
     if (!hits.note.includes('منو يغني')) throw new Error('ماكو بديل نصي بالمشغّل: ' + hits.note);
   });
 
+  /* «تبديل السؤال» يسحب من البنك الخام مباشرة — لو ما يمر بالتحويل،
+     سؤال أغنية ينبدل بالآيفون ويطلع «خمّن اسم هذي الأغنية» بلا مقطع */
+  await step('الآيفون: تبديل السؤال بفئة أغاني يجيب سؤال نصي', async () => {
+    const r = await page.evaluate(() => {
+      const real = window.Capacitor;
+      window.Capacitor = { getPlatform: () => 'ios' };
+      try {
+        const topic = makeBankTopic('أغاني تجريبية');
+        topic.taken = true; topic.takenBy = 0;
+        resetTeamHelps();
+        state.helpsEnabled = { letter:true, blanks:true, swap:true };
+        const q = topic.questions[0];
+        const modal = document.createElement('div');
+        modal.innerHTML = '<button class="help-btn" data-team="0" data-type="swap"></button>';
+        const keepRender = window.render; window.render = () => {};
+        try {
+          wireHelpButtons(modal, topic, q);
+          modal.querySelector('.help-btn').click();
+        } finally { window.render = keepRender; }
+        return { media: q.mediaType || null, text: q.text, used: helpUsed(state.teams[0], 'swap') };
+      } finally { window.Capacitor = real; }
+    });
+    if (!r.used) throw new Error('التبديل ما صار');
+    if (r.media === 'song') throw new Error('البديل طلع سؤال صوتي بالآيفون');
+    if (!/^منو يغني «.+»؟$/.test(r.text)) throw new Error('البديل مو نصي: ' + r.text);
+  });
+
+  /* البنك يكدر يسبق التطبيق: نوع وسائط جديد (صورة/فيديو) ينضاف من لوحة
+     الإدارة قبل ما ينزل دعمه — النسخة الحالية لازم تتجاهله مو تعرضه ناقص */
+  await step('أنواع الوسائط اللي ما تدعمها النسخة ما تطلع باللعبة', async () => {
+    const r = await page.evaluate(async () => {
+      const realFetch = window.fetch;
+      const rows = [
+        { id: 1, topic: 'مختلطة', points: 100, question: 'نص', answer: 'أ' },
+        { id: 2, topic: 'مختلطة', points: 100, question: 'علم', answer: 'ب', media_type: 'flag', image: 'iq' },
+        { id: 3, topic: 'مختلطة', points: 100, question: 'منو هذا؟', answer: 'ج', media_type: 'photo', image: 'https://x/y.jpg' },
+        { id: 4, topic: 'مختلطة', points: 100, question: 'شوف المقطع', answer: 'د', media_type: 'video', image: 'https://x/v.mp4' },
+        { id: 5, topic: 'صور بس', points: 100, question: 'منو هذا؟', answer: 'هـ', media_type: 'photo', image: 'https://x/z.jpg' }
+      ];
+      window.fetch = async () => ({
+        ok: true, status: 206,
+        headers: { get: h => h.toLowerCase() === 'content-range' ? '0-4/5' : null },
+        json: async () => rows
+      });
+      try {
+        const bank = await fetchWholeBank();
+        const kept = [].concat(...Object.values(bank.grouped).map(t => [].concat(t[100], t[200], t[400], t[600])));
+        return { topics: bank.topics, ids: kept.map(q => q.bankId).sort() };
+      } finally { window.fetch = realFetch; }
+    });
+    if (r.ids.join(',') !== '1,2') throw new Error('الأسئلة اللي بقت: ' + r.ids.join(','));
+    if (r.topics.includes('صور بس')) throw new Error('فئة كلها صور طلعت فاضية بالقائمة');
+  });
+
   console.log('\nالتحكم بالمساعدات');
   const openFirstQuestion = async () => {
     await page.evaluate(() => {
@@ -1810,7 +1864,7 @@ const CANNED_BANK = (() => {
   await step('مساعدة «تبديل السؤال» تبدّل bankId وياه', async () => {
     const src = await page.evaluate(() => {
       const fn = String(wireHelpButtons);
-      return fn.slice(fn.indexOf("type==='swap'"), fn.indexOf("type==='swap'") + 400);
+      return fn.slice(fn.indexOf("type==='swap'"), fn.indexOf("type==='swap'") + 1200);
     });
     if (!/q\.bankId\s*=\s*fresh\.bankId/.test(src))
       throw new Error('السؤال ينتبدل بلا bankId — النتيجة تنحسب على السؤال القديم');

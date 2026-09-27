@@ -47,6 +47,17 @@ function groupBankRows(rows){
   return grouped;
 }
 
+/* أنواع الأسئلة اللي تعرف هاي النسخة تعرضها. أي نوع ثاني بالبنك (مثلاً
+   صورة أو فيديو ينضاف من لوحة الإدارة قبل ما ينزل دعمه) ما يطلع باللعبة —
+   وإلا اللاعب يشوف «منو هذا اللاعب؟» بلا صورة. النسخ القديمة تتجاهل
+   الأنواع الجديدة لحالها، فالبنك يكدر يسبق التطبيق بأمان.
+   لمن ينضاف دعم نوع جديد، ينضاف اسمه هنا. */
+const KNOWN_MEDIA_TYPES = ['song', 'flag', 'acting'];
+
+function isPlayableBankRow(row){
+  return !row.media_type || KNOWN_MEDIA_TYPES.indexOf(row.media_type) >= 0;
+}
+
 async function fetchWholeBank(){
   const first = await fetchBankRange(0, CATEGORY_PAGE_SIZE - 1);
   let rows = first.rows;
@@ -68,7 +79,7 @@ async function fetchWholeBank(){
     }
   }
 
-  const grouped = groupBankRows(rows);
+  const grouped = groupBankRows(rows.filter(isPlayableBankRow));
   const topics = Object.keys(grouped);
   if(!topics.length) throw new Error('بنك الأسئلة رجع فارغ');
   return { grouped: grouped, topics: topics, total: first.total || rows.length };
@@ -198,11 +209,20 @@ function pickFromTier(tier, topicName, pts, n){
   saveUsedQuestions();
   return chosen.map(i=>tier[i]);
 }
-/* أسئلة الأغاني تشتغل بتشغيل مقطع ٣٠ ثانية من متجر آبل (iTunes Search API).
-   شروط آبل تسمح بهذا المحتوى للترويج لمتجرها فقط — مو كمحتوى ترفيهي داخل
-   لعبة. فعلى الآيفون نحوّل السؤال لصيغة نصية بدل ما نشغّل المقطع:
-   الجواب بالبنك «اسم الأغنية - المطرب»، فنسأل عن المطرب ونعطي الاسم.
-   أندرويد يبقى مثل ما هو. */
+/* أسئلة الأغاني تشغّل مقطع ٣٠ ثانية من متجر آبل (iTunes Search API).
+   على الآيفون تتحوّل لسؤال نصي بدل المقطع: الجواب بالبنك
+   «اسم الأغنية - المطرب»، فنسأل عن المطرب ونعطي الاسم.
+   على أندرويد المقطع يشتغل — قرار صاحب التطبيق (سياسة كوكل بلي مغطّاة).
+   تنبيه: شروط آبل للمقاطع تمنع استخدامها «كقيمة ترفيهية مستقلة» عن
+   الترويج للبيع، وهي شروط على المحتوى نفسه مو على المنصة.
+   SONG_CLIPS_ENABLED = false يطفّي المقاطع على كل المنصات بضربة وحدة. */
+const SONG_CLIPS_ENABLED = true;
+
+function songClipsAllowed(){
+  if(!SONG_CLIPS_ENABLED) return false;
+  return !((typeof currentPlatform === 'function') && currentPlatform() === 'ios');
+}
+
 function songQuestionToText(q){
   if(q.mediaType !== 'song') return q;
   const dash = String(q.answer || '').lastIndexOf(' - ');
@@ -221,7 +241,7 @@ function songQuestionToText(q){
 function pickQuestionsForBankTopic(topicName){
   const bank = CATEGORY_DATA[topicName] || {};
   const counts = { 100:2, 200:2, 400:1, 600:1 };
-  const noSongClips = (typeof currentPlatform === 'function') && currentPlatform() === 'ios';
+  const noSongClips = !songClipsAllowed();
   const result = [];
   [100,200,400,600].forEach(pts=>{
     const picked = pickFromTier(bank[pts], topicName, pts, counts[pts]);
