@@ -5,9 +5,9 @@ const state = {
   timerEnabled: false,
   timerSeconds: 30,
   /* أي مساعدة تظهر باللعبة — تنضبط من شاشة الإعدادات قبل ما تبدي الجولة.
-     «تبديل السؤال» تشتغل بمواضيع البنك بس (الفئات الخاصة ماكو منها بديل). */
-  helpsEnabled: { letter:true, blanks:true, choices:true, swap:true },
-  helpsPerTeam: 3,
+     «تبديل السؤال» تشتغل بمواضيع البنك بس (الفئات الخاصة ماكو منها بديل).
+     كل مساعدة تنستخدم مرة وحدة لكل فريق باللعبة (team.usedHelps). */
+  helpsEnabled: { letter:true, blanks:true, swap:true },
   user: null,
   statsRecordedForThisGame: false,
   lastReward: null,          // نتيجة award_game_coins لآخر لعبة
@@ -50,8 +50,8 @@ const state = {
   accountError: '',
 
   teams: [
-    { name: 'الفريق الأول', score: 0, helps: 3 },
-    { name: 'الفريق الثاني', score: 0, helps: 3 }
+    { name: 'الفريق الأول', score: 0, usedHelps: {} },
+    { name: 'الفريق الثاني', score: 0, usedHelps: {} }
   ],
   pool: [],
   selectedTopicIds: [],

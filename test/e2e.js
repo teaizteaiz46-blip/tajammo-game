@@ -794,7 +794,7 @@ const CANNED_BANK = (() => {
       [{question:'ما هي عاصمة اليابان؟', answer:'طوكيو', points:100}]);
     state.pool.push(t);
     state.selectedTopicIds = [t.id];
-    state.teams[0].helps = 3; state.teams[1].helps = 3;
+    resetTeamHelps();
     t.taken = true; t.takenBy = 0;
     state.screen = 'board';
     state.activeCell = { topicId: t.id, qId: t.questions[0].id };
@@ -1354,7 +1354,7 @@ const CANNED_BANK = (() => {
       state.pool = CATEGORY_TOPICS.slice(0, 6).map(makeBankTopic);
       state.selectedTopicIds = [];
       state.pool.forEach((t, i) => { t.taken = true; t.takenBy = i % 2; state.selectedTopicIds.push(t.id); });
-      state.teams[0].helps = 3; state.teams[1].helps = 3;
+      resetTeamHelps();
       state.helpHints = { 0:null, 1:null };
       const t = state.pool[0];
       t.questions.forEach(q => { delete q.usedBy; delete q.revealed; });
@@ -1365,19 +1365,22 @@ const CANNED_BANK = (() => {
     await page.waitForSelector('.help-wrap, .q-modal', { timeout: 8000 });
   };
 
-  await step('الافتراضي: الأربع مساعدات كلهن يظهرن', async () => {
+  /* «خيارات» مطفّاة حالياً لحد ما تنكتب الخيارات يدوياً من لوحة الإدارة.
+     حتى لو ضايلة مفعّلة بإعدادات قديمة، ما لازم تطلع. */
+  await step('الافتراضي: ثلاث مساعدات، و«خيارات» ما تطلع حتى لو مفعّلة', async () => {
     await page.evaluate(() => { state.helpsEnabled = { letter:true, blanks:true, choices:true, swap:true }; });
     await openFirstQuestion();
     const types = await page.$$eval('.help-btn', els => els.map(e => e.dataset.type));
-    for (const t of ['letter','blanks','choices','swap'])
+    for (const t of ['letter','blanks','swap'])
       if (!types.includes(t)) throw new Error('مساعدة ناقصة: ' + t);
+    if (types.includes('choices')) throw new Error('«خيارات» طالعة وهي مفروض مطفّاة');
   });
 
-  await step('إطفاء «خيارات» و«تبديل السؤال» يشيلهن من النافذة', async () => {
-    await page.evaluate(() => { state.helpsEnabled.choices = false; state.helpsEnabled.swap = false; });
+  await step('إطفاء «تبديل السؤال» يشيله من النافذة', async () => {
+    await page.evaluate(() => { state.helpsEnabled.swap = false; });
     await openFirstQuestion();
     const types = await page.$$eval('.help-btn', els => els.map(e => e.dataset.type));
-    if (types.includes('choices') || types.includes('swap')) throw new Error('المطفّاة لسه ظاهرة: ' + types.join(','));
+    if (types.includes('swap')) throw new Error('المطفّاة لسه ظاهرة: ' + types.join(','));
     if (!types.includes('letter') || !types.includes('blanks')) throw new Error('انشالت مساعدة مفروض تبقى: ' + types.join(','));
   });
 
@@ -1392,49 +1395,87 @@ const CANNED_BANK = (() => {
     if (!r.modal) throw new Error('نافذة السؤال انكسرت');
   });
 
-  await step('مساعدة مطفّاة ما تنصرف حتى لو انضغطت بالقوة', async () => {
-    const before = await page.evaluate(() => {
-      state.helpsEnabled = { letter:true, blanks:false, choices:false, swap:false };
-      return state.teams[0].helps;
-    });
+  await step('مساعدة مطفّاة أو ملغية ما تنصرف حتى لو انضغطت بالقوة', async () => {
+    await page.evaluate(() => { state.helpsEnabled = { letter:true, blanks:false, choices:true, swap:false }; });
     await openFirstQuestion();
     const used = await page.evaluate(() => {
-      // نزوّر زر مساعدة مطفّاة ونضغطه — المنطق لازم يرفضه
+      // نزوّر زرين: «عدد الأحرف» (مطفّاة) و«خيارات» (ملغية) — المنطق لازم يرفضهم
       const real = document.querySelector('.help-btn');
       if (!real) return 'ماكو أي زر مساعدة';
-      const fake = real.cloneNode(true);
-      fake.dataset.type = 'choices';
-      real.parentNode.appendChild(fake);
-      wireHelpButtons(document.querySelector('.q-modal'),
-        state.pool.find(t => t.id === state.activeCell.topicId),
-        state.pool.find(t => t.id === state.activeCell.topicId).questions[0]);
-      fake.click();
-      return state.teams[state.pool.find(t => t.id === state.activeCell.topicId).takenBy].helps;
+      ['blanks', 'choices'].forEach(type => {
+        const fake = real.cloneNode(true);
+        fake.dataset.type = type;
+        real.parentNode.appendChild(fake);
+      });
+      const topic = state.pool.find(t => t.id === state.activeCell.topicId);
+      wireHelpButtons(document.querySelector('.q-modal'), topic, topic.questions[0]);
+      [...document.querySelectorAll('.help-btn')]
+        .filter(b => b.dataset.type !== 'letter').forEach(b => b.click());
+      return Object.keys(state.teams[topic.takenBy].usedHelps || {});
     });
     if (typeof used === 'string') throw new Error(used);
-    if (used !== before) throw new Error('انخصمت مساعدة على زر مطفّى: ' + before + ' ← ' + used);
+    if (used.length) throw new Error('انحسبت مساعدة على زر مطفّى: ' + used.join(','));
   });
 
-  await step('عدد المساعدات من الإعدادات ينطبّق على الفريقين', async () => {
+  /* الطلب: كل مساعدة مرة وحدة لكل فريق باللعبة كلها، مو عدد مفتوح */
+  await step('كل مساعدة تنستخدم مرة وحدة للفريق باللعبة', async () => {
+    await page.evaluate(() => { state.helpsEnabled = { letter:true, blanks:true, swap:true }; });
+    await openFirstQuestion();
     const r = await page.evaluate(() => {
-      state.helpsEnabled = { letter:true, blanks:true, choices:true, swap:true };
-      state.helpsPerTeam = 5;
+      const topic = state.pool.find(t => t.id === state.activeCell.topicId);
+      const ti = topic.takenBy;
+      const click = type => {
+        const b = document.querySelector(`.help-btn[data-type="${type}"]`);
+        if (b) b.click();
+        return b;
+      };
+      click('letter');
+      const firstHint = state.helpHints[ti];
+      const btnAfter = document.querySelector('.help-btn[data-type="letter"]');
+
+      // سؤال ثاني بنفس اللعبة: «أول حرف» لازم تبقى مستخدمة
+      state.helpHints = { 0:null, 1:null };
+      state.activeCell = { topicId: topic.id, qId: topic.questions[1].id };
+      render();
+      click('letter');
+      const secondHint = state.helpHints[ti];
+      const blanksBtn = click('blanks');
+      const blanksHint = state.helpHints[ti];
+      const title = (document.querySelector('.help-title') || {}).textContent || '';
+      return {
+        firstHint, secondHint, blanksHint, title,
+        letterDisabled: !!(btnAfter && btnAfter.disabled),
+        blanksFound: !!blanksBtn
+      };
+    });
+    if (!r.firstHint) throw new Error('أول استخدام ما اشتغل');
+    if (!r.letterDisabled) throw new Error('زر «أول حرف» ما صار معطّل بعد استخدامه');
+    if (r.secondHint && r.secondHint.includes('أول حرف')) throw new Error('«أول حرف» انستخدمت مرتين بنفس اللعبة');
+    if (!r.blanksFound || !r.blanksHint || !r.blanksHint.includes('عدد الأحرف'))
+      throw new Error('مساعدة ثانية ما اشتغلت بعد استخدام الأولى');
+    if (!r.title.includes('متبقي 1')) throw new Error('العدّاد غلط: ' + r.title);
+  });
+
+  await step('لعبة جديدة ترجّع كل المساعدات للفريقين', async () => {
+    const r = await page.evaluate(() => {
+      state.teams[0].usedHelps = { letter:true, blanks:true };
+      state.teams[1].usedHelps = { swap:true };
       goto('teams');
       document.querySelector('#to-select').click();
-      return [state.teams[0].helps, state.teams[1].helps];
+      return [Object.keys(state.teams[0].usedHelps).length, Object.keys(state.teams[1].usedHelps).length];
     });
-    if (r[0] !== 5 || r[1] !== 5) throw new Error('عدد المساعدات: ' + r.join(' / '));
-    await page.evaluate(() => { state.helpsPerTeam = 3; });
+    if (r[0] || r[1]) throw new Error('بقت مساعدات مستخدمة من اللعبة السابقة: ' + r.join(' / '));
   });
 
-  await step('شاشة الإعدادات بيها مفاتيح المساعدات الأربعة', async () => {
+  await step('شاشة الإعدادات: ثلاث مفاتيح وبلا خانة عدد', async () => {
     await page.evaluate(() => goto('teams'));
     await page.waitForSelector('#helps-toggles', { timeout: 8000 });
     const keys = await page.$$eval('#helps-toggles .switch', els => els.map(e => e.dataset.help));
-    for (const k of ['letter','blanks','choices','swap'])
+    for (const k of ['letter','blanks','swap'])
       if (!keys.includes(k)) throw new Error('مفتاح ناقص: ' + k);
+    if (keys.includes('choices')) throw new Error('مفتاح «خيارات» لسه ظاهر');
     const n = await page.$$eval('#helps-count', els => els.length);
-    if (n !== 1) throw new Error('خانة عدد المساعدات مو موجودة');
+    if (n !== 0) throw new Error('خانة عدد المساعدات لسه موجودة — ما عاد إلها معنى');
   });
 
   console.log('\nألعاب القعدة الجديدة (الدخيل + القنبلة)');

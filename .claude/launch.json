@@ -6,6 +6,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["--yes", "http-server", "www", "-p", "8123", "-c-1"],
       "port": 8123
+    },
+    {
+      "name": "tajammo-root",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "http-server", ".", "-p", "8124", "-c-1"],
+      "port": 8124
     }
   ]
 }

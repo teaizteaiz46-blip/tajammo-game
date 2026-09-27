@@ -165,16 +165,12 @@ function renderTeams(){
   });
   wrap.appendChild(timerPanel);
 
-  /* ---- المساعدات: أي وحدة تظهر، وكم مساعدة لكل فريق ---- */
+  /* ---- المساعدات: أي وحدة تظهر. كل وحدة مرة لكل فريق باللعبة ---- */
   const anyOn = HELP_TYPES.some(h => helpIsOn(h.key));
   const helpsPanel = el(`<div class="panel">
     <div class="section-title">المساعدات</div>
-    <div class="section-sub">شنو المساعدات الي تظهر للفرق داخل السؤال</div>
+    <div class="section-sub">شنو المساعدات الي تظهر للفرق داخل السؤال. كل فريق يستخدم كل مساعدة مرة وحدة باللعبة.</div>
     <div id="helps-toggles"></div>
-    <div class="field" style="margin-top:16px; ${anyOn?'':'display:none;'}" id="helps-count-field">
-      <label>عدد المساعدات لكل فريق بالجولة</label>
-      <input type="number" id="helps-count" min="0" max="10" value="${state.helpsPerTeam}"/>
-    </div>
     ${anyOn ? '' : '<div class="section-sub" style="margin-top:14px; color:var(--rose);">كل المساعدات مطفّاة — ما راح يظهر صندوق المساعدات إطلاقاً.</div>'}
   </div>`);
 
@@ -192,11 +188,6 @@ function renderTeams(){
     togglesBox.appendChild(row);
   });
 
-  const cntInput = helpsPanel.querySelector('#helps-count');
-  if(cntInput) cntInput.addEventListener('input', e=>{
-    const n = parseInt(e.target.value, 10);
-    state.helpsPerTeam = isFinite(n) ? Math.max(0, Math.min(10, n)) : 3;
-  });
   wrap.appendChild(helpsPanel);
 
   const actions = el(`<div class="btn-row">
@@ -209,8 +200,7 @@ function renderTeams(){
     state.turn = 0;
     state.teams[0].score = 0;
     state.teams[1].score = 0;
-    state.teams[0].helps = state.helpsPerTeam;
-    state.teams[1].helps = state.helpsPerTeam;
+    resetTeamHelps();                // كل مساعدة ترجع متاحة مرة وحدة للعبة الجديدة
     state.statsRecordedForThisGame = false;
     startTeamScoreRun();
     resetAdGates();
@@ -503,16 +493,35 @@ function buildChoices(topic, q){
   return shuffled([core].concat(decoys));
 }
 
-/* المساعدات المتاحة بالترتيب. swap تنفع بمواضيع البنك بس. */
+/* المساعدات المتاحة بالترتيب. swap تنفع بمواضيع البنك بس.
+
+   «خيارات» مطفّاة حالياً: الخيارات المولّدة تلقائياً (buildChoices) چانت
+   أحياناً تفضح الجواب أو تطلع غريبة. الخيارات راح تنكتب يدوياً لكل سؤال
+   بجدول category_question_choices من لوحة الإدارة، ولمن تكتمل ترجع هنا
+   وتقرا منه بدل buildChoices. */
 const HELP_TYPES = [
   { key:'letter',  label:'أول حرف',      bankOnly:false },
   { key:'blanks',  label:'عدد الأحرف',   bankOnly:false },
-  { key:'choices', label:'خيارات',       bankOnly:false },
   { key:'swap',    label:'تبديل السؤال', bankOnly:true  }
 ];
 
 function helpIsOn(key){
+  if(!HELP_TYPES.some(h => h.key === key)) return false;   // مو من المساعدات الحالية
   return !state.helpsEnabled || state.helpsEnabled[key] !== false;
+}
+
+/* كل مساعدة مرة وحدة لكل فريق باللعبة كلها (مو بكل سؤال) */
+function helpUsed(team, key){
+  return !!(team && team.usedHelps && team.usedHelps[key]);
+}
+
+function markHelpUsed(team, key){
+  if(!team.usedHelps) team.usedHelps = {};
+  team.usedHelps[key] = true;
+}
+
+function resetTeamHelps(){
+  state.teams.forEach(t => { t.usedHelps = {}; });
 }
 
 function renderHelpSection(topic, q){
@@ -524,11 +533,15 @@ function renderHelpSection(topic, q){
   if(!available.length) return '';
 
   const team = state.teams[ti];
-  const disabled = team.helps<=0;
+  const left = available.filter(h => !helpUsed(team, h.key)).length;
   return `<div class="help-wrap">
-    <div class="help-title">مساعدات ${escapeAttr(team.name)} — متبقي ${team.helps}</div>
+    <div class="help-title">مساعدات ${escapeAttr(team.name)} — متبقي ${left} <small style="opacity:.75;">(كل وحدة مرة باللعبة)</small></div>
     <div class="help-btns" style="justify-content:center;">
-      ${available.map(h => `<button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="${h.key}" ${disabled?'disabled':''}>${h.label}</button>`).join('')}
+      ${available.map(h => {
+        const used = helpUsed(team, h.key);
+        return `<button class="btn btn-ghost btn-sm help-btn" data-team="${ti}" data-type="${h.key}"
+                  ${used ? 'disabled title="استخدمتوها باللعبة"' : ''}>${used ? '✓ ' : ''}${h.label}</button>`;
+      }).join('')}
     </div>
     ${state.helpHints[ti] ? `<div class="help-result">${escapeAttr(state.helpHints[ti])}</div>` : ''}
   </div>`;
@@ -541,16 +554,20 @@ function wireHelpButtons(modal, topic, q){
       const type = btn.dataset.type;
       const team = state.teams[ti];
 
-      if(team.helps<=0) return;
-      if(!helpIsOn(type)) return;   // مطفّاة من الإعدادات
+      if(!helpIsOn(type)) return;          // مطفّاة من الإعدادات، أو مو من المساعدات الحالية
+      if(helpUsed(team, type)) return;     // استخدمها الفريق قبل باللعبة
 
       if(type==='swap'){
         if(topic.bankKey){
           const fresh = pickFromTier((CATEGORY_DATA[topic.bankKey]||{})[q.points]||[], topic.bankKey, q.points, 1)[0];
           /* bankId لازم يتبدل وياه، وإلا النتيجة تنحسب على السؤال القديم */
           if(fresh){ q.text = fresh.text; q.answer = fresh.answer; q.image = fresh.image; q.bankId = fresh.bankId; }
+          /* ماكو سؤال بديل بنفس المستوى — ما نحرق المساعدة على لا شي */
+          if(!fresh) return;
+        } else {
+          return;
         }
-        team.helps--;
+        markHelpUsed(team, type);
         state.helpHints = {0:null, 1:null};
         render();
         return;
@@ -561,12 +578,9 @@ function wireHelpButtons(modal, topic, q){
         hint = 'أول حرف: ' + (q.answer.trim().charAt(0) || '؟');
       } else if(type==='blanks'){
         hint = 'عدد الأحرف: ' + q.answer.replace(/\s/g,'').length;
-      } else if(type==='choices'){
-        const options = buildChoices(topic, q);
-        if(options) hint = 'الخيارات: ' + options.join('  /  ');
       }
       if(hint){
-        team.helps--;
+        markHelpUsed(team, type);
         state.helpHints[ti] = hint;
         render();
       }
@@ -1103,8 +1117,7 @@ function renderEnd(){
     state.turn = 0;
     state.teams[0].score = 0;
     state.teams[1].score = 0;
-    state.teams[0].helps = state.helpsPerTeam;
-    state.teams[1].helps = state.helpsPerTeam;
+    resetTeamHelps();                // كل مساعدة ترجع متاحة مرة وحدة للعبة الجديدة
     state.statsRecordedForThisGame = false;
     startTeamScoreRun();
     resetAdGates();
