@@ -17,7 +17,9 @@
 | | الرابط | تحقق منه |
 |---|---|---|
 | سياسة الخصوصية — آبل | https://teaizteaiz46-blip.github.io/tajammo-game/privacy.html | ✅ 2026-09-28 |
-| سياسة الخصوصية — كوكل | ⏳ لسه ما انتحقق | — |
+| سياسة الخصوصية — كوكل | ⏳ لسه ما انتحقق (App content ← Privacy policy) | — |
+| رابط حذف الحساب — كوكل (Data safety) | https://teaizteaiz46-blip.github.io/tajammo-game/privacy.html | ✅ 2026-09-28 |
+| رابط حذف البيانات — كوكل (Data safety) | https://teaizteaiz46-blip.github.io/tajammo-game/support.html | ✅ 2026-09-28 |
 | الدعم (Support URL) — آبل | https://teaizteaiz46-blip.github.io/tajammo-game/support.html | ✅ |
 | شروط الاستخدام | https://teaizteaiz46-blip.github.io/tajammo-game/terms.html | — |
 
@@ -101,11 +103,29 @@
 
 ## ٥. تصريحات كوكل — Data safety
 
-⏳ **لسه ما انتحقق منها بهذا السجل.** لمن تنتحقق: سجّل هنا أنواع البيانات
-تحت «Data collected» و«Data shared» مثل قسم آبل فوق، وقارنها بالجدول
-بالقسم ٢. المتوقع يكون مصرّح: الإيميل، الاسم، معرّف المستخدم، معرّف الإعلانات،
-الموقع التقريبي، نشاط التطبيق (نتائج اللعب)، محتوى المستخدم (فئات، أسماء
-فرق)، الأعطال.
+آخر تحقق: 2026-09-28 (من صورة Play Console — الملخص بس)
+
+- **آخر تحديث للنموذج: 15 سبتمبر 2026** — قبل ترتيب الفرق (24 سبتمبر).
+- **Data sharing:** «4 data types collected or shared» — ⏳ **الأنواع الأربعة
+  نفسها لسه ما انتحقق منها.** أربعة قليل: آبل عندها ١١ نوع مصرّح. ولازم
+  تكون متطابقة بين المتجرين، لأن البيانات نفسها.
+- **Data deletion:** رابط حذف الحساب ← `privacy.html`، ورابط حذف البيانات
+  ← `support.html`.
+- **Security practices:** Data is encrypted in transit.
+- صفحة التطبيق العلنية بـ Google Play ترجع 404 (2026-09-28)، فما تنقرا من برّا.
+
+**المتوقع يكون مصرّح بكوكل** (مقابل تصريحات آبل والجدول بالقسم ٢):
+
+| نوع كوكل | ليش | Collected | Shared |
+|---|---|---|---|
+| Personal info ← Email address | الحساب | ✅ | — |
+| Personal info ← Name | الاسم المعروض | ✅ | — |
+| Personal info ← User IDs | معرّف الحساب | ✅ | — |
+| Device or other IDs | معرّف الإعلانات (AdMob) | ✅ | ✅ Google |
+| Location ← Approximate location | AdMob من الـ IP | ✅ | ✅ Google |
+| App activity ← App interactions | AdMob + إحصائيات ونتائج اللعب | ✅ | ✅ Google (جزء الإعلانات) |
+| App activity ← Other user-generated content | فئات خاصة، أسماء فرق، بلاغات | ✅ | — |
+| App info and performance ← Crash logs / Diagnostics | AdMob/النظام | ✅ | ✅ Google |
 
 ---
 
