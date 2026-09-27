@@ -19,6 +19,7 @@ function renderShdSetup(){
     const names = state.shdPlayerNames.map(n=>n.trim()).filter(n=>n);
     if(names.length < 4){ alert('لازم ٤ لاعبين على الأقل'); return; }
     state.shdPlayerNames = names;
+    resetAdGates();
     const maxD = shdMaxDemons(names.length);
     const maxS = shdMaxSpecial(names.length);
     state.shdDemonCount = Math.min(state.shdDemonCount || 1, maxD);
@@ -60,6 +61,7 @@ function renderShdRoles(){
     state.shdPlayers = shuffledRoles.map((role,i)=>({ name: state.shdPlayerNames[i], role }));
     state.shdRevealIndex = 0;
     state.shdRevealShown = false;
+    showBreakAd('start');
     goto('shd-reveal');
   });
   wrap.appendChild(actions);
@@ -113,12 +115,13 @@ function shdApplyWin(winnerSide){
 }
 
 function renderShdEnd(){
+  showBreakAd('end');
   const wrap = el(`<div></div>`);
   const sorted = state.shdPlayerNames.map(name=>({ name, score: (state.shdScores && state.shdScores[name]) || 0 })).sort((a,b)=>b.score-a.score);
   const panel = el(`<div class="panel"><div class="section-title" style="text-align:center;">${state.shdWinner==='demon' ? '😈 فاز الشياطين' : '🛡️ فاز الحلفاء'}</div><div class="section-title" style="font-size:16px; margin-top:16px;">لوحة النقاط</div><div style="display:grid; gap:8px; margin-top:10px;">${sorted.map(p=>`<div style="display:flex; justify-content:space-between; padding:10px 14px; background:rgba(255,255,255,0.05); border-radius:10px;"><span>${escapeAttr(p.name)}</span><span style="font-weight:700;">${p.score}</span></div>`).join('')}</div></div>`);
   wrap.appendChild(panel);
   const actions = el(`<div class="btn-row" style="margin-top:16px;"><button class="btn btn-gold" id="shd-new-round">جولة جديدة (نفس اللاعبين)</button><button class="btn btn-ghost" id="shd-hub">الرئيسية</button></div>`);
-  actions.querySelector('#shd-new-round').addEventListener('click', ()=> goto('shd-roles'));
+  actions.querySelector('#shd-new-round').addEventListener('click', ()=>{ resetAdGates(); goto('shd-roles'); });
   actions.querySelector('#shd-hub').addEventListener('click', ()=> goto('hub'));
   wrap.appendChild(actions);
   return wrap;

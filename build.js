@@ -13,7 +13,7 @@ const path = require('path');
 const ROOT = __dirname;
 const OUT = path.join(ROOT, 'www');
 
-const FILES = ['index.html', 'styles.css', 'privacy.html', 'terms.html', 'support.html'];
+const FILES = ['index.html', 'styles.css', 'privacy.html', 'terms.html', 'support.html', 'app-ads.txt'];
 const DIRS = ['js', 'img'];
 
 function fail(msg) {

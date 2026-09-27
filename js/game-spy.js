@@ -116,6 +116,7 @@ function renderSpySetup(){
 }
 
 function startSpyRound(){
+  resetAdGates();
   const n = state.spyPlayerCount;
   const pool = pickPartyItems('spy', SPY_POOL_SIZE);
   const place = pool[Math.floor(Math.random()*pool.length)];
@@ -155,7 +156,9 @@ function renderSpyReveal(){
         <button class="btn btn-gold" id="sp-go-play">ابدأ النقاش</button>
       </div>
     </div>`);
+    /* قبل ما يشتغل المؤقت — بعده أي إعلان يقطع النقاش */
     done.querySelector('#sp-go-play').addEventListener('click', ()=>{
+      showBreakAd('start');
       goto('spy-play');
       startSpyTimer();
     });
@@ -360,6 +363,7 @@ function renderSpyScoreboard(title){
 }
 
 function renderSpyResult(){
+  showBreakAd('end');
   /* نسجّل مرة وحدة بالجلسة، مو كل جولة — الجولات تتكرر بنفس اللعبة */
   if(state.user && !state.statsRecordedForThisGame){
     state.statsRecordedForThisGame = true;

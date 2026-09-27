@@ -120,6 +120,7 @@ function renderBombSetup(){
       });
     }
     state.bombKnockedOut = [];
+    resetAdGates();
     startBombRound();
   });
   wrap.appendChild(actions);
@@ -271,6 +272,8 @@ function renderBombPlay(){
 }
 
 function renderBombOut(){
+  /* بعد الانفجار الأول: الكل ديضحك والموبايل نازل */
+  showBreakAd('mid');
   const loser = state.bombPlayers[state.bombLoserIndex];
   const alive = bombAlivePlayers();
 
@@ -304,6 +307,7 @@ function renderBombOut(){
 }
 
 function renderBombEnd(){
+  showBreakAd('end');
   stopBombTicker();
   if(state.user && !state.statsRecordedForThisGame){
     state.statsRecordedForThisGame = true;
@@ -331,6 +335,7 @@ function renderBombEnd(){
   </div>`);
   actions.querySelector('#bo-again').addEventListener('click', ()=>{
     state.statsRecordedForThisGame = false;
+    resetAdGates();
     goto('bomb-setup');
   });
   actions.querySelector('#bo-hub').addEventListener('click', ()=>{

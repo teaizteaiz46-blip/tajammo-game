@@ -2011,6 +2011,25 @@ const CANNED_BANK = (() => {
     if (r !== 0) throw new Error('أعاد طلب الإذن مع إن اللاعب قرر قبل');
   });
 
+  /* الإعلانات البينية كانت مربوطة بلعبة الفئات بس. هذا فحص نصّي على
+     الملفات المبنية — مو سلوكي — لأن showBreakAd ما يشتغل خارج التطبيق
+     الأصلي أصلاً (isNativeApp() يرجع false بالمتصفح). */
+  await step('الإعلانات البينية مربوطة بالألعاب الخمسة كلها', async () => {
+    const need = {
+      'game-categories.js':   ['resetAdGates(', "showBreakAd('start')", "showBreakAd('end')"],
+      'game-whoami.js':       ['resetAdGates(', "showBreakAd('start')", "showBreakAd('end')"],
+      'game-spy.js':          ['resetAdGates(', "showBreakAd('start')", "showBreakAd('end')"],
+      'game-bomb.js':         ['resetAdGates(', "showBreakAd('mid')",   "showBreakAd('end')"],
+      'game-secrethitler.js': ['resetAdGates(', "showBreakAd('start')", "showBreakAd('end')"]
+    };
+    const missing = [];
+    Object.keys(need).forEach(f => {
+      const src = fs.readFileSync(path.join(WWW, 'js', f), 'utf8');
+      need[f].forEach(k => { if (src.indexOf(k) === -1) missing.push(f + ' ← ' + k); });
+    });
+    if (missing.length) throw new Error('ناقص: ' + missing.join('، '));
+  });
+
   console.log('\nأخطاء جافاسكربت غير متوقعة');
   if (errors.length) { console.log('  ✗ ' + errors.join('\n  ')); fail++; }
   else console.log('  ✓ ماكو أي خطأ بالصفحة');

@@ -87,6 +87,7 @@ function renderWhoamiSetup(){
   </div>`);
   actions.querySelector('#wa-back').addEventListener('click', ()=> goto('hub'));
   actions.querySelector('#wa-start').addEventListener('click', async ()=>{
+    resetAdGates();
     state.whoamiLoading = true; state.whoamiError=''; render();
     try{
       const names = await fetchRandomCharacters(state.whoamiPlayerCount);
@@ -125,7 +126,11 @@ function renderWhoamiReveal(){
         <button class="btn btn-gold" id="wa-play-start">ابدأ اللعبة</button>
       </div>
     </div>`);
-    done.querySelector('#wa-play-start').addEventListener('click', ()=> goto('whoami-play'));
+    /* لحظة هدوء: كلهم شافوا ورقتهم والموبايل نازل — إعلان هنا ما يقطع دور */
+    done.querySelector('#wa-play-start').addEventListener('click', ()=>{
+      showBreakAd('start');
+      goto('whoami-play');
+    });
     wrap.appendChild(done);
     return wrap;
   }
@@ -237,6 +242,7 @@ function stopWhoamiTimer(){
 }
 
 function renderWhoamiEnd(){
+  showBreakAd('end');
   if(state.user && !state.statsRecordedForThisGame){
     state.statsRecordedForThisGame = true;
     recordGameResult(0);
