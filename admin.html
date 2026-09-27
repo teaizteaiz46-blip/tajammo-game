@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>تجمّع — لوحة الأسئلة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Changa:wght@400;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* اللوحة تستعير ألوان التطبيق من styles.css، وهذا الي يخصها بس */
+  body{padding:0;}
+  .adm{max-width:1100px; margin:0 auto; padding:18px 16px 60px;}
+  .adm-top{display:flex; align-items:center; justify-content:space-between; gap:12px;
+    flex-wrap:wrap; padding:14px 0 18px; border-bottom:1px solid var(--line); margin-bottom:22px;}
+  .adm-top h1{font-family:'Changa',sans-serif; font-size:22px; margin:0; color:var(--ivory);}
+  .adm-who{color:var(--muted); font-size:13px;}
+  .cols{display:grid; grid-template-columns:1fr 340px; gap:18px; align-items:start;}
+  @media (max-width:860px){ .cols{grid-template-columns:1fr;} }
+  .card{background:linear-gradient(135deg,var(--panel-2),var(--panel));
+    border:1px solid var(--line); border-radius:16px; padding:18px; margin-bottom:16px;}
+  .card h2{font-family:'Changa',sans-serif; font-size:16px; margin:0 0 14px; color:var(--gold);}
+  label{display:block; color:var(--muted); font-size:12.5px; margin:0 0 6px;}
+  input[type=text], input[type=email], input[type=password], select, textarea{
+    width:100%; box-sizing:border-box; padding:11px 12px; border-radius:10px;
+    border:1px solid var(--line); background:rgba(0,0,0,.25); color:var(--ivory);
+    font-family:'Tajawal',sans-serif; font-size:14px;}
+  textarea{resize:vertical; min-height:70px;}
+  input:focus, select:focus, textarea:focus{outline:none; border-color:var(--gold-dim);}
+  .row{display:grid; gap:12px; margin-bottom:14px;}
+  .row.two{grid-template-columns:1fr 1fr;}
+  @media (max-width:520px){ .row.two{grid-template-columns:1fr;} }
+  .seg{display:flex; gap:8px; flex-wrap:wrap;}
+  .seg button{flex:1; min-width:110px; padding:10px; border-radius:10px; cursor:pointer;
+    border:1px solid var(--line); background:rgba(0,0,0,.22); color:var(--muted);
+    font-family:'Tajawal',sans-serif; font-size:13.5px;}
+  .seg button.on{border-color:var(--gold); color:var(--ivory); background:rgba(212,175,95,.13);}
+  .seg button[disabled]{opacity:.4; cursor:not-allowed;}
+  .hint{color:var(--muted); font-size:11.5px; line-height:1.7; margin-top:6px; opacity:.85;}
+  .msg{border-radius:10px; padding:11px 13px; font-size:13.5px; line-height:1.7; margin:12px 0 0;}
+  .msg.ok{background:rgba(122,168,116,.14); color:var(--sage); border:1px solid rgba(122,168,116,.35);}
+  .msg.err{background:rgba(198,80,80,.14); color:#ffb2b2; border:1px solid rgba(198,80,80,.4);}
+  .msg.warn{background:rgba(212,175,95,.12); color:var(--gold); border:1px solid var(--gold-dim);}
+  .msg:empty{display:none; margin:0; padding:0; border:0;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th{color:var(--muted); font-weight:500; text-align:right; padding:8px 6px; font-size:12px;
+     border-bottom:1px solid var(--line);}
+  td{padding:9px 6px; border-bottom:1px solid rgba(255,255,255,.05); vertical-align:top;}
+  tr:last-child td{border-bottom:0;}
+  .pts{display:inline-block; min-width:34px; text-align:center; border-radius:999px;
+    padding:2px 8px; font-size:11px; background:rgba(212,175,95,.15); color:var(--gold);}
+  .tag{display:inline-block; border-radius:999px; padding:2px 8px; font-size:10.5px;
+    border:1px solid var(--line); color:var(--muted);}
+  .del{border:0; background:none; color:#e08a8a; cursor:pointer; font-size:16px; padding:2px 6px;}
+  .del:hover{color:#ff9b9b;}
+  .prev{border:1px dashed var(--line); border-radius:14px; padding:16px; text-align:center;}
+  .prev img{width:100%; max-width:190px; aspect-ratio:4/5; object-fit:cover;
+    border-radius:14px; display:block; margin:0 auto 6px; background:var(--panel-2);}
+  .prev .credit{color:var(--muted); font-size:10.5px; opacity:.75; margin-bottom:12px;}
+  .prev .qt{font-size:18px; line-height:1.7; color:var(--ivory); margin-bottom:10px;}
+  .prev .an{color:var(--sage); font-weight:700; font-size:15px;}
+  .stat{display:flex; justify-content:space-between; gap:10px; padding:7px 0;
+    border-bottom:1px solid rgba(255,255,255,.05); font-size:13px;}
+  .stat:last-child{border-bottom:0;}
+  .stat b{color:var(--ivory); font-weight:700;}
+  .tiny{font-size:11.5px; color:var(--muted);}
+  #gate{max-width:380px; margin:60px auto;}
+  .hidden{display:none !important;}
+  .spin{color:var(--muted); font-size:13px; padding:10px 0;}
+</style>
+</head>
+<body>
+<div class="adm">
+
+  <!-- ══════════ تسجيل الدخول ══════════ -->
+  <div id="gate" class="card">
+    <h2>لوحة أسئلة «تجمّع»</h2>
+    <div class="row">
+      <div>
+        <label>البريد</label>
+        <input type="email" id="em" autocomplete="username" placeholder="you@example.com">
+      </div>
+      <div>
+        <label>كلمة السر</label>
+        <input type="password" id="pw" autocomplete="current-password" placeholder="••••••••">
+      </div>
+    </div>
+    <button class="btn btn-gold" id="login" style="width:100%;">دخول</button>
+    <div class="msg" id="gate-msg"></div>
+    <div class="hint">نفس حساب التطبيق. الكتابة مسموحة للمشرفين بس — قاعدة البيانات نفسها ترفض أي أحد غيرهم، مو الصفحة.</div>
+  </div>
+
+  <!-- ══════════ اللوحة ══════════ -->
+  <div id="panel" class="hidden">
+    <div class="adm-top">
+      <h1>لوحة أسئلة «تجمّع»</h1>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span class="adm-who" id="who"></span>
+        <button class="btn btn-ghost btn-sm" id="logout">خروج</button>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div>
+        <!-- ─── إضافة سؤال ─── -->
+        <div class="card">
+          <h2>إضافة سؤال</h2>
+
+          <div class="row two">
+            <div>
+              <label>الفئة</label>
+              <select id="topic-sel"></select>
+            </div>
+            <div>
+              <label>النقاط</label>
+              <select id="pts">
+                <option value="100">١٠٠ — سهل</option>
+                <option value="200" selected>٢٠٠ — متوسط</option>
+                <option value="400">٤٠٠ — صعب</option>
+                <option value="600">٦٠٠ — الأصعب</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row hidden" id="new-topic-row">
+            <div>
+              <label>اسم الفئة الجديدة</label>
+              <input type="text" id="new-topic" placeholder="مثلاً: كرة القدم العراقية">
+              <div class="hint">الفئة تنولد لحالها أول ما تضيف سؤال بهذا الاسم — ماكو جدول فئات منفصل.</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>نوع السؤال</label>
+              <div class="seg" id="kind">
+                <button data-k="text" class="on">نص فقط</button>
+                <button data-k="photo">صورة + سؤال</button>
+                <button data-k="video" disabled title="التطبيق لسه ما يدعم الفيديو">فيديو (قريباً)</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="photo-fields" class="hidden">
+            <div class="row">
+              <div>
+                <label>رابط الصورة المباشر</label>
+                <input type="text" id="img" dir="ltr" placeholder="https://upload.wikimedia.org/wikipedia/commons/thumb/.../480px-....jpg">
+                <div class="hint">
+                  من <b>commons.wikimedia.org</b> بس — كل شي هناك مرخّص بحرية.
+                  افتح صفحة الصورة ← كليك يمين على الصورة ← Copy image address.
+                  الرابط لازم يبدي بـ<code>upload.wikimedia.org</code>، مو رابط الصفحة.
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <label>نسبة المصدر (إلزامية)</label>
+                <input type="text" id="credit" placeholder="ويكيميديا كومنز · تصوير Tasnim News · CC BY 4.0">
+                <div class="hint">انسخ اسم المصور (Author) والرخصة (License) من نفس صفحة الصورة. بدون هذا السطر تكون خرقت الرخصة.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>السؤال</label>
+              <textarea id="q" placeholder="منو هذا اللاعب؟"></textarea>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>الإجابة</label>
+              <input type="text" id="a" placeholder="علي عدنان">
+            </div>
+          </div>
+
+          <button class="btn btn-gold" id="save" style="width:100%;">أضف السؤال</button>
+          <div class="msg" id="save-msg"></div>
+        </div>
+
+        <!-- ─── أسئلة الفئة ─── -->
+        <div class="card">
+          <h2>أسئلة هذي الفئة <span class="tiny" id="list-count"></span></h2>
+          <div id="list"><div class="spin">…</div></div>
+        </div>
+      </div>
+
+      <!-- ═══ العمود الجانبي ═══ -->
+      <div>
+        <div class="card">
+          <h2>شكله باللعبة</h2>
+          <div class="prev" id="prev"></div>
+        </div>
+
+        <div class="card">
+          <h2>جاهزية الفئة</h2>
+          <div id="stats"><div class="spin">…</div></div>
+          <div class="hint">كل جولة تسحب ٢ من ١٠٠، ٢ من ٢٠٠، ١ من ٤٠٠، ١ من ٦٠٠. أقل من هيچي والفئة ما تنلعب. الأحسن ٦ لكل مستوى حتى ما تتكرر الأسئلة.</div>
+        </div>
+
+        <div class="card">
+          <h2>كل الفئات</h2>
+          <div id="all-stats" style="max-height:340px; overflow:auto;"><div class="spin">…</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "https://pajxormplmloivyankji.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhanhvcm1wbG1sb2l2eWFua2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA0ODQ3OTksImV4cCI6MjA3NjA2MDc5OX0.eEPB_Gt5HywU9oGNXLpSNc4IA7CTTL7CX-EMKDE3yec";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const arNum = n => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+
+let kind = 'text';
+let topics = [];
+/* قيمة خيار «فئة جديدة» — سلسلة ما تصلح اسم فئة حقيقي */
+const NEW_TOPIC = '__new__';
+
+function say(el, text, cls){
+  el.className = 'msg' + (text ? ' ' + cls : '');
+  el.textContent = text || '';
+}
+
+/* ═════════ الدخول ═════════ */
+async function boot(){
+  const { data } = await sb.auth.getSession();
+  if(data && data.session) await enter(data.session);
+}
+
+$('login').addEventListener('click', async ()=>{
+  const msg = $('gate-msg');
+  say(msg, 'جاري الدخول…', 'warn');
+  const { data, error } = await sb.auth.signInWithPassword({
+    email: $('em').value.trim(), password: $('pw').value
+  });
+  if(error){ say(msg, 'تعذّر الدخول: ' + error.message, 'err'); return; }
+  await enter(data.session);
+});
+$('pw').addEventListener('keydown', e => { if(e.key === 'Enter') $('login').click(); });
+
+async function enter(session){
+  const msg = $('gate-msg');
+  const { data: isAdmin, error } = await sb.rpc('is_app_admin');
+  if(error){ say(msg, 'تعذّر التحقق من الصلاحية: ' + error.message, 'err'); return; }
+  if(!isAdmin){
+    say(msg, 'هذا الحساب مو مشرف. الإضافة مقفولة عليه من قاعدة البيانات نفسها.', 'err');
+    await sb.auth.signOut();
+    return;
+  }
+  $('gate').classList.add('hidden');
+  $('panel').classList.remove('hidden');
+  $('who').textContent = session.user.email;
+  await loadTopics();
+}
+
+$('logout').addEventListener('click', async ()=>{
+  await sb.auth.signOut();
+  location.reload();
+});
+
+/* ═════════ الفئات ═════════ */
+async function loadTopics(keep){
+  const { data, error } = await sb.rpc('bank_topic_stats');
+  if(error){ $('all-stats').innerHTML = '<div class="msg err">' + esc(error.message) + '</div>'; return; }
+  topics = data || [];
+
+  const sel = $('topic-sel');
+  const prev = keep || sel.value;
+  sel.innerHTML = topics.map(t =>
+      `<option value="${esc(t.topic)}">${esc(t.topic)} (${arNum(t.total)})</option>`).join('')
+    + `<option value="${NEW_TOPIC}">➕ فئة جديدة…</option>`;
+  if(prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+
+  $('all-stats').innerHTML = topics.map(t => {
+    const ok = t.c100 >= 2 && t.c200 >= 2 && t.c400 >= 1 && t.c600 >= 1;
+    return `<div class="stat"><span>${ok ? '' : '⚠️ '}${esc(t.topic)}</span>`
+         + `<b>${arNum(t.total)}${t.photos > 0 ? ' <span class="tiny">· ' + arNum(t.photos) + ' صورة</span>' : ''}</b></div>`;
+  }).join('') || '<div class="tiny">ماكو فئات بعد</div>';
+
+  onTopicChange();
+}
+
+function onTopicChange(){
+  const isNew = $('topic-sel').value === NEW_TOPIC;
+  $('new-topic-row').classList.toggle('hidden', !isNew);
+  if(isNew){
+    $('stats').innerHTML = '<div class="tiny">فئة جديدة — ماكو أسئلة بعد</div>';
+    $('list').innerHTML = '<div class="tiny">ماكو أسئلة بعد</div>';
+    $('list-count').textContent = '';
+    return;
+  }
+  renderStats();
+  loadList();
+}
+$('topic-sel').addEventListener('change', onTopicChange);
+
+function currentTopic(){
+  const v = $('topic-sel').value;
+  return v === NEW_TOPIC ? $('new-topic').value.trim() : v;
+}
+
+function renderStats(){
+  const t = topics.find(x => x.topic === $('topic-sel').value);
+  if(!t){ $('stats').innerHTML = '<div class="tiny">—</div>'; return; }
+  const need = { c100:2, c200:2, c400:1, c600:1 };
+  const lbl  = { c100:'١٠٠', c200:'٢٠٠', c400:'٤٠٠', c600:'٦٠٠' };
+  $('stats').innerHTML = Object.keys(need).map(k =>
+    `<div class="stat"><span>${need[k] > t[k] ? '⚠️ ' : '✓ '}مستوى ${lbl[k]}</span>`
+    + `<b>${arNum(t[k])} <span class="tiny">/ ${arNum(need[k])} مطلوب</span></b></div>`
+  ).join('') + `<div class="stat"><span>المجموع</span><b>${arNum(t.total)}</b></div>`;
+}
+
+/* ═════════ قائمة الأسئلة ═════════ */
+async function loadList(){
+  const topic = $('topic-sel').value;
+  $('list').innerHTML = '<div class="spin">…</div>';
+  const { data, error } = await sb.from('category_questions')
+    .select('id,points,question,answer,media_type,image')
+    .eq('topic', topic).order('id', { ascending:false }).limit(60);
+  if(error){ $('list').innerHTML = '<div class="msg err">' + esc(error.message) + '</div>'; return; }
+  $('list-count').textContent = data.length ? '— آخر ' + arNum(data.length) : '';
+  if(!data.length){ $('list').innerHTML = '<div class="tiny">ماكو أسئلة بهذي الفئة</div>'; return; }
+
+  $('list').innerHTML = '<table><thead><tr><th style="width:52px;">النقاط</th>'
+    + '<th>السؤال</th><th style="width:26%;">الإجابة</th><th style="width:34px;"></th></tr></thead><tbody>'
+    + data.map(r => `<tr>
+        <td><span class="pts">${arNum(r.points)}</span></td>
+        <td>${r.media_type === 'photo' ? '<span class="tag">صورة</span> ' : ''}${esc(r.question)}</td>
+        <td>${esc(r.answer)}</td>
+        <td><button class="del" data-id="${r.id}" title="حذف">✕</button></td>
+      </tr>`).join('') + '</tbody></table>';
+
+  $('list').querySelectorAll('.del').forEach(b => b.addEventListener('click', async ()=>{
+    b.disabled = true;
+    const { error } = await sb.from('category_questions').delete().eq('id', b.dataset.id);
+    if(error){ b.disabled = false; say($('save-msg'), 'تعذّر الحذف: ' + error.message, 'err'); return; }
+    await loadTopics($('topic-sel').value);
+  }));
+}
+
+/* ═════════ نوع السؤال + المعاينة ═════════ */
+$('kind').querySelectorAll('button').forEach(b => b.addEventListener('click', ()=>{
+  if(b.disabled) return;
+  kind = b.dataset.k;
+  $('kind').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  $('photo-fields').classList.toggle('hidden', kind !== 'photo');
+  preview();
+}));
+
+function preview(){
+  const img = $('img').value.trim(), cr = $('credit').value.trim();
+  const q = $('q').value.trim(), a = $('a').value.trim();
+  $('prev').innerHTML =
+      (kind === 'photo' && img ? `<img src="${esc(img)}" alt="" onerror="this.style.display='none'">` : '')
+    + (kind === 'photo' && cr ? `<div class="credit">📷 ${esc(cr)}</div>` : '')
+    + `<div class="qt">${esc(q) || '<span class="tiny">نص السؤال…</span>'}</div>`
+    + `<div class="an">${esc(a) || '<span class="tiny">الإجابة…</span>'}</div>`;
+}
+['img','credit','q','a'].forEach(id => $(id).addEventListener('input', preview));
+preview();
+
+/* ═════════ الحفظ ═════════ */
+$('save').addEventListener('click', async ()=>{
+  const msg = $('save-msg');
+  const topic = currentTopic();
+  const q = $('q').value.trim(), a = $('a').value.trim();
+  const img = $('img').value.trim(), cr = $('credit').value.trim();
+
+  if(!topic) return say(msg, 'اكتب اسم الفئة أول.', 'err');
+  if(!q) return say(msg, 'نص السؤال فاضي.', 'err');
+  if(!a) return say(msg, 'الإجابة فاضية.', 'err');
+  if(kind === 'photo'){
+    if(!/^https:\/\//i.test(img)) return say(msg, 'رابط الصورة لازم يبدي بـhttps://', 'err');
+    if(/\/wiki\/File:/i.test(img)) return say(msg, 'هذا رابط صفحة الصورة مو الصورة نفسها. كليك يمين على الصورة ← Copy image address.', 'err');
+    if(!cr) return say(msg, 'سطر نسبة المصدر إلزامي مع الصورة.', 'err');
+  }
+
+  $('save').disabled = true;
+  say(msg, 'جاري الحفظ…', 'warn');
+  const { error } = await sb.from('category_questions').insert({
+    topic, points: Number($('pts').value), question: q, answer: a,
+    media_type: kind === 'photo' ? 'photo' : null,
+    image:      kind === 'photo' ? img : null,
+    media_credit: kind === 'photo' ? cr : null
+  });
+  $('save').disabled = false;
+
+  if(error){
+    say(msg, error.code === '42501'
+      ? 'قاعدة البيانات رفضت الإضافة — هذا الحساب مو مشرف.'
+      : 'تعذّر الحفظ: ' + error.message, 'err');
+    return;
+  }
+
+  say(msg, '✓ انضاف السؤال لفئة «' + topic + '»', 'ok');
+  $('q').value = ''; $('a').value = ''; $('img').value = ''; $('credit').value = '';
+  preview();
+  /* loadTopics ترجّع الاختيار للفئة نفسها لو موجودة بالقائمة الجديدة */
+  await loadTopics(topic);
+});
+
+boot();
+</script>
+</body>
+</html>
