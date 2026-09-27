@@ -103,29 +103,39 @@
 
 ## ٥. تصريحات كوكل — Data safety
 
-آخر تحقق: 2026-09-28 (من صورة Play Console — الملخص بس)
+آخر تحقق: 2026-09-28 (من صور Play Console — نموذج Data safety)
 
 - **آخر تحديث للنموذج: 15 سبتمبر 2026** — قبل ترتيب الفرق (24 سبتمبر).
-- **Data sharing:** «4 data types collected or shared» — ⏳ **الأنواع الأربعة
-  نفسها لسه ما انتحقق منها.** أربعة قليل: آبل عندها ١١ نوع مصرّح. ولازم
-  تكون متطابقة بين المتجرين، لأن البيانات نفسها.
+- **Account creation:** Username and password.
 - **Data deletion:** رابط حذف الحساب ← `privacy.html`، ورابط حذف البيانات
-  ← `support.html`.
+  (بلا حذف الحساب) ← `support.html`.
 - **Security practices:** Data is encrypted in transit.
+- الملخص يكول «4 data types» — هذا عدد **المجموعات** المؤشرة، مو الأنواع.
 - صفحة التطبيق العلنية بـ Google Play ترجع 404 (2026-09-28)، فما تنقرا من برّا.
 
-**المتوقع يكون مصرّح بكوكل** (مقابل تصريحات آبل والجدول بالقسم ٢):
+**المرجع لـ AdMob:** https://developers.google.com/admob/android/privacy/play-data-disclosure
+— جوجل تكول مكتبة الإعلانات تجمع وتشارك: Approximate location، App
+interactions، Crash logs / Diagnostics / Other app performance data، Device
+or other IDs. الأغراض: Advertising, Analytics, Fraud prevention.
 
-| نوع كوكل | ليش | Collected | Shared |
-|---|---|---|---|
-| Personal info ← Email address | الحساب | ✅ | — |
-| Personal info ← Name | الاسم المعروض | ✅ | — |
-| Personal info ← User IDs | معرّف الحساب | ✅ | — |
-| Device or other IDs | معرّف الإعلانات (AdMob) | ✅ | ✅ Google |
-| Location ← Approximate location | AdMob من الـ IP | ✅ | ✅ Google |
-| App activity ← App interactions | AdMob + إحصائيات ونتائج اللعب | ✅ | ✅ Google (جزء الإعلانات) |
-| App activity ← Other user-generated content | فئات خاصة، أسماء فرق، بلاغات | ✅ | — |
-| App info and performance ← Crash logs / Diagnostics | AdMob/النظام | ✅ | ✅ Google |
+| نوع كوكل | ليش | الحالة (2026-09-28) |
+|---|---|---|
+| Personal info ← Name | الاسم المعروض | ✅ مؤشر |
+| Personal info ← Email address | الحساب | ✅ مؤشر |
+| Personal info ← **User IDs** | معرّف الحساب (آبل: User ID) | ❌ **ناقص** — Collected، Optional، App functionality + Account management |
+| **Location ← Approximate location** | AdMob من الـ IP | ❌ **ناقص** — Collected + Shared، Required، Advertising + Analytics + Fraud prevention |
+| App activity ← App interactions | AdMob | ✅ مؤشر |
+| App activity ← Other user-generated content | فئات خاصة، أسماء فرق، بلاغات | ✅ مؤشر |
+| App activity ← **Other actions** | نتائج اللعب والترتيب («such as gameplay») | ❌ **ناقص** — Collected، Optional، App functionality |
+| App info and performance ← Diagnostics | AdMob | ✅ مؤشر |
+| App info and performance ← **Crash logs** | AdMob (آبل: Crash Data) | ❌ **ناقص** — Collected + Shared، Required، Advertising + Analytics + Fraud prevention |
+| App info and performance ← **Other app performance data** | AdMob | ❌ **ناقص** — نفس Crash logs |
+| Device or other IDs | معرّف الإعلانات | ✅ مؤشر |
+
+Supabase مزوّد خدمة يشتغل بالنيابة عنّا، فجوجل ما تحسبه «مشاركة» — البيانات
+اللي بس عندنا تنأشّر Collected بلا Shared.
+
+**لمن تنضاف الخمسة الناقصة:** حوّل ❌ لـ ✅ وحدّث تاريخ «آخر تحديث للنموذج».
 
 ---
 
