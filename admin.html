@@ -92,6 +92,11 @@
   .rng{display:flex; align-items:center; gap:12px; margin-bottom:12px;}
   .rng input[type=range]{flex:1; accent-color:var(--gold);}
   .rng b{min-width:58px; text-align:left; font-variant-numeric:tabular-nums; color:var(--ivory);}
+  .chips{display:flex; gap:7px; flex-wrap:wrap; margin-top:10px;}
+  .chips button{padding:7px 14px; border-radius:999px; cursor:pointer; font-size:12.5px;
+    border:1px solid var(--line); background:rgba(0,0,0,.2); color:var(--muted);
+    font-family:'Tajawal',sans-serif; white-space:nowrap;}
+  .chips button:hover{border-color:var(--gold-dim); color:var(--ivory);}
   /* بطاقة الخيارات */
   .ch-q{font-size:16px; line-height:1.8; color:var(--ivory); margin-bottom:8px;}
   .ch-a{color:var(--sage); font-weight:700; font-size:14px; margin-bottom:14px;}
@@ -268,8 +273,8 @@
           <h2>دوّر على الأغنية</h2>
           <div class="row two">
             <div>
-              <label>اسم المطرب</label>
-              <input type="text" id="s-artist" placeholder="كاظم الساهر">
+              <label>ابحث</label>
+              <input type="text" id="s-artist" placeholder="اسم أغنية، أو مطرب، أو أي كلمة">
             </div>
             <div>
               <label>متجر آبل</label>
@@ -285,8 +290,15 @@
             <div><label>من سنة</label><input type="text" id="s-y1" inputmode="numeric" placeholder="2005"></div>
             <div><label>إلى سنة</label><input type="text" id="s-y2" inputmode="numeric" placeholder="2015"></div>
           </div>
-          <button class="btn btn-gold" id="s-go" style="width:100%;">ابحث</button>
-          <div class="hint">اترك خانات السنة فاضية إذا ما تريد فلترة. تطلع الأغاني الي عندها مقطع صوتي بس.</div>
+          <div class="btn-row">
+            <button class="btn btn-gold" id="s-go" style="flex:1;">ابحث</button>
+            <button class="btn btn-ghost" id="s-chart">الأكثر استماعاً</button>
+          </div>
+          <div class="hint">
+            ما تتذكر الاسم؟ اضغط «الأكثر استماعاً» وتصفّح، أو اضغط أي مطرب من تحت.
+            خانات السنة اتركها فاضية إذا ما تريد فلترة.
+          </div>
+          <div class="chips" id="s-chips"></div>
           <div class="msg" id="s-msg"></div>
           <div class="hits" id="s-hits"></div>
         </div>
@@ -739,6 +751,10 @@ function artistLooksRight(expected, got){
   return tokens.filter(t => g.indexOf(t) !== -1).length / tokens.length >= 0.5;
 }
 
+const SONG_CHIPS = ['كاظم الساهر','إلهام المدفعي','حاتم العراقي','رحمة رياض',
+  'ماجد المهندس','سيف نبيل','نصرت البدر','ناظم الغزالي','فؤاد سالم','سعدون جابر',
+  'ياس خضر','حسين نعمة','رياض أحمد'];
+
 let songHits = [], songSel = null, songStop = null;
 
 async function itunes(term, opts){
@@ -748,47 +764,88 @@ async function itunes(term, opts){
   return (await r.json()).results || [];
 }
 
+/* عرض قائمة نتائج واحدة — يستعملها البحث والأكثر استماعاً سوا */
+function showHits(rows, msgEl){
+  const y1 = parseInt($('s-y1').value, 10) || 0;
+  const y2 = parseInt($('s-y2').value, 10) || 9999;
+  if(y1 || y2 < 9999){
+    rows = rows.filter(r => {
+      const y = parseInt((r.releaseDate || '').slice(0, 4), 10);
+      return y >= y1 && y <= y2;
+    });
+  }
+  /* iTunes يرجّع نفس الأغنية بعدة ألبومات — نخلي وحدة لكل اسم */
+  const seen = Object.create(null);
+  songHits = rows.filter(r => {
+    const k = normalizeArabic(r.trackName) + '|' + normalizeArabic(r.artistName);
+    if(seen[k]) return false; seen[k] = 1; return true;
+  });
+
+  if(!songHits.length){
+    $('s-hits').innerHTML = '';
+    return say(msgEl, 'ماكو نتائج. وسّع مدى السنوات، أو بدّل المتجر، أو جرّب كلمة ثانية.', 'err');
+  }
+  say(msgEl, 'طلعت ' + arNum(songHits.length) + ' أغنية', 'ok');
+
+  $('s-hits').innerHTML = songHits.map((r, i)=>`
+    <button class="hit" data-i="${i}">
+      <img src="${esc(r.artworkUrl60 || r.artworkUrl100 || '')}" alt="">
+      <span class="t"><span class="n">${esc(r.trackName)}</span><span class="a">${esc(r.artistName)}</span></span>
+      <span class="y">${esc((r.releaseDate || '').slice(0, 4))}</span>
+    </button>`).join('');
+
+  $('s-hits').querySelectorAll('.hit').forEach(b => b.addEventListener('click', ()=>{
+    $('s-hits').querySelectorAll('.hit').forEach(x => x.classList.toggle('on', x === b));
+    pickSong(songHits[+b.dataset.i]);
+  }));
+}
+
+/* رقائق المطربين: ضغطة وحدة بدل ما تتذكر الاسم وتكتبه */
+$('s-chips').innerHTML = SONG_CHIPS.map(n=>`<button data-n="${esc(n)}">${esc(n)}</button>`).join('');
+$('s-chips').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  $('s-artist').value = b.dataset.n;
+  $('s-go').click();
+});
+
+/* الأكثر استماعاً: تصفّح بلا ما تكتب ولا حرف.
+   جدول آبل يرجّع الاسم والمعرّف بس، فنجيب تفاصيل المقاطع بـlookup. */
+$('s-chart').addEventListener('click', async ()=>{
+  const msg = $('s-msg');
+  const cc = ($('s-store').value || 'SA').toLowerCase();
+  say(msg, 'جاري جلب الأكثر استماعاً…', 'warn');
+  $('s-hits').innerHTML = '';
+  try{
+    const feed = await fetch('https://rss.applemarketingtools.com/api/v2/' + cc + '/music/most-played/100/songs.json');
+    if(!feed.ok) throw new Error('HTTP ' + feed.status);
+    const ids = ((await feed.json()).feed.results || []).map(x => x.id).filter(Boolean);
+    if(!ids.length) throw new Error('الجدول فاضي');
+
+    /* lookup يتحمّل دفعات — نقسمها ٥٠ بالمرة */
+    let out = [];
+    for(let i = 0; i < ids.length; i += 50){
+      const r = await fetch('https://itunes.apple.com/lookup?id=' + ids.slice(i, i + 50).join(',') + '&entity=song');
+      const d = await r.json();
+      out = out.concat((d.results || []).filter(x => x.previewUrl && x.trackName));
+    }
+    showHits(out, msg);
+  }catch(e){
+    say(msg, 'تعذّر جلب الجدول (' + e.message + '). استعمل البحث أو الرقائق.', 'err');
+  }
+});
+
 $('s-go').addEventListener('click', async ()=>{
   const msg = $('s-msg');
   const artist = $('s-artist').value.trim();
-  if(!artist) return say(msg, 'اكتب اسم المطرب أول.', 'err');
+  if(!artist) return say(msg, 'اكتب أي شي بخانة البحث، أو اضغط «الأكثر استماعاً».', 'err');
 
   say(msg, 'جاري البحث…', 'warn');
   $('s-hits').innerHTML = '';
   try{
     const opts = { limit: '150' };
     const st = $('s-store').value; if(st) opts.country = st;
-    let rows = (await itunes(artist, opts)).filter(r => r.previewUrl);
-
-    const y1 = parseInt($('s-y1').value, 10) || 0;
-    const y2 = parseInt($('s-y2').value, 10) || 9999;
-    if(y1 || y2 < 9999){
-      rows = rows.filter(r => {
-        const y = parseInt((r.releaseDate || '').slice(0, 4), 10);
-        return y >= y1 && y <= y2;
-      });
-    }
-    /* iTunes يرجّع نفس الأغنية بعدة ألبومات — نخلي وحدة لكل اسم */
-    const seen = Object.create(null);
-    songHits = rows.filter(r => {
-      const k = normalizeArabic(r.trackName) + '|' + normalizeArabic(r.artistName);
-      if(seen[k]) return false; seen[k] = 1; return true;
-    });
-
-    if(!songHits.length) return say(msg, 'ماكو نتائج. جرّب كتابة ثانية للاسم، أو وسّع مدى السنوات، أو بدّل المتجر.', 'err');
-    say(msg, 'طلعت ' + arNum(songHits.length) + ' أغنية', 'ok');
-
-    $('s-hits').innerHTML = songHits.map((r, i)=>`
-      <button class="hit" data-i="${i}">
-        <img src="${esc(r.artworkUrl60 || '')}" alt="">
-        <span class="t"><span class="n">${esc(r.trackName)}</span><span class="a">${esc(r.artistName)}</span></span>
-        <span class="y">${esc((r.releaseDate || '').slice(0, 4))}</span>
-      </button>`).join('');
-
-    $('s-hits').querySelectorAll('.hit').forEach(b => b.addEventListener('click', ()=>{
-      $('s-hits').querySelectorAll('.hit').forEach(x => x.classList.toggle('on', x === b));
-      pickSong(songHits[+b.dataset.i]);
-    }));
+    const rows = (await itunes(artist, opts)).filter(r => r.previewUrl);
+    showHits(rows, msg);
   }catch(e){
     say(msg, 'تعذّر البحث: ' + e.message, 'err');
   }
