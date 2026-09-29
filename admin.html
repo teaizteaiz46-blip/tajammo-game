@@ -69,14 +69,6 @@
   #gate{max-width:380px; margin:60px auto;}
   .hidden{display:none !important;}
   .spin{color:var(--muted); font-size:13px; padding:10px 0;}
-  /* بطاقة الخيارات */
-  .ch-q{font-size:16px; line-height:1.8; color:var(--ivory); margin-bottom:8px;}
-  .ch-a{color:var(--sage); font-weight:700; font-size:14px; margin-bottom:14px;}
-  .ch-nav{display:flex; align-items:center; justify-content:space-between; gap:8px;
-    flex-wrap:wrap; margin-top:12px;}
-  .ch-nav .tiny{flex:1; text-align:center;}
-  .has-ch{color:var(--sage); font-size:13px;}
-  .edit-ch{border:0; background:none; color:var(--gold); cursor:pointer; font-size:14px; padding:2px 6px;}
 </style>
 </head>
 <body>
@@ -187,23 +179,6 @@
 
           <button class="btn btn-gold" id="save" style="width:100%;">أضف السؤال</button>
           <div class="msg" id="save-msg"></div>
-        </div>
-
-        <!-- ─── خيارات الأسئلة ─── -->
-        <div class="card" id="ch-card">
-          <h2>خيارات الأسئلة <span class="tiny" id="ch-progress"></span></h2>
-          <div class="hint" style="margin:-6px 0 12px;">
-            لمساعدة «خيارات» باللعبة (مطفّاة لحد ما تكتمل). اكتب جوابين أو ثلاثة
-            <b>غلط</b> بس قريبين من الصح وبنفس صيغته — إذا الجواب «اسم (English)»
-            اكتب الخيارات بنفس الشكل. الجواب الصح ينضاف لحاله باللعبة.
-            <span id="ch-total"></span>
-          </div>
-          <div class="seg" id="ch-filter" style="margin-bottom:14px;">
-            <button data-f="missing" class="on">بلا خيارات بس</button>
-            <button data-f="all">كل الأسئلة</button>
-          </div>
-          <div id="ch-box"><div class="spin">…</div></div>
-          <div class="msg" id="ch-msg"></div>
         </div>
 
         <!-- ─── أسئلة الفئة ─── -->
@@ -322,12 +297,10 @@ function onTopicChange(){
     $('stats').innerHTML = '<div class="tiny">فئة جديدة — ماكو أسئلة بعد</div>';
     $('list').innerHTML = '<div class="tiny">ماكو أسئلة بعد</div>';
     $('list-count').textContent = '';
-    chAll = []; renderChoices();
     return;
   }
   renderStats();
   loadList();
-  loadChoices();
 }
 $('topic-sel').addEventListener('change', onTopicChange);
 
@@ -352,25 +325,20 @@ async function loadList(){
   const topic = $('topic-sel').value;
   $('list').innerHTML = '<div class="spin">…</div>';
   const { data, error } = await sb.from('category_questions')
-    .select('id,points,question,answer,media_type,image,category_question_choices(decoys)')
+    .select('id,points,question,answer,media_type,image')
     .eq('topic', topic).order('id', { ascending:false }).limit(60);
   if(error){ $('list').innerHTML = '<div class="msg err">' + esc(error.message) + '</div>'; return; }
   $('list-count').textContent = data.length ? '— آخر ' + arNum(data.length) : '';
   if(!data.length){ $('list').innerHTML = '<div class="tiny">ماكو أسئلة بهذي الفئة</div>'; return; }
 
   $('list').innerHTML = '<table><thead><tr><th style="width:52px;">النقاط</th>'
-    + '<th>السؤال</th><th style="width:26%;">الإجابة</th><th style="width:56px;">خيارات</th>'
-    + '<th style="width:34px;"></th></tr></thead><tbody>'
+    + '<th>السؤال</th><th style="width:26%;">الإجابة</th><th style="width:34px;"></th></tr></thead><tbody>'
     + data.map(r => `<tr>
         <td><span class="pts">${arNum(r.points)}</span></td>
         <td>${r.media_type === 'photo' ? '<span class="tag">صورة</span> ' : ''}${esc(r.question)}</td>
         <td>${esc(r.answer)}</td>
-        <td>${choicesOf(r) ? '<span class="has-ch" title="' + esc(choicesOf(r).join(' / ')) + '">✓</span>' : ''}
-            <button class="edit-ch" data-id="${r.id}" title="اكتب أو عدّل الخيارات">✎</button></td>
         <td><button class="del" data-id="${r.id}" title="حذف">✕</button></td>
       </tr>`).join('') + '</tbody></table>';
-
-  $('list').querySelectorAll('.edit-ch').forEach(b => b.addEventListener('click', ()=> openChoicesFor(+b.dataset.id)));
 
   $('list').querySelectorAll('.del').forEach(b => b.addEventListener('click', async ()=>{
     b.disabled = true;
@@ -440,173 +408,6 @@ $('save').addEventListener('click', async ()=>{
   /* loadTopics ترجّع الاختيار للفئة نفسها لو موجودة بالقائمة الجديدة */
   await loadTopics(topic);
 });
-
-/* ═════════ خيارات الأسئلة ═════════
-   جدول category_question_choices: سطر لكل سؤال بيه الخيارات الغلط بس
-   (٢ أو ٣). الشغل اليومي: سؤال بكل مرة، «حفظ والتالي» ينقل للي بعده.
-   قاعدة البيانات نفسها تمنع غير المشرفين، وتفرض ٢-٣ خيارات بلا فراغ. */
-let chAll = [];            // كل أسئلة الفئة الحالية ويا خياراتها
-let chFilter = 'missing';  // 'missing' = بلا خيارات بس، 'all' = الكل
-let chIdx = 0;
-
-/* PostgREST يرجّع العلاقة واحد-لواحد كـobject، بس نحتاط لو رجعت array */
-function choicesOf(r){
-  const c = r && r.category_question_choices;
-  const row = Array.isArray(c) ? c[0] : c;
-  return row && Array.isArray(row.decoys) ? row.decoys : null;
-}
-
-const chNorm = s => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
-
-/* «Rhaenyra (رينيرا)» ← [الكل، Rhaenyra، رينيرا] — حتى نمسك خيار هو نفسه الجواب */
-function answerParts(a){
-  const parts = [chNorm(a)];
-  const m = /^(.*?)\s*\((.*)\)\s*$/.exec(String(a || '').trim());
-  if(m) parts.push(chNorm(m[1]), chNorm(m[2]));
-  return parts.filter(Boolean);
-}
-
-function chQueue(){
-  return chFilter === 'missing' ? chAll.filter(r => !choicesOf(r)) : chAll;
-}
-
-async function loadChoices(focusId){
-  const topic = $('topic-sel').value;
-  if(!topic || topic === NEW_TOPIC){ chAll = []; renderChoices(); return; }
-  $('ch-box').innerHTML = '<div class="spin">…</div>';
-  const { data, error } = await sb.from('category_questions')
-    .select('id,points,question,answer,media_type,category_question_choices(decoys)')
-    .eq('topic', topic).order('points').order('id').limit(1000);
-  if(error){ $('ch-box').innerHTML = '<div class="msg err">' + esc(error.message) + '</div>'; return; }
-  chAll = data || [];
-  chIdx = 0;
-  if(focusId){
-    const i = chQueue().findIndex(r => r.id === focusId);
-    if(i >= 0) chIdx = i;
-  }
-  renderChoices();
-  loadChoicesTotal();
-}
-
-async function loadChoicesTotal(){
-  const [withC, all] = await Promise.all([
-    sb.from('category_question_choices').select('question_id', { count:'exact', head:true }),
-    sb.from('category_questions').select('id', { count:'exact', head:true })
-  ]);
-  if(withC.error || all.error) return;
-  $('ch-total').textContent = ' كل البنك: ' + arNum(withC.count || 0) + ' من ' + arNum(all.count || 0) + ' سؤال.';
-}
-
-/* زر ✎ بقائمة الأسئلة: يفتح السؤال نفسه بالبطاقة حتى لو عنده خيارات */
-function openChoicesFor(id){
-  chFilter = 'all';
-  $('ch-filter').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.f === 'all'));
-  const i = chAll.findIndex(r => r.id === id);
-  if(i >= 0){ chIdx = i; renderChoices(); }
-  else loadChoices(id);
-  $('ch-card').scrollIntoView({ behavior:'smooth', block:'start' });
-}
-
-$('ch-filter').querySelectorAll('button').forEach(b => b.addEventListener('click', ()=>{
-  chFilter = b.dataset.f;
-  $('ch-filter').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
-  chIdx = 0;
-  say($('ch-msg'), '', '');
-  renderChoices();
-}));
-
-function renderChoices(){
-  const box = $('ch-box');
-  const done = chAll.filter(r => choicesOf(r)).length;
-  $('ch-progress').textContent = chAll.length ? '— ' + arNum(done) + ' من ' + arNum(chAll.length) + ' بهذي الفئة' : '';
-
-  if(!chAll.length){ box.innerHTML = '<div class="tiny">ماكو أسئلة بهذي الفئة.</div>'; return; }
-  const queue = chQueue();
-  if(!queue.length){
-    box.innerHTML = '<div class="msg ok">✓ كل أسئلة هذي الفئة عندها خيارات. اختار «كل الأسئلة» إذا تريد تعدّل وحدة.</div>';
-    return;
-  }
-  chIdx = Math.max(0, Math.min(chIdx, queue.length - 1));
-  const r = queue[chIdx];
-  const d = choicesOf(r) || [];
-
-  box.innerHTML = `
-    <div class="ch-q"><span class="pts">${arNum(r.points)}</span>
-      ${r.media_type === 'photo' ? '<span class="tag">صورة</span> ' : ''}${esc(r.question)}</div>
-    <div class="ch-a">✓ الجواب الصح: ${esc(r.answer)}</div>
-    <div class="row">
-      ${[0,1,2].map(i => `<div>
-        <label>خيار غلط ${arNum(i + 1)}${i === 2 ? ' (اختياري)' : ''}</label>
-        <input type="text" id="ch-d${i}" value="${esc(d[i] || '')}" maxlength="120" autocomplete="off">
-      </div>`).join('')}
-    </div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn btn-gold" id="ch-save" style="flex:2;">حفظ والتالي</button>
-      <button class="btn btn-ghost" id="ch-skip" style="flex:1;">تخطّي</button>
-      ${d.length ? '<button class="btn btn-ghost" id="ch-clear" style="flex:1; color:#e08a8a;">امسح الخيارات</button>' : ''}
-    </div>
-    <div class="ch-nav">
-      <button class="btn btn-ghost btn-sm" id="ch-prev" ${chIdx === 0 ? 'disabled' : ''}>→ السابق</button>
-      <span class="tiny">${arNum(chIdx + 1)} من ${arNum(queue.length)}${chFilter === 'missing' ? ' باقية بلا خيارات' : ''}</span>
-      <button class="btn btn-ghost btn-sm" id="ch-next" ${chIdx >= queue.length - 1 ? 'disabled' : ''}>التالي ←</button>
-    </div>`;
-
-  $('ch-save').addEventListener('click', ()=> saveChoices(r));
-  $('ch-skip').addEventListener('click', ()=>{ chIdx = (chIdx + 1) % queue.length; say($('ch-msg'), '', ''); renderChoices(); });
-  $('ch-prev').addEventListener('click', ()=>{ chIdx--; say($('ch-msg'), '', ''); renderChoices(); });
-  $('ch-next').addEventListener('click', ()=>{ chIdx++; say($('ch-msg'), '', ''); renderChoices(); });
-  if($('ch-clear')) $('ch-clear').addEventListener('click', ()=> clearChoices(r));
-  [0,1,2].forEach(i => $('ch-d' + i).addEventListener('keydown', e => {
-    if(e.key === 'Enter'){ e.preventDefault(); saveChoices(r); }
-  }));
-
-  /* المؤشر يروح لأول خانة فاضية — تكتب وتضغط Enter وتكمل بلا فأرة */
-  const empty = [0,1,2].map(i => $('ch-d' + i)).find(x => !x.value);
-  (empty || $('ch-d0')).focus();
-}
-
-async function saveChoices(r){
-  const msg = $('ch-msg');
-  const vals = [0,1,2].map(i => $('ch-d' + i).value.trim().replace(/\s+/g, ' ')).filter(Boolean);
-
-  if(vals.length < 2) return say(msg, 'اكتب خيارين غلط على الأقل.', 'err');
-  if(new Set(vals.map(chNorm)).size !== vals.length) return say(msg, 'أكو خيارين نفس الشي.', 'err');
-  const parts = answerParts(r.answer);
-  const same = vals.find(v => parts.includes(chNorm(v)));
-  if(same) return say(msg, '«' + same + '» هو نفسه الجواب الصح — الخيارات لازم تكون غلط.', 'err');
-
-  $('ch-save').disabled = true;
-  say(msg, 'جاري الحفظ…', 'warn');
-  const { error } = await sb.from('category_question_choices')
-    .upsert({ question_id: r.id, decoys: vals }, { onConflict: 'question_id' });
-  if(error){
-    $('ch-save').disabled = false;
-    say(msg, error.code === '42501'
-      ? 'قاعدة البيانات رفضت — هذا الحساب مو مشرف.'
-      : 'تعذّر الحفظ: ' + error.message, 'err');
-    return;
-  }
-
-  r.category_question_choices = { decoys: vals };
-  say(msg, '✓ انحفظت خيارات «' + r.question.slice(0, 40) + (r.question.length > 40 ? '…' : '') + '»', 'ok');
-  /* بفلتر «بلا خيارات» السؤال يطلع من القائمة لحاله، فنفس الرقم يصير
-     هو التالي. بفلتر «الكل» نتقدّم خطوة. */
-  if(chFilter === 'all') chIdx++;
-  renderChoices();
-  loadChoicesTotal();
-  loadList();
-}
-
-async function clearChoices(r){
-  if(!confirm('تمسح خيارات هذا السؤال؟')) return;
-  const { error } = await sb.from('category_question_choices').delete().eq('question_id', r.id);
-  if(error){ say($('ch-msg'), 'تعذّر المسح: ' + error.message, 'err'); return; }
-  r.category_question_choices = null;
-  say($('ch-msg'), 'انمسحت الخيارات.', 'ok');
-  renderChoices();
-  loadChoicesTotal();
-  loadList();
-}
 
 boot();
 </script>
