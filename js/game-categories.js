@@ -409,101 +409,62 @@ function renderScoreboard(){
 /* ─────────────────────────────────────────────────────────────────────
    مساعدة «الخيارات»
 
-   قبل، كانت تسحب جوابين عشوائي من الموضوع كله. فيصير الجواب «١»
-   والخيارات «١ / فيبي / مونيكا» — أي واحد يعرف إن الجواب رقم.
-   هسه الخيارات لازم تكون من نفس شكل الجواب: رقم وية أرقام قريبة،
-   واسم وية أسماء بنفس الطول تقريباً.
+   الخيارات الغلط مكتوبة يدوياً لكل سؤال بجدول category_question_choices
+   (من لوحة الإدارة)، وتنزل ويّا البنك بـ q.decoys. الجواب الصح ينخلط
+   عشوائياً ويّا الخيارين.
+
+   قبل چانت الخيارات تتولّد تلقائياً من أجوبة أسئلة ثانية بنفس الفئة،
+   وأحياناً تفضح الجواب أو تطلع غريبة — فانشالت.
+
+   السؤال اللي ما إله خيارات بالجدول ما يطلعله الزر أصلاً — ما نحرق
+   مساعدة على لا شي، وما نرجع للتوليد التلقائي.
    ───────────────────────────────────────────────────────────────────── */
-const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
 
-/* نشيل الشرح الإنكليزي والتفسير بعد الشرطة — حتى كل الخيارات تطلع
-   بنفس الشكل، وإلا صيغة الجواب بروحها تفضحه */
-function answerCore(a){
-  return String(a || '').replace(/\([^)]*\)/g, ' ')
-    .split(/\s[—–:]\s/)[0]
-    .replace(/\s{2,}/g, ' ')
-    .trim();
+/* «Shape of You - Ed Sheeran» ← «Shape of You». سؤال الأغنية يسأل عن
+   اسمها، والخيارات بالجدول بنفس صيغة الجواب (اسم - مطرب). */
+function songTitleOnly(s){
+  const i = s.lastIndexOf(' - ');
+  return i > 0 ? s.slice(0, i).trim() : s;
 }
 
-function firstNumber(s){
-  const m = String(s).match(/[0-9٠-٩]+/);
-  if(!m) return null;
-  const west = m[0].replace(/[٠-٩]/g, d => String(AR_DIGITS.indexOf(d)));
-  const value = parseInt(west, 10);
-  if(!isFinite(value)) return null;
-  return { raw: m[0], value: value, index: m.index, arabic: /[٠-٩]/.test(m[0]) };
-}
+function questionChoices(q){
+  if(!q || !Array.isArray(q.decoys) || q.decoys.length < 2) return null;
+  let opts = [q.answer].concat(q.decoys).map(s => String(s || '').trim());
+  if(q.mediaType === 'song') opts = opts.map(songTitleOnly);
 
-/* «٨ أرجل» → «٦ أرجل» و«١٠ أرجل» — نبدّل الرقم ونخلي الوحدة مثل ما هي */
-function numericDecoys(core, n){
-  const p = firstNumber(core);
-  if(!p) return [];
-  const v = p.value;
-  const step = v <= 10 ? 1 : (v <= 100 ? Math.max(2, Math.round(v * 0.1)) : Math.round(v * 0.15));
-  const cands = [];
-  for(let k = 1; k <= 4; k++){
-    [v - k * step, v + k * step].forEach(x=>{
-      if(x > 0 && x !== v && cands.indexOf(x) === -1) cands.push(x);
-    });
-  }
-  return shuffled(cands).slice(0, n).map(x=>{
-    const txt = p.arabic ? String(x).replace(/[0-9]/g, d => AR_DIGITS[+d]) : String(x);
-    return core.slice(0, p.index) + txt + core.slice(p.index + p.raw.length);
-  });
-}
-
-/* خيارات نصية: من نفس الموضوع، بنفس نوع الحروف وقريبة بعدد الكلمات والطول */
-function textDecoys(core, pool, n){
-  const isLatin = s => /^[\x20-\x7E]+$/.test(s);
-  const words   = s => s.split(/\s+/).length;
-  const tLatin = isLatin(core), tWords = words(core), tLen = core.length;
-  return pool
-    .filter(c => c && c !== core && c.indexOf(core) === -1 && core.indexOf(c) === -1)
-    .map(c => ({
-      c: c,
-      s: (isLatin(c) === tLatin ? 0 : 40)
-       + (/[0-9٠-٩]/.test(c) ? 25 : 0)          // ما ندس رقم بين أسماء
-       + Math.abs(words(c) - tWords) * 6
-       + Math.abs(c.length - tLen) * 0.6
-       + Math.random() * 4                      // حتى ما تتكرر نفس الخيارات
-    }))
-    .sort((a, b) => a.s - b.s)
-    .slice(0, n)
-    .map(x => x.c);
-}
-
-function buildChoices(topic, q){
-  const core = answerCore(q.answer);
-  if(!core) return null;
-
-  let pool;
-  if(topic.bankKey){
-    const bank = CATEGORY_DATA[topic.bankKey] || {};
-    pool = [].concat(bank[100]||[], bank[200]||[], bank[400]||[], bank[600]||[])
-             .map(x => answerCore(x.answer));
-  } else {
-    pool = (topic.questions || []).map(x => answerCore(x.answer));
+  /* حزام أمان للصيغة: إذا بعض الخيارات بيها «(…)» وبعضها لا، الخيار
+     المختلف يفضح نفسه — فنشيل الأقواس من الكل. البيانات الحالية متطابقة،
+     بس أي خيار ينكتب بعدين بصيغة مختلفة ما يخرّب السؤال. */
+  const hasParen = s => /\([^()]*\)/.test(s);
+  if(opts.some(hasParen) && !opts.every(hasParen)){
+    opts = opts.map(s => s.replace(/\s*\([^()]*\)/g, '').trim());
   }
 
-  let decoys = /[0-9٠-٩]/.test(core) ? numericDecoys(core, 2) : [];
-  if(decoys.length < 2){
-    decoys = decoys.concat(textDecoys(core, pool, 2 - decoys.length));
-  }
-  if(decoys.length < 2) return null;     // ما نحرق مساعدة بخيارات ناقصة
-  return shuffled([core].concat(decoys));
+  if(opts.some(o => !o)) return null;
+  /* خيارين يطلعن نفس الشي (بعد التطبيع) = مساعدة ناقصة — ما نعرضها */
+  if(new Set(opts.map(normalizeArabic)).size !== opts.length) return null;
+  return shuffled(opts);
 }
 
-/* المساعدات المتاحة بالترتيب. swap تنفع بمواضيع البنك بس.
+function questionHasChoices(q){
+  return !!questionChoices(q);
+}
 
-   «خيارات» مطفّاة حالياً: الخيارات المولّدة تلقائياً (buildChoices) چانت
-   أحياناً تفضح الجواب أو تطلع غريبة. الخيارات راح تنكتب يدوياً لكل سؤال
-   بجدول category_question_choices من لوحة الإدارة، ولمن تكتمل ترجع هنا
-   وتقرا منه بدل buildChoices. */
+/* المساعدات المتاحة بالترتيب. swap وchoices تنفع بمواضيع البنك بس
+   (الفئات الخاصة ماكو إلها بديل ولا خيارات مكتوبة). */
 const HELP_TYPES = [
   { key:'letter',  label:'أول حرف',      bankOnly:false },
   { key:'blanks',  label:'عدد الأحرف',   bankOnly:false },
+  { key:'choices', label:'خيارات',       bankOnly:true  },
   { key:'swap',    label:'تبديل السؤال', bankOnly:true  }
 ];
+
+/* مساعدة تنفع لهذا السؤال بالذات؟ «خيارات» تحتاج خيارات مكتوبة بالجدول */
+function helpFitsQuestion(h, topic, q){
+  if(h.bankOnly && !topic.bankKey) return false;
+  if(h.key === 'choices') return questionHasChoices(q);
+  return true;
+}
 
 function helpIsOn(key){
   if(!HELP_TYPES.some(h => h.key === key)) return false;   // مو من المساعدات الحالية
@@ -528,7 +489,7 @@ function renderHelpSection(topic, q){
   const ti = topic.takenBy;
   if(ti !== 0 && ti !== 1) return '';
 
-  const available = HELP_TYPES.filter(h => helpIsOn(h.key) && (!h.bankOnly || topic.bankKey));
+  const available = HELP_TYPES.filter(h => helpIsOn(h.key) && helpFitsQuestion(h, topic, q));
   // كل المساعدات مطفّاة من الإعدادات — ما نعرض صندوق فاضي
   if(!available.length) return '';
 
@@ -564,6 +525,8 @@ function wireHelpButtons(modal, topic, q){
           if(fresh && !songClipsAllowed()) fresh = songQuestionToText(fresh);
           /* bankId لازم يتبدل وياه، وإلا النتيجة تنحسب على السؤال القديم */
           if(fresh){ q.text = fresh.text; q.answer = fresh.answer; q.image = fresh.image; q.bankId = fresh.bankId; }
+          /* وخياراته وياه — وإلا «خيارات» تعرض خيارات السؤال القديم */
+          if(fresh) q.decoys = fresh.decoys || null;
           /* ماكو سؤال بديل بنفس المستوى — ما نحرق المساعدة على لا شي */
           if(!fresh) return;
         } else {
@@ -580,6 +543,10 @@ function wireHelpButtons(modal, topic, q){
         hint = 'أول حرف: ' + (q.answer.trim().charAt(0) || '؟');
       } else if(type==='blanks'){
         hint = 'عدد الأحرف: ' + q.answer.replace(/\s/g,'').length;
+      } else if(type==='choices'){
+        /* الخلط يصير هنا، وقت الضغط — فكل مرة يطلع ترتيب جديد */
+        const opts = questionChoices(q);
+        if(opts) hint = 'الخيارات: ' + opts.join('  /  ');
       }
       if(hint){
         markHelpUsed(team, type);

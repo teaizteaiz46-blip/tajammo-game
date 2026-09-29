@@ -7,7 +7,7 @@ const state = {
   /* أي مساعدة تظهر باللعبة — تنضبط من شاشة الإعدادات قبل ما تبدي الجولة.
      «تبديل السؤال» تشتغل بمواضيع البنك بس (الفئات الخاصة ماكو منها بديل).
      كل مساعدة تنستخدم مرة وحدة لكل فريق باللعبة (team.usedHelps). */
-  helpsEnabled: { letter:true, blanks:true, swap:true },
+  helpsEnabled: { letter:true, blanks:true, choices:true, swap:true },
   user: null,
   statsRecordedForThisGame: false,
   lastReward: null,          // نتيجة award_game_coins لآخر لعبة

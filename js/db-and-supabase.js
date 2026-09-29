@@ -6,14 +6,25 @@ let CATEGORY_DATA = {};
    البنك بصمت وتضيع مواضيع كاملة. نجيبه على صفحات لحد ما يخلص. */
 const CATEGORY_PAGE_SIZE = 1000;
 
-/* id ضروري لترتيب الفرق — بيه نعرف أي سؤال انجاوب صح */
+/* id ضروري لترتيب الفرق — بيه نعرف أي سؤال انجاوب صح.
+   category_question_choices(decoys): الخيارات الغلط المكتوبة يدوياً لكل
+   سؤال (مساعدة «خيارات»). تنزل ويّا السؤال بنفس الطلب، فتنحفظ بالكاش
+   وتشتغل بلا إنترنت. السؤال اللي ما إله خيارات يرجع null. */
 const BANK_SELECT =
-  'select=id,topic,points,question,answer,image,media_type,clip_start,clip_seconds&order=id.asc';
+  'select=id,topic,points,question,answer,image,media_type,clip_start,clip_seconds,' +
+  'category_question_choices(decoys)&order=id.asc';
 
 /* البنك ينحفظ بالجهاز بعد أول تحميل، فالمرات الجاية تفتح فوراً بلا انتظار.
-   النسخة (v2) بالمفتاح: لو غيّرنا شكل البيانات، نرفع الرقم ويُهمل الكاش القديم.
-   v2 أضافت id لكل سؤال، فكاش v1 ما ينفع. */
-const BANK_CACHE_KEY = 'tajammo.bank.v2';
+   المفتاح مشتق من BANK_SELECT نفسه: أي عمود ينضاف أو ينشال يغيّر المفتاح،
+   فالكاش القديم (اللي ما بيه العمود الجديد) ينهمل لحاله — بلا ما أحد يتذكر
+   يرفع رقم يدوياً. والكاشات القديمة تنمسح بـ writeBankCache حتى ما تاكل
+   مساحة الجهاز (البنك بحدود ٢ ميغا). */
+function bankCacheKey(){
+  let h = 5381;
+  for(let i = 0; i < BANK_SELECT.length; i++) h = ((h << 5) + h + BANK_SELECT.charCodeAt(i)) | 0;
+  return 'tajammo.bank.' + (h >>> 0).toString(36);
+}
+const BANK_CACHE_KEY = bankCacheKey();
 const BANK_CACHE_TTL = 24 * 60 * 60 * 1000;   // بعد يوم نجدّده بالخلفية
 
 /* طلب صفحة وحدة. Prefer: count=exact يخلي السيرفر يرجّع العدد الكلي
@@ -42,9 +53,16 @@ function groupBankRows(rows){
   rows.forEach(row=>{
     if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
     const tier = grouped[row.topic][row.points] ? row.points : 200;
-    grouped[row.topic][tier].push({ bankId:row.id, text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type, clipStart:row.clip_start, clipSeconds:row.clip_seconds });
+    grouped[row.topic][tier].push({ bankId:row.id, text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type, clipStart:row.clip_start, clipSeconds:row.clip_seconds, decoys:bankRowDecoys(row) });
   });
   return grouped;
+}
+
+/* PostgREST يرجّع العلاقة واحد-لواحد كـ object، بس نحتاط لو رجعت array */
+function bankRowDecoys(row){
+  const c = row.category_question_choices;
+  const d = Array.isArray(c) ? (c[0] && c[0].decoys) : (c && c.decoys);
+  return Array.isArray(d) && d.length >= 2 ? d.slice() : null;
 }
 
 /* أنواع الأسئلة اللي تعرف هاي النسخة تعرضها. أي نوع ثاني بالبنك (مثلاً
@@ -95,7 +113,21 @@ function readBankCache(){
   }catch(e){ return null; }
 }
 
+/* نسخ البنك القديمة (مفاتيح BANK_SELECT سابقة) — كل وحدة بحدود ٢ ميغا،
+   وذاكرة المتصفح بحدود ٥. لو بقت، الكاش الجديد ما يلكى مكان وينحفظ. */
+function dropOldBankCaches(){
+  try{
+    const old = [];
+    for(let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if(k && k.indexOf('tajammo.bank.') === 0 && k !== BANK_CACHE_KEY) old.push(k);
+    }
+    old.forEach(k => localStorage.removeItem(k));
+  }catch(e){ /* ذاكرة ممنوعة — ماكو شي نمسحه */ }
+}
+
 function writeBankCache(bank){
+  dropOldBankCaches();
   try{
     localStorage.setItem(BANK_CACHE_KEY, JSON.stringify({
       at: Date.now(), total: bank.total, topics: bank.topics, data: bank.grouped
@@ -234,7 +266,10 @@ function songQuestionToText(q){
     text: 'منو يغني «' + title + '»؟',
     answer: artist,
     mediaType: null,                            // يلغي مشغّل المقطع
-    image: null
+    image: null,
+    /* الخيارات بالجدول «أغنية - مطرب» ولأغاني نفس المطرب غالباً، فبعد ما
+       صار الجواب اسم المطرب تطلع الثلاثة نفس الاسم — ما تنفع */
+    decoys: null
   });
 }
 
@@ -247,7 +282,7 @@ function pickQuestionsForBankTopic(topicName){
     const picked = pickFromTier(bank[pts], topicName, pts, counts[pts]);
     picked.forEach(raw=>{
       const q = noSongClips ? songQuestionToText(raw) : raw;
-      result.push({ id:nextId(), bankId:q.bankId, text:q.text, answer:q.answer, points:pts, image:q.image, mediaType:q.mediaType, clipStart:q.clipStart, clipSeconds:q.clipSeconds });
+      result.push({ id:nextId(), bankId:q.bankId, text:q.text, answer:q.answer, points:pts, image:q.image, mediaType:q.mediaType, clipStart:q.clipStart, clipSeconds:q.clipSeconds, decoys:q.decoys || null });
     });
   });
   return result;

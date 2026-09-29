@@ -679,50 +679,109 @@ const CANNED_BANK = (() => {
     if (!decodeURIComponent(wa).includes('K7M2QP')) throw new Error('الكود مو داخل رسالة الواتساب');
   });
 
-  console.log('\nمساعدة الخيارات');
-  await step('الجواب رقم ← كل الخيارات أرقام بنفس الوحدة', async () => {
-    const opts = await page.evaluate(() => {
-      const topic = { bankKey: 'ت', questions: [] };
-      const keep = CATEGORY_DATA;
-      CATEGORY_DATA = { 'ت': { 100:[{answer:'٨ أرجل'},{answer:'الأسد'},{answer:'فيبي'},
-                                    {answer:'الحوت الأزرق'},{answer:'الزرافة'}], 200:[],400:[],600:[] } };
-      const out = buildChoices(topic, { answer: '٨ أرجل' });
-      CATEGORY_DATA = keep;
-      return out;
-    });
+  /* الخيارات مكتوبة يدوياً بجدول category_question_choices وتنزل ويّا
+     البنك (q.decoys). قبل چانت تتولّد تلقائياً وتفضح الجواب أحياناً. */
+  console.log('\nمساعدة الخيارات (من جدول الخيارات)');
+  await step('الخيارات = الجواب + الخيارين من الجدول، ٣ بالضبط', async () => {
+    const opts = await page.evaluate(() =>
+      questionChoices({ answer: 'طوكيو', decoys: ['كيوتو', 'أوساكا'] }));
     if (!opts || opts.length !== 3) throw new Error('ما رجّع ٣ خيارات: ' + JSON.stringify(opts));
-    if (!opts.includes('٨ أرجل')) throw new Error('الجواب الصحيح مو ضمن الخيارات');
-    const noDigits = opts.filter(o => !/[٠-٩0-9]/.test(o));
-    if (noDigits.length) throw new Error('خيار بلا رقم وية جواب رقمي: ' + noDigits.join(','));
+    for (const o of ['طوكيو', 'كيوتو', 'أوساكا'])
+      if (!opts.includes(o)) throw new Error('خيار ناقص: ' + o);
   });
 
-  await step('الجواب اسم ← ماكو خيار رقمي ينفضح', async () => {
-    const opts = await page.evaluate(() => {
-      const topic = { bankKey: 'ت', questions: [] };
-      const keep = CATEGORY_DATA;
-      CATEGORY_DATA = { 'ت': { 100:[{answer:'فيبي (Phoebe)'},{answer:'مونيكا'},{answer:'روس'},
-                                    {answer:'١٠ مواسم'},{answer:'٦ أصدقاء'}], 200:[],400:[],600:[] } };
-      const out = buildChoices(topic, { answer: 'فيبي (Phoebe)' });
-      CATEGORY_DATA = keep;
-      return out;
+  await step('الجواب الصح ينخلط — مو دائماً بنفس المكان', async () => {
+    const positions = await page.evaluate(() => {
+      const seen = {};
+      for (let i = 0; i < 60; i++) {
+        const opts = questionChoices({ answer: 'طوكيو', decoys: ['كيوتو', 'أوساكا'] });
+        seen[opts.indexOf('طوكيو')] = true;
+      }
+      return Object.keys(seen);
     });
-    if (!opts || opts.length !== 3) throw new Error('ما رجّع ٣ خيارات');
-    if (!opts.includes('فيبي')) throw new Error('الجواب مو ضمن الخيارات: ' + opts.join('/'));
-    const withDigits = opts.filter(o => /[٠-٩0-9]/.test(o));
-    if (withDigits.length) throw new Error('خيار رقمي وية جواب اسم: ' + withDigits.join(','));
+    if (positions.length < 3) throw new Error('الجواب طلع بس بالمكان: ' + positions.join(','));
   });
 
-  await step('كل الخيارات بنفس الصيغة — ماكو (English) بوحدة بس', async () => {
-    const opts = await page.evaluate(() => {
-      const topic = { bankKey: 'ت', questions: [] };
-      const keep = CATEGORY_DATA;
-      CATEGORY_DATA = { 'ت': { 100:[{answer:'اليابانية (Japanese)'},{answer:'اليونانية (Greek)'},
-                                    {answer:'العربية'},{answer:'الفرنسية'}], 200:[],400:[],600:[] } };
-      const out = buildChoices(topic, { answer: 'اليابانية (Japanese)' });
-      CATEGORY_DATA = keep;
-      return out;
+  await step('بلا خيارات بالجدول ← ما ترجع خيارات (ولا توليد تلقائي)', async () => {
+    const r = await page.evaluate(() => [
+      questionChoices({ answer: 'طوكيو', decoys: null }),
+      questionChoices({ answer: 'طوكيو' }),
+      questionChoices({ answer: 'طوكيو', decoys: ['كيوتو'] })
+    ]);
+    if (r.some(Boolean)) throw new Error('رجعت خيارات بلا ما تكون بالجدول: ' + JSON.stringify(r));
+  });
+
+  await step('سؤال أغنية (أندرويد): الخيارات أسماء الأغاني بس', async () => {
+    const opts = await page.evaluate(() => questionChoices({
+      mediaType: 'song', answer: 'Shape of You - Ed Sheeran',
+      decoys: ['Perfect - Ed Sheeran', 'Thinking Out Loud - Ed Sheeran']
+    }));
+    if (!opts || opts.some(o => o.includes(' - ')))
+      throw new Error('بقى اسم المطرب بالخيارات: ' + JSON.stringify(opts));
+    if (!opts.includes('Shape of You')) throw new Error('اسم الأغنية الصح مو موجود');
+  });
+
+  await step('الآيفون: سؤال الأغنية ينحوّل لـ«منو يغني» بلا خيارات', async () => {
+    const r = await page.evaluate(() => songQuestionToText({
+      mediaType: 'song', text: 'خمّن', answer: 'Shape of You - Ed Sheeran',
+      decoys: ['Perfect - Ed Sheeran', 'Thinking Out Loud - Ed Sheeran']
+    }));
+    if (r.decoys) throw new Error('بقت خيارات «أغنية - مطرب» لسؤال جوابه المطرب');
+    if (r.answer !== 'Ed Sheeran') throw new Error('التحويل تغيّر: ' + r.answer);
+  });
+
+  await step('صيغة مختلفة (قوس ببعضها) ← الأقواس تنشال من الكل', async () => {
+    const opts = await page.evaluate(() =>
+      questionChoices({ answer: 'الجنكة (Ginkgo)', decoys: ['الأرز اللبناني', 'الصنوبر الحلبي'] }));
+    if (opts.some(o => o.includes('('))) throw new Error('بقى قوس يفضح الجواب: ' + opts.join(' / '));
+    if (!opts.includes('الجنكة')) throw new Error('الجواب انشال: ' + opts.join(' / '));
+  });
+
+  await step('صيغة متطابقة (قوس بالكل) ← تبقى مثل ما هي', async () => {
+    const opts = await page.evaluate(() => questionChoices({
+      answer: 'الجنكة (Ginkgo)', decoys: ['الأرز اللبناني (Lebanon Cedar)', 'الصنوبر الحلبي (Aleppo Pine)']
+    }));
+    if (!opts.includes('الجنكة (Ginkgo)')) throw new Error('انشالت أقواس ما لازم تنشال: ' + opts.join(' / '));
+  });
+
+  await step('خيار يطلع نفس الجواب بعد التطبيع ← ما تنعرض', async () => {
+    const r = await page.evaluate(() =>
+      questionChoices({ answer: 'الأسد', decoys: ['الاسد', 'النمر'] }));
+    if (r) throw new Error('انعرضت خيارات بيها الجواب مرتين: ' + r.join(' / '));
+  });
+
+  await step('البنك يقرا الخيارات من نفس طلب الأسئلة', async () => {
+    const r = await page.evaluate(() => {
+      const g = groupBankRows([
+        { id: 1, topic: 'ت', points: 100, question: 'س', answer: 'أ',
+          category_question_choices: { decoys: ['ب', 'ج'] } },
+        { id: 2, topic: 'ت', points: 100, question: 'س', answer: 'أ',
+          category_question_choices: [{ decoys: ['د', 'هـ'] }] },
+        { id: 3, topic: 'ت', points: 100, question: 'س', answer: 'أ', category_question_choices: null }
+      ]);
+      return g['ت'][100].map(q => q.decoys);
     });
-    if (opts.some(o => o.includes('('))) throw new Error('بقى قوس إنكليزي يفضح الخيار: ' + opts.join('/'));
+    if (JSON.stringify(r) !== JSON.stringify([['ب','ج'], ['د','هـ'], null]))
+      throw new Error('قراءة الخيارات غلط: ' + JSON.stringify(r));
+    const sel = await page.evaluate(() => BANK_SELECT);
+    if (!sel.includes('category_question_choices(decoys)')) throw new Error('الطلب ما يجيب الخيارات: ' + sel);
+  });
+
+  await step('الكاش القديم للبنك ينمسح لمن ينحفظ الجديد', async () => {
+    const r = await page.evaluate(() => {
+      // الكاش الحقيقي ينحفظ ويرجع — تستات بعدين تعتمد عليه
+      const keep = localStorage.getItem(BANK_CACHE_KEY);
+      try {
+        localStorage.setItem('tajammo.bank.v2', '{"old":true}');
+        writeBankCache({ total: 1, topics: ['ت'], grouped: { 'ت': { 100:[], 200:[], 400:[], 600:[] } } });
+        return { old: localStorage.getItem('tajammo.bank.v2'), now: !!localStorage.getItem(BANK_CACHE_KEY) };
+      } finally {
+        if (keep) localStorage.setItem(BANK_CACHE_KEY, keep);
+        else localStorage.removeItem(BANK_CACHE_KEY);
+      }
+    });
+    if (r.old !== null) throw new Error('الكاش القديم بقى ياكل مساحة');
+    if (!r.now) throw new Error('الكاش الجديد ما انحفظ');
   });
 
   console.log('\nالتراجع عن اختيار الفئة');
@@ -1419,15 +1478,66 @@ const CANNED_BANK = (() => {
     await page.waitForSelector('.help-wrap, .q-modal', { timeout: 8000 });
   };
 
-  /* «خيارات» مطفّاة حالياً لحد ما تنكتب الخيارات يدوياً من لوحة الإدارة.
-     حتى لو ضايلة مفعّلة بإعدادات قديمة، ما لازم تطلع. */
-  await step('الافتراضي: ثلاث مساعدات، و«خيارات» ما تطلع حتى لو مفعّلة', async () => {
+  /* «خيارات» تطلع بس للسؤال اللي عنده خيارات مكتوبة بالجدول */
+  await step('«خيارات» تطلع بس للسؤال اللي عنده خيارات بالجدول', async () => {
     await page.evaluate(() => { state.helpsEnabled = { letter:true, blanks:true, choices:true, swap:true }; });
     await openFirstQuestion();
-    const types = await page.$$eval('.help-btn', els => els.map(e => e.dataset.type));
+    const without = await page.$$eval('.help-btn', els => els.map(e => e.dataset.type));
+    const withC = await page.evaluate(() => {
+      const t = state.pool.find(x => x.id === state.activeCell.topicId);
+      t.questions[0].decoys = ['خيار غلط ١', 'خيار غلط ٢'];
+      render();
+      const types = [...document.querySelectorAll('.help-btn')].map(e => e.dataset.type);
+      delete t.questions[0].decoys;
+      return types;
+    });
     for (const t of ['letter','blanks','swap'])
-      if (!types.includes(t)) throw new Error('مساعدة ناقصة: ' + t);
-    if (types.includes('choices')) throw new Error('«خيارات» طالعة وهي مفروض مطفّاة');
+      if (!without.includes(t)) throw new Error('مساعدة ناقصة: ' + t);
+    if (without.includes('choices')) throw new Error('«خيارات» طالعة لسؤال بلا خيارات بالجدول');
+    if (!withC.includes('choices')) throw new Error('«خيارات» ما طلعت لسؤال عنده خيارات');
+  });
+
+  await step('«خيارات» تعرض الجواب ويّا الخيارين، ومرة وحدة باللعبة', async () => {
+    await openFirstQuestion();
+    const r = await page.evaluate(() => {
+      const t = state.pool.find(x => x.id === state.activeCell.topicId);
+      const q0 = t.questions[0], q1 = t.questions[1];
+      q0.decoys = ['غلط أ', 'غلط ب'];
+      q1.decoys = ['غلط ج', 'غلط د'];
+      render();
+      document.querySelector('.help-btn[data-type="choices"]').click();
+      const hint = state.helpHints[t.takenBy] || '';
+      // سؤال ثاني عنده خيارات هم — لازم الزر يكون مستخدم
+      state.helpHints = { 0:null, 1:null };
+      state.activeCell = { topicId: t.id, qId: q1.id };
+      render();
+      const btn = document.querySelector('.help-btn[data-type="choices"]');
+      const out = { hint, answer: q0.answer, disabled: !!(btn && btn.disabled) };
+      delete q0.decoys; delete q1.decoys;
+      return out;
+    });
+    if (!r.hint.startsWith('الخيارات:')) throw new Error('ما طلعت الخيارات: ' + r.hint);
+    for (const s of [r.answer, 'غلط أ', 'غلط ب'])
+      if (!r.hint.includes(s)) throw new Error('ناقص من الخيارات: ' + s + ' ← ' + r.hint);
+    if (!r.disabled) throw new Error('«خيارات» انستخدمت مرتين بنفس اللعبة');
+  });
+
+  await step('«تبديل السؤال» يجيب خيارات السؤال الجديد', async () => {
+    await openFirstQuestion();
+    const r = await page.evaluate(() => {
+      const t = state.pool.find(x => x.id === state.activeCell.topicId);
+      const q = t.questions[0];
+      q.decoys = ['قديم أ', 'قديم ب'];
+      const tier = CATEGORY_DATA[t.bankKey][q.points];
+      tier.forEach(b => { b.decoys = ['جديد أ', 'جديد ب']; });
+      render();
+      document.querySelector('.help-btn[data-type="swap"]').click();
+      const out = q.decoys;
+      tier.forEach(b => { delete b.decoys; });
+      delete q.decoys;
+      return out;
+    });
+    if (!r || r[0] !== 'جديد أ') throw new Error('بقت خيارات السؤال القديم: ' + JSON.stringify(r));
   });
 
   await step('إطفاء «تبديل السؤال» يشيله من النافذة', async () => {
@@ -1449,11 +1559,11 @@ const CANNED_BANK = (() => {
     if (!r.modal) throw new Error('نافذة السؤال انكسرت');
   });
 
-  await step('مساعدة مطفّاة أو ملغية ما تنصرف حتى لو انضغطت بالقوة', async () => {
+  await step('مساعدة مطفّاة أو ما تنفع للسؤال ما تنصرف حتى لو انضغطت بالقوة', async () => {
     await page.evaluate(() => { state.helpsEnabled = { letter:true, blanks:false, choices:true, swap:false }; });
     await openFirstQuestion();
     const used = await page.evaluate(() => {
-      // نزوّر زرين: «عدد الأحرف» (مطفّاة) و«خيارات» (ملغية) — المنطق لازم يرفضهم
+      // نزوّر زرين: «عدد الأحرف» (مطفّاة) و«خيارات» (السؤال بلا خيارات بالجدول) — المنطق لازم يرفضهم
       const real = document.querySelector('.help-btn');
       if (!real) return 'ماكو أي زر مساعدة';
       ['blanks', 'choices'].forEach(type => {
@@ -1521,13 +1631,12 @@ const CANNED_BANK = (() => {
     if (r[0] || r[1]) throw new Error('بقت مساعدات مستخدمة من اللعبة السابقة: ' + r.join(' / '));
   });
 
-  await step('شاشة الإعدادات: ثلاث مفاتيح وبلا خانة عدد', async () => {
+  await step('شاشة الإعدادات: أربع مفاتيح وبلا خانة عدد', async () => {
     await page.evaluate(() => goto('teams'));
     await page.waitForSelector('#helps-toggles', { timeout: 8000 });
     const keys = await page.$$eval('#helps-toggles .switch', els => els.map(e => e.dataset.help));
-    for (const k of ['letter','blanks','swap'])
+    for (const k of ['letter','blanks','choices','swap'])
       if (!keys.includes(k)) throw new Error('مفتاح ناقص: ' + k);
-    if (keys.includes('choices')) throw new Error('مفتاح «خيارات» لسه ظاهر');
     const n = await page.$$eval('#helps-count', els => els.length);
     if (n !== 0) throw new Error('خانة عدد المساعدات لسه موجودة — ما عاد إلها معنى');
   });
