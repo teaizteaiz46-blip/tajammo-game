@@ -175,6 +175,14 @@
 
           <div class="row">
             <div>
+              <label>قسم الفئة (بشاشة اختيار الفئات باللعبة)</label>
+              <select id="sec-sel"></select>
+              <div class="hint" id="sec-hint">ينحفظ لحاله لمن تغيّره. الفئة بلا قسم تطلع باللعبة تحت «منوعات». يوصل للاعبين خلال يوم (لمن يتجدد بنك الأسئلة بأجهزتهم).</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
               <label>نوع السؤال</label>
               <div class="seg" id="kind">
                 <button data-k="text" class="on">نص فقط</button>
@@ -386,6 +394,7 @@ async function enter(session){
   $('gate').classList.add('hidden');
   $('panel').classList.remove('hidden');
   $('who').textContent = session.user.email;
+  await loadSections();
   await loadTopics();
 }
 
@@ -416,7 +425,53 @@ async function loadTopics(keep){
   onTopicChange();
 }
 
+/* ═════════ أقسام الفئات ═════════
+   category_sections (القسم + إيموجي + ترتيب) و category_topic_sections
+   (الفئة ← قسمها). اللعبة تجيبهن ويّا البنك وتقسّم بيهن شاشة الاختيار. */
+let sections = [];
+let topicSection = {};
+
+async function loadSections(){
+  const [s, m] = await Promise.all([
+    sb.from('category_sections').select('name,emoji,sort_order').order('sort_order'),
+    sb.from('category_topic_sections').select('topic,section')
+  ]);
+  if(s.error || m.error){ $('sec-hint').textContent = 'تعذّر تحميل الأقسام: ' + (s.error || m.error).message; return; }
+  sections = s.data || [];
+  topicSection = {};
+  (m.data || []).forEach(r => { topicSection[r.topic] = r.section; });
+  $('sec-sel').innerHTML = '<option value="">— بلا قسم (منوعات) —</option>'
+    + sections.map(x => `<option value="${esc(x.name)}">${esc(x.emoji)} ${esc(x.name)}</option>`).join('');
+  syncSectionSelect();
+}
+
+function syncSectionSelect(){
+  const v = $('topic-sel').value;
+  $('sec-sel').value = (v && v !== NEW_TOPIC && topicSection[v]) || '';
+}
+
+async function saveTopicSection(topic, section){
+  if(!topic) return { error: null };
+  const res = section
+    ? await sb.from('category_topic_sections').upsert({ topic, section, updated_at: new Date().toISOString() }, { onConflict: 'topic' })
+    : await sb.from('category_topic_sections').delete().eq('topic', topic);
+  if(!res.error){
+    if(section) topicSection[topic] = section; else delete topicSection[topic];
+  }
+  return res;
+}
+
+$('sec-sel').addEventListener('change', async ()=>{
+  const topic = $('topic-sel').value;
+  if(!topic || topic === NEW_TOPIC) return;      // الفئة الجديدة ينحفظ قسمها ويّا أول سؤال
+  const { error } = await saveTopicSection(topic, $('sec-sel').value);
+  say($('save-msg'), error
+    ? 'تعذّر حفظ القسم: ' + error.message
+    : '✓ قسم «' + topic + '» صار: ' + ($('sec-sel').value || 'منوعات'), error ? 'err' : 'ok');
+});
+
 function onTopicChange(){
+  syncSectionSelect();
   const isNew = $('topic-sel').value === NEW_TOPIC;
   $('new-topic-row').classList.toggle('hidden', !isNew);
   if(isNew){
@@ -533,6 +588,11 @@ $('save').addEventListener('click', async ()=>{
       ? 'قاعدة البيانات رفضت الإضافة — هذا الحساب مو مشرف.'
       : 'تعذّر الحفظ: ' + error.message, 'err');
     return;
+  }
+
+  /* فئة جديدة: قسمها ينحفظ ويّا أول سؤال */
+  if($('topic-sel').value === NEW_TOPIC && $('sec-sel').value && !topicSection[topic]){
+    await saveTopicSection(topic, $('sec-sel').value);
   }
 
   say(msg, '✓ انضاف السؤال لفئة «' + topic + '»', 'ok');
