@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>حمّل تجمّع</title>
+<meta name="description" content="خمس ألعاب جماعية بموبايل واحد — للآيفون والأندرويد، مجاناً">
+<!-- معاينة الرابط بالانستا والواتساب -->
+<meta property="og:title" content="تجمّع — خمس ألعاب جماعية بموبايل واحد">
+<meta property="og:description" content="لعبة الفئات، من أنا؟، الحلفاء والشياطين، من الدخيل؟ والقنبلة الموقوتة — مجاناً للآيفون والأندرويد">
+<meta property="og:image" content="https://teaizteaiz46-blip.github.io/tajammo-game/get/icon.png">
+<meta property="og:url" content="https://teaizteaiz46-blip.github.io/tajammo-game/get/">
+<meta property="og:type" content="website">
+<link rel="icon" href="icon.png">
+<script>
+  /* رابط واحد للبايو: الآيفون يروح لآب ستور، والأندرويد لكوكل بلي،
+     والحاسبة (أو أي جهاز ثاني) تبقى بالصفحة وتشوف الزرين */
+  var IOS = 'https://apps.apple.com/app/id6811716622';
+  var ANDROID = 'https://play.google.com/store/apps/details?id=com.azax.tajammo';
+  var ua = navigator.userAgent || '';
+  // الآيباد الحديث يعرّف نفسه «ماك» — نميّزه باللمس
+  var isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  var isAndroid = /Android/i.test(ua);
+  if (isIOS) location.replace(IOS);
+  else if (isAndroid) location.replace(ANDROID);
+</script>
+<style>
+  :root{--bg:#0F2B28;--bg-2:#0B211E;--gold:#D4A857;--ivory:#F4EFE1;--muted:#8FB3AC;--line:rgba(212,168,87,.25)}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;
+    font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;color:var(--ivory);text-align:center;
+    background:radial-gradient(ellipse 600px 400px at 50% 0%,rgba(212,168,87,.18),transparent 70%),
+               linear-gradient(180deg,var(--bg-2),var(--bg))}
+  main{width:100%;max-width:360px}
+  img{width:112px;height:112px;border-radius:26px;box-shadow:0 12px 30px rgba(0,0,0,.4)}
+  h1{margin:18px 0 6px;font-size:34px;color:var(--gold)}
+  p{margin:0 0 26px;color:var(--muted);line-height:1.7}
+  a.store{display:block;margin:10px 0;padding:14px 18px;border-radius:14px;text-decoration:none;font-weight:700;font-size:17px;
+    border:1px solid var(--line);color:var(--ivory);background:rgba(0,0,0,.2)}
+  a.store:hover{border-color:var(--gold)}
+  a.store small{display:block;font-weight:400;font-size:12px;color:var(--muted);margin-top:2px}
+</style>
+</head>
+<body>
+<main>
+  <img src="icon.png" alt="تجمّع">
+  <h1>تجمّع</h1>
+  <p>خمس ألعاب جماعية بموبايل واحد<br>مجاناً للآيفون والأندرويد</p>
+  <a class="store" href="https://apps.apple.com/app/id6811716622">App Store<small>للآيفون والآيباد</small></a>
+  <a class="store" href="https://play.google.com/store/apps/details?id=com.azax.tajammo">Google Play<small>للأندرويد</small></a>
+</main>
+</body>
+</html>
