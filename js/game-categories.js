@@ -272,8 +272,26 @@ function renderHelpSection(topic, q){
                   ${used ? 'disabled title="استخدمتوها باللعبة"' : ''}>${used ? '✓ ' : ''}${h.label}</button>`;
       }).join('')}
     </div>
-    ${state.helpHints[ti] ? `<div class="help-result">${escapeAttr(state.helpHints[ti])}</div>` : ''}
+    ${state.helpHints[ti] ? helpHintHtml(state.helpHints[ti]) : ''}
   </div>`;
+}
+
+/* الخيارات بسطر واحد يتلخبط ترتيبها لمن تخلط عربي وإنكليزي بين قوسين
+   («كريستيانو رونالدو (Cristiano Ronaldo) / …») — فكل خيار بمربع لحاله */
+const CHOICES_PREFIX = 'الخيارات: ';
+const CHOICES_SEP = '  /  ';
+function helpHintHtml(hint){
+  if(!hint.startsWith(CHOICES_PREFIX)) return `<div class="help-result">${escapeAttr(hint)}</div>`;
+  const opts = hint.slice(CHOICES_PREFIX.length).split(CHOICES_SEP);
+  /* «زلاتان إبراهيموفيتش (Zlatan Ibrahimović)» ← العربي فوق والإنكليزي تحته،
+     حتى لو انكسر السطر ما تنفصل الأقواس */
+  const choiceHtml = o => {
+    const m = o.match(/^(.*[^\s])\s*\(([^()]+)\)$/);
+    return m
+      ? `<span class="help-choice"><span dir="auto">${escapeAttr(m[1])}</span><small dir="auto">${escapeAttr(m[2])}</small></span>`
+      : `<span class="help-choice" dir="auto">${escapeAttr(o)}</span>`;
+  };
+  return `<div class="help-result help-choices">${opts.map(choiceHtml).join('')}</div>`;
 }
 
 function wireHelpButtons(modal, topic, q){
@@ -315,7 +333,7 @@ function wireHelpButtons(modal, topic, q){
       } else if(type==='choices'){
         /* الخلط يصير هنا، وقت الضغط — فكل مرة يطلع ترتيب جديد */
         const opts = questionChoices(q);
-        if(opts) hint = 'الخيارات: ' + opts.join('  /  ');
+        if(opts) hint = CHOICES_PREFIX + opts.join(CHOICES_SEP);
       }
       if(hint){
         markHelpUsed(team, type);

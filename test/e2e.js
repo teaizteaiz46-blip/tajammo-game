@@ -1667,6 +1667,21 @@ const CANNED_BANK = (() => {
     if (!r.disabled) throw new Error('«خيارات» انستخدمت مرتين بنفس اللعبة');
   });
 
+  await step('«خيارات» كل خيار بمربع لحاله، والإنكليزي بين القوسين تحته', async () => {
+    const r = await page.evaluate(() => {
+      const box = el(helpHintHtml('الخيارات: زلاتان إبراهيموفيتش (Zlatan Ibrahimović)  /  3-3  /  <b>x</b>'));
+      const items = [...box.querySelectorAll('.help-choice')];
+      return { n: items.length, small: items[0].querySelector('small')?.textContent,
+               main: items[0].querySelector('span')?.textContent, plain: items[1].textContent,
+               escaped: !box.querySelector('b') };
+    });
+    if (r.n !== 3) throw new Error('عدد المربعات غلط: ' + r.n);
+    if (r.main !== 'زلاتان إبراهيموفيتش' || r.small !== 'Zlatan Ibrahimović')
+      throw new Error('الاسم ما انفصل عن الإنكليزي: ' + r.main + ' | ' + r.small);
+    if (r.plain !== '3-3') throw new Error('خيار بلا أقواس تغيّر: ' + r.plain);
+    if (!r.escaped) throw new Error('نص الخيار ما انهرب');
+  });
+
   await step('«تبديل السؤال» يجيب خيارات السؤال الجديد', async () => {
     await openFirstQuestion();
     const r = await page.evaluate(() => {
