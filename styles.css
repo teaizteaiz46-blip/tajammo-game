@@ -418,6 +418,16 @@
     font-family:'Changa'; font-size:15px; color:#22190A; background:var(--gold);
     display:inline-block; padding:4px 16px; border-radius:20px; margin-bottom:20px;
   }
+  /* صورة السؤال (mediaType = 'photo') — بورتريه ٤:٥، وتحتها سطر نسبة
+     المصدر لصاحبه. السطر إلزامي برخص المشاع الإبداعي، فما ينشال. */
+  .q-photo{margin:0 0 6px;}
+  .q-photo img{
+    width:100%; max-width:230px; aspect-ratio:4/5; object-fit:cover;
+    border-radius:14px; display:block; margin:0 auto;
+    background:var(--panel-2);
+    box-shadow:0 8px 24px rgba(0,0,0,.45);
+  }
+  .q-credit{color:var(--muted); font-size:10.5px; line-height:1.6; margin:0 0 16px; opacity:.75;}
   .q-text{font-size:22px; line-height:1.8; margin-bottom:22px; min-height:60px;}
   .timer{
     font-family:'Changa'; font-size:34px; color:var(--gold); margin-bottom:18px;

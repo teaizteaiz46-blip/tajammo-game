@@ -162,6 +162,13 @@ window.supabase = {
 const FREE = ['أمثال عراقية','لهجة عراقية','أكل عراقي','بغداد','محافظات العراق','تاريخ العراق','معلومات عامة','رياضة'];
 // موضوع يسقط حصراً بالصفحة الثانية — هو الدليل إن الترقيم يشتغل
 const PAGE2_ONLY_TOPIC = 'موضوع_بالصفحة_الثانية';
+/* صورة وهمية ١x١ — الاختبار يعترض الطلب ويرجّعها، فما نحتاج إنترنت */
+const PHOTO_URL = 'https://example.test/player.png';
+const BROKEN_PHOTO_URL = 'https://example.test/missing.png';
+const PNG_1PX = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64');
+
 const CANNED_BANK = (() => {
   const rows = [];
   const pad = ['حشو أ','حشو ب','حشو ج','حشو د','حشو هـ','حشو و','حشو ز','حشو ح','حشو ط','حشو ي','حشو ك','حشو ل'];
@@ -180,6 +187,12 @@ const CANNED_BANK = (() => {
     rows.push({ topic: 'أغاني تجريبية', points: p, question: 'خمّن اسم هذي الأغنية',
                 answer: 'أغنية ' + i + ' - مطرب ' + i, image: 'أغنية ' + i,
                 media_type: 'song', clip_start: 0, clip_seconds: 10 });
+  });
+  // موضوع صور: السؤال يعرض صورة من الإنترنت وتحتها سطر نسبة المصدر
+  [100,100,100,200,200,200,400,400,600,600].forEach((p, i) => {
+    rows.push({ topic: 'صور تجريبية', points: p, question: 'منو هذا اللاعب؟',
+                answer: 'لاعب ' + i, image: PHOTO_URL,
+                media_type: 'photo', media_credit: 'ويكيميديا كومنز · CC BY 4.0' });
   });
   // الموضوع الحصري بالآخر → يطلع بالصفحة الثانية فقط
   [100,100,100,200,200,200,400,400,600,600].forEach((p, i) => {
@@ -221,6 +234,12 @@ const CANNED_BANK = (() => {
         headers: { 'content-range': `${from}-${from + slice.length - 1}/${CANNED_BANK.length}` },
         body: JSON.stringify(slice)
       });
+    }
+    if (url === PHOTO_URL) {
+      return route.fulfill({ status: 200, contentType: 'image/png', body: PNG_1PX });
+    }
+    if (url === BROKEN_PHOTO_URL) {
+      return route.fulfill({ status: 404, contentType: 'text/plain', body: 'nope' });
     }
     if (url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com') || url.includes('flagcdn.com')) {
       return route.abort();
@@ -2213,6 +2232,63 @@ const CANNED_BANK = (() => {
       return asked;
     });
     if (r !== 0) throw new Error('أعاد طلب الإذن مع إن اللاعب قرر قبل');
+  });
+
+  console.log('\nأسئلة الصور');
+  await step('الصورة وسطر النسبة يوصلون من البنك للسؤال', async () => {
+    const r = await page.evaluate(() => {
+      const qs = pickQuestionsForBankTopic('صور تجريبية');
+      return { n: qs.length, media: qs.map(q => q.mediaType),
+               image: qs[0].image, credit: qs[0].credit };
+    });
+    if (r.n !== 6) throw new Error('عدد الأسئلة: ' + r.n);
+    if (!r.media.every(m => m === 'photo')) throw new Error('نوع الوسائط: ' + r.media.join(','));
+    if (!r.image) throw new Error('الصورة ضاعت بالطريق');
+    if (!r.credit || !r.credit.includes('CC BY')) throw new Error('سطر النسبة ضاع: ' + r.credit);
+  });
+
+  await step('النافذة تعرض الصورة وتحتها النسبة', async () => {
+    const r = await page.evaluate(() => {
+      const q = pickQuestionsForBankTopic('صور تجريبية')[0];
+      const savedPool = state.pool, savedCell = state.activeCell;
+      state.pool = [{ id: 901, name: 'صور تجريبية', questions: [q] }];
+      state.activeCell = { topicId: 901, qId: q.id };
+      try {
+        const ov = renderQuestionOverlay();
+        const img = ov.querySelector('.q-photo img');
+        const cr = ov.querySelector('.q-credit');
+        return { src: img && img.getAttribute('src'),
+                 credit: cr && cr.textContent.trim(),
+                 qtext: (ov.querySelector('.q-text') || {}).textContent };
+      } finally { state.pool = savedPool; state.activeCell = savedCell; }
+    });
+    if (!r.src) throw new Error('ماكو <img> بالنافذة');
+    if (!r.credit || r.credit.indexOf('ويكيميديا') === -1)
+      throw new Error('ماكو سطر نسبة: ' + r.credit);
+    if (!r.qtext || r.qtext.indexOf('منو هذا اللاعب') === -1)
+      throw new Error('نص السؤال ضاع: ' + r.qtext);
+  });
+
+  await step('صورة ما تحمّلت: تنشال هي وسطر النسبة، والسؤال يبقى مقروء', async () => {
+    const r = await page.evaluate(() => {
+      const q = pickQuestionsForBankTopic('صور تجريبية')[0];
+      const savedPool = state.pool, savedCell = state.activeCell;
+      state.pool = [{ id: 902, name: 'صور تجريبية', questions: [q] }];
+      state.activeCell = { topicId: 902, qId: q.id };
+      try {
+        const ov = renderQuestionOverlay();
+        const img = ov.querySelector('.q-photo img');
+        img.dispatchEvent(new Event('error'));
+        return { photo: !!ov.querySelector('.q-photo'),
+                 credit: !!ov.querySelector('.q-credit'),
+                 text: !!ov.querySelector('.q-text'),
+                 reveal: !!ov.querySelector('#reveal') };
+      } finally { state.pool = savedPool; state.activeCell = savedCell; }
+    });
+    if (r.photo) throw new Error('الصورة المكسورة ظلت بالنافذة');
+    if (r.credit) throw new Error('سطر النسبة ظل بلا صورة');
+    if (!r.text) throw new Error('نص السؤال انشال وياها');
+    if (!r.reveal) throw new Error('زر إظهار الإجابة انشال');
   });
 
   /* الإعلانات البينية كانت مربوطة بلعبة الفئات بس. هذا فحص نصّي على

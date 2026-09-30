@@ -524,7 +524,8 @@ function wireHelpButtons(modal, topic, q){
           /* البديل يمر بنفس تحويل الأغاني — وإلا سؤال أغنية ينبدل ويشغّل مقطع */
           if(fresh && !songClipsAllowed()) fresh = songQuestionToText(fresh);
           /* bankId لازم يتبدل وياه، وإلا النتيجة تنحسب على السؤال القديم */
-          if(fresh){ q.text = fresh.text; q.answer = fresh.answer; q.image = fresh.image; q.bankId = fresh.bankId; }
+          if(fresh){ q.bankId = fresh.bankId; q.text = fresh.text; q.answer = fresh.answer;
+                     q.image = fresh.image; q.mediaType = fresh.mediaType; q.credit = fresh.credit; }
           /* وخياراته وياه — وإلا «خيارات» تعرض خيارات السؤال القديم */
           if(fresh) q.decoys = fresh.decoys || null;
           /* ماكو سؤال بديل بنفس المستوى — ما نحرق المساعدة على لا شي */
@@ -692,6 +693,10 @@ function renderQuestionOverlay(){
     }</div>
     <div class="q-points">${q.points} نقطة</div>
     ${q.mediaType === 'flag' && q.image ? `<img src="https://flagcdn.com/w320/${q.image}.png" style="width:180px; max-width:70%; border-radius:8px; margin-bottom:14px; box-shadow:0 4px 14px rgba(0,0,0,0.4);" alt=""/>` : ''}
+    ${q.mediaType === 'photo' && q.image ? `
+      <div class="q-photo"><img src="${escapeAttr(q.image)}" alt="" loading="eager" decoding="async"></div>
+      ${q.credit ? `<div class="q-credit">\u{1F4F7} ${escapeAttr(q.credit)}</div>` : ''}
+    ` : ''}
     ${q.mediaType === 'song' && q.image ? `<div class="song-player" id="song-player"><div class="section-sub">...جاري تحميل المقطع</div></div>` : ''}
             <div class="q-text">${q.mediaType==='acting' ? '🎭 مثّل الكلمة أمام فريقك بدون كلام!' : escapeAttr(q.text)}</div>
     ${state.timerEnabled ? `<div class="timer" id="timer-display">${state.timerLeft}</div>` : ''}
@@ -715,6 +720,19 @@ function renderQuestionOverlay(){
       </div>
     `}
   </div>`);
+
+  /* الصورة تنزل من الإنترنت وقت اللعب. لو ما وصلت (نت مقطوع، أو الرابط
+     انكسر من المصدر)، نشيل مكانها ونشيل سطر النسبة وياها — السؤال يبقى
+     نصياً مقروءاً بدل أيقونة صورة مكسورة بنص الجولة. */
+  const qImg = modal.querySelector('.q-photo img');
+  if(qImg){
+    qImg.addEventListener('error', ()=>{
+      const box = modal.querySelector('.q-photo');
+      const cr  = modal.querySelector('.q-credit');
+      if(box) box.remove();
+      if(cr) cr.remove();
+    });
+  }
 
   const repBtn = modal.querySelector('.q-report');
   if(repBtn) repBtn.addEventListener('click', ()=>{

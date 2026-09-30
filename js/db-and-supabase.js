@@ -11,7 +11,7 @@ const CATEGORY_PAGE_SIZE = 1000;
    سؤال (مساعدة «خيارات»). تنزل ويّا السؤال بنفس الطلب، فتنحفظ بالكاش
    وتشتغل بلا إنترنت. السؤال اللي ما إله خيارات يرجع null. */
 const BANK_SELECT =
-  'select=id,topic,points,question,answer,image,media_type,clip_start,clip_seconds,' +
+  'select=id,topic,points,question,answer,image,media_type,media_credit,clip_start,clip_seconds,' +
   'category_question_choices(decoys)&order=id.asc';
 
 /* البنك ينحفظ بالجهاز بعد أول تحميل، فالمرات الجاية تفتح فوراً بلا انتظار.
@@ -53,7 +53,7 @@ function groupBankRows(rows){
   rows.forEach(row=>{
     if(!grouped[row.topic]) grouped[row.topic] = { 100:[], 200:[], 400:[], 600:[] };
     const tier = grouped[row.topic][row.points] ? row.points : 200;
-    grouped[row.topic][tier].push({ bankId:row.id, text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type, clipStart:row.clip_start, clipSeconds:row.clip_seconds, decoys:bankRowDecoys(row) });
+    grouped[row.topic][tier].push({ bankId:row.id, text:row.question, answer:row.answer, image:row.image, mediaType:row.media_type, credit:row.media_credit, clipStart:row.clip_start, clipSeconds:row.clip_seconds, decoys:bankRowDecoys(row) });
   });
   return grouped;
 }
@@ -70,7 +70,7 @@ function bankRowDecoys(row){
    وإلا اللاعب يشوف «منو هذا اللاعب؟» بلا صورة. النسخ القديمة تتجاهل
    الأنواع الجديدة لحالها، فالبنك يكدر يسبق التطبيق بأمان.
    لمن ينضاف دعم نوع جديد، ينضاف اسمه هنا. */
-const KNOWN_MEDIA_TYPES = ['song', 'flag', 'acting'];
+const KNOWN_MEDIA_TYPES = ['song', 'flag', 'acting', 'photo'];
 
 function isPlayableBankRow(row){
   return !row.media_type || KNOWN_MEDIA_TYPES.indexOf(row.media_type) >= 0;
@@ -282,7 +282,7 @@ function pickQuestionsForBankTopic(topicName){
     const picked = pickFromTier(bank[pts], topicName, pts, counts[pts]);
     picked.forEach(raw=>{
       const q = noSongClips ? songQuestionToText(raw) : raw;
-      result.push({ id:nextId(), bankId:q.bankId, text:q.text, answer:q.answer, points:pts, image:q.image, mediaType:q.mediaType, clipStart:q.clipStart, clipSeconds:q.clipSeconds, decoys:q.decoys || null });
+      result.push({ id:nextId(), bankId:q.bankId, text:q.text, answer:q.answer, points:pts, image:q.image, mediaType:q.mediaType, credit:q.credit, clipStart:q.clipStart, clipSeconds:q.clipSeconds, decoys:q.decoys || null });
     });
   });
   return result;
