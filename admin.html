@@ -196,7 +196,7 @@
             <div class="row">
               <div>
                 <label>رابط الصورة المباشر</label>
-                <input type="text" id="img" dir="ltr" placeholder="https://upload.wikimedia.org/wikipedia/commons/thumb/.../480px-....jpg">
+                <input type="text" id="img" dir="ltr" placeholder="https://upload.wikimedia.org/wikipedia/commons/thumb/.../500px-....jpg">
                 <div class="hint">
                   من <b>commons.wikimedia.org</b> بس — كل شي هناك مرخّص بحرية.
                   افتح صفحة الصورة ← كليك يمين على الصورة ← Copy image address.
@@ -558,11 +558,18 @@ function preview(){
 preview();
 
 /* ═════════ الحفظ ═════════ */
+// كومنز صار ينطي روابط thumb.wikimedia.org مع ?utm_… — نرجّعها لـupload.wikimedia.org
+// حتى تطابق اللي مكتوب بسياسة الخصوصية
+function commonsImageUrl(u){
+  if(!/^https:\/\/thumb\.wikimedia\.org\//i.test(u)) return u;
+  return u.split('?')[0].replace(/^https:\/\/thumb\.wikimedia\.org\//i, 'https://upload.wikimedia.org/');
+}
+
 $('save').addEventListener('click', async ()=>{
   const msg = $('save-msg');
   const topic = currentTopic();
   const q = $('q').value.trim(), a = $('a').value.trim();
-  const img = $('img').value.trim(), cr = $('credit').value.trim();
+  const img = commonsImageUrl($('img').value.trim()), cr = $('credit').value.trim();
 
   if(!topic) return say(msg, 'اكتب اسم الفئة أول.', 'err');
   if(!q) return say(msg, 'نص السؤال فاضي.', 'err');
