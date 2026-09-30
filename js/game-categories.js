@@ -16,10 +16,10 @@ async function openCategoryGame(){
     }
   }
   state.categoryDataLoaded = true;
-  if(state.pool.length === 0){
-    CATEGORY_TOPICS.forEach(t=> state.pool.push(makeBankTopic(t)));
-  }
-  goto('editor');
+  /* الحوض يحمل بس الفئات الخاصة والفئات المختارة. فئات البنك تنضاف لمن
+     تنختار بشاشة التجهيز — ما نسحب أسئلة كل الفئات مقدماً */
+  state.pool = state.pool.filter(t => t.bankKey === null || t.taken);
+  goto('setup');
 }
 
 function renderCatLoading(){
@@ -48,240 +48,8 @@ function renderCatLoading(){
   return wrap;
 }
 
-function renderEditor(){
-  const wrap = el(`<div></div>`);
-
-  const intro = el(`<div class="panel">
-    <div class="section-title">اختر المواضيع</div>
-    <div class="section-sub">مواضيع جاهزة بأسئلتها — بس اختار وشيل اللي يعجبك، وتقدر تضيف موضوعك الخاص إذا حبيت. لازم يبقى ٦ مواضيع على الأقل.</div>
-    <div class="pool-counter">مختار حالياً <b id="pool-count">${state.pool.length}</b> من ٦ مواضيع على الأقل</div>
-  </div>`);
-  wrap.appendChild(intro);
-
-  const grid = el(`<div class="pick-grid" id="bank-grid" style="margin-bottom:20px;"></div>`);
-  CATEGORY_TOPICS.forEach(topicName=>{
-    const inPool = state.pool.find(t=>t.bankKey === topicName);
-    const card = el(`<div class="pick-card ${inPool?'':'taken'}" style="${inPool? `border-color:var(--gold-dim); background:rgba(212,168,87,0.10);`:''}">
-      ${escapeAttr(topicName)}
-      <span class="taken-by">${inPool ? '✓ مُختار' : 'اضغط للإضافة'}</span>
-    </div>`);
-    card.addEventListener('click', ()=>{
-      if(inPool){
-        state.pool = state.pool.filter(t => t.bankKey !== topicName);
-      } else {
-        state.pool.push(makeBankTopic(topicName));
-      }
-      render();
-    });
-    grid.appendChild(card);
-  });
-  wrap.appendChild(grid);
-
-  const customTopics = state.pool.filter(t=>t.bankKey === null);
-  if(customTopics.length){
-    const customPanel = el(`<div class="panel"><div class="section-title" style="font-size:16px;">مواضيعك الخاصة</div></div>`);
-    const list = customPanel.querySelector('.section-title');
-    customTopics.forEach(t=>{
-      const row = el(`<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 4px; border-top:1px solid var(--line); flex-wrap:wrap;">
-        <span style="flex:1; min-width:120px;">${escapeAttr(t.name)}</span>
-        <div style="display:flex; gap:8px; align-items:center;">
-          ${t.sharedCode ? `<button class="btn btn-ghost btn-sm report-btn" title="بلّغ عن محتوى مسيء">⚑ بلّغ</button>` : ''}
-          <button class="remove-x" title="حذف">✕</button>
-        </div>
-      </div>`);
-      const rep = row.querySelector('.report-btn');
-      if(rep) rep.addEventListener('click', ()=> openReportModal(t));
-      row.querySelector('.remove-x').addEventListener('click', ()=>{
-        state.pool = state.pool.filter(x=>x.id!==t.id);
-        render();
-      });
-      customPanel.appendChild(row);
-    });
-    wrap.appendChild(customPanel);
-  }
-
-  // الفئات المخصصة: مفتوحة للكل بقصد — هي محرك الانتشار مو مصدر ربح
-  wrap.appendChild(renderCustomTopicsPanel());
-
-  const actions = el(`<div class="btn-row">
-    <button class="btn btn-gold" id="to-teams">التالي: الفرق</button>
-    <button class="btn btn-ghost" id="back-hub">رجوع</button>
-  </div>`);
-  actions.querySelector('#to-teams').disabled = state.pool.length < 6;
-  actions.querySelector('#to-teams').addEventListener('click', ()=>{
-    if(state.pool.length >= 6) goto('teams');
-  });
-  actions.querySelector('#back-hub').addEventListener('click', ()=> goto('hub'));
-  wrap.appendChild(actions);
-
-  if(state.pool.length < 6){
-    wrap.appendChild(el(`<div class="section-sub" style="margin-top:-8px;">لازم يبقى عندك ٦ مواضيع على الأقل عشان تكمل.</div>`));
-  }
-
-  return wrap;
-}
-
-/* ============================ TEAMS / SETTINGS ============================ */
-function renderTeams(){
-  const wrap = el(`<div></div>`);
-
-  const panel = el(`<div class="panel">
-    <div class="section-title">الفرق</div>
-    <div class="section-sub">سمّوا الفرق قبل ما تبدون</div>
-    <div class="row2">
-      <div class="team-card t0">
-        <label>اسم الفريق الأول</label>
-        <input type="text" id="t0name" value="${escapeAttr(state.teams[0].name)}"/>
-      </div>
-      <div class="team-card t1">
-        <label>اسم الفريق الثاني</label>
-        <input type="text" id="t1name" value="${escapeAttr(state.teams[1].name)}"/>
-      </div>
-    </div>
-  </div>`);
-  panel.querySelector('#t0name').addEventListener('input', e=> state.teams[0].name = e.target.value || 'الفريق الأول');
-  panel.querySelector('#t1name').addEventListener('input', e=> state.teams[1].name = e.target.value || 'الفريق الثاني');
-  wrap.appendChild(panel);
-
-  const timerPanel = el(`<div class="panel">
-    <div class="section-title">المؤقت</div>
-    <div class="section-sub">اختر إذا بتلعبون بمؤقت زمني لكل سؤال أو بدون</div>
-    <div class="toggle-row">
-      <span>تفعيل المؤقت</span>
-      <div class="switch ${state.timerEnabled?'on':''}" id="timer-switch"><div class="knob"></div></div>
-    </div>
-    <div class="field" style="margin-top:16px; ${state.timerEnabled?'':'display:none;'}" id="timer-duration-field">
-      <label>مدة كل سؤال (بالثواني)</label>
-      <input type="number" id="timer-seconds" min="10" max="180" value="${state.timerSeconds}"/>
-    </div>
-  </div>`);
-  timerPanel.querySelector('#timer-switch').addEventListener('click', ()=>{
-    state.timerEnabled = !state.timerEnabled;
-    render();
-  });
-  const secInput = timerPanel.querySelector('#timer-seconds');
-  if(secInput) secInput.addEventListener('input', e=>{
-    state.timerSeconds = Math.max(5, parseInt(e.target.value||'30',10));
-  });
-  wrap.appendChild(timerPanel);
-
-  /* ---- المساعدات: أي وحدة تظهر. كل وحدة مرة لكل فريق باللعبة ---- */
-  const anyOn = HELP_TYPES.some(h => helpIsOn(h.key));
-  const helpsPanel = el(`<div class="panel">
-    <div class="section-title">المساعدات</div>
-    <div class="section-sub">شنو المساعدات الي تظهر للفرق داخل السؤال. كل فريق يستخدم كل مساعدة مرة وحدة باللعبة.</div>
-    <div id="helps-toggles"></div>
-    ${anyOn ? '' : '<div class="section-sub" style="margin-top:14px; color:var(--rose);">كل المساعدات مطفّاة — ما راح يظهر صندوق المساعدات إطلاقاً.</div>'}
-  </div>`);
-
-  const togglesBox = helpsPanel.querySelector('#helps-toggles');
-  HELP_TYPES.forEach(h=>{
-    const on = helpIsOn(h.key);
-    const row = el(`<div class="toggle-row">
-      <span>${h.label}${h.bankOnly ? ' <small style="color:var(--muted);">(مواضيع البنك فقط)</small>' : ''}</span>
-      <div class="switch ${on?'on':''}" data-help="${h.key}"><div class="knob"></div></div>
-    </div>`);
-    row.querySelector('.switch').addEventListener('click', ()=>{
-      state.helpsEnabled[h.key] = !helpIsOn(h.key);
-      render();
-    });
-    togglesBox.appendChild(row);
-  });
-
-  wrap.appendChild(helpsPanel);
-
-  const actions = el(`<div class="btn-row">
-    <button class="btn btn-gold" id="to-select">التالي: اختيار الفئات</button>
-    <button class="btn btn-ghost" id="back-editor">رجوع</button>
-  </div>`);
-  actions.querySelector('#to-select').addEventListener('click', ()=>{
-    state.pool.forEach(t=>{ t.taken=false; t.takenBy=null; });
-    state.selectedTopicIds = [];
-    state.turn = 0;
-    state.teams[0].score = 0;
-    state.teams[1].score = 0;
-    resetTeamHelps();                // كل مساعدة ترجع متاحة مرة وحدة للعبة الجديدة
-    state.statsRecordedForThisGame = false;
-    startTeamScoreRun();
-    resetAdGates();
-    goto('select');
-  });
-  actions.querySelector('#back-editor').addEventListener('click', ()=> goto('editor'));
-  wrap.appendChild(actions);
-
-  return wrap;
-}
-
-/* ============================ SELECT TOPICS ============================ */
-
-/* يرجّع آخر فئة انختارت — غلطة ضغط وحدة ما لازم تخرب الجولة كلها.
-   الأسئلة تنوزّع قبل هاي الشاشة، فالتراجع بس يشيل علامة الاختيار
-   ويرجّع الدور للفريق اللي اختار. */
-function undoLastPick(){
-  if(!state.selectedTopicIds.length) return;
-  const id = state.selectedTopicIds.pop();
-  const t = state.pool.find(x => x.id === id);
-  if(t){ t.taken = false; delete t.takenBy; }
-  state.turn = state.turn === 0 ? 1 : 0;
-  render();
-}
-
-function renderSelect(){
-  const wrap = el(`<div></div>`);
-  const currentTeam = state.teams[state.turn];
-  const pickedCount = state.selectedTopicIds.length;
-
-  if(pickedCount >= 6){
-    const lastTopic = state.pool.find(x => x.id === state.selectedTopicIds[5]);
-    const done = el(`<div class="panel" style="text-align:center;">
-      <div class="section-title">تم اختيار كل الفئات ✓</div>
-      <div class="section-sub">جاهزين نبدأ اللعب</div>
-      <div class="btn-row" style="justify-content:center;">
-        <button class="btn btn-gold" id="start-board">ابدأ اللعبة</button>
-        <button class="btn btn-ghost" id="undo-pick">↶ تراجع عن «${escapeAttr(lastTopic ? lastTopic.name : 'آخر فئة')}»</button>
-      </div>
-    </div>`);
-    done.querySelector('#start-board').addEventListener('click', ()=>{
-      showBreakAd('start');
-      goto('board');
-    });
-    done.querySelector('#undo-pick').addEventListener('click', undoLastPick);
-    wrap.appendChild(done);
-    return wrap;
-  }
-
-  const banner = el(`<div class="turn-banner">دور <b>${currentTeam.name}</b> — يختار الفئة رقم ${pickedCount+1} من ٦ (${(pickedCount%3)+1} من ٣ لهذا الفريق)</div>`);
-  wrap.appendChild(banner);
-
-  if(pickedCount > 0){
-    const lastTopic = state.pool.find(x => x.id === state.selectedTopicIds[pickedCount-1]);
-    const undoRow = el(`<div class="btn-row" style="justify-content:center; margin-bottom:12px;">
-      <button class="btn btn-ghost btn-sm" id="undo-pick">↶ تراجع عن «${escapeAttr(lastTopic ? lastTopic.name : 'آخر فئة')}»</button>
-    </div>`);
-    undoRow.querySelector('#undo-pick').addEventListener('click', undoLastPick);
-    wrap.appendChild(undoRow);
-  }
-
-  const grid = el(`<div class="pick-grid"></div>`);
-  state.pool.forEach(topic=>{
-    const card = el(`<div class="pick-card ${topic.taken?'taken':''}">
-      ${escapeAttr(topic.name)}
-      ${topic.taken ? `<span class="taken-by">اختارها ${escapeAttr(state.teams[topic.takenBy].name)}</span>`:''}
-    </div>`);
-    if(!topic.taken){
-      card.addEventListener('click', ()=>{
-        topic.taken = true;
-        topic.takenBy = state.turn;
-        state.selectedTopicIds.push(topic.id);
-        state.turn = state.turn === 0 ? 1 : 0;
-        render();
-      });
-    }
-    grid.appendChild(card);
-  });
-  wrap.appendChild(grid);
-  return wrap;
-}
+/* الشاشات الثلاث القديمة (اختر المواضيع، الفرق والإعدادات، اختيار الفئات)
+   صارت شاشة وحدة: renderCategorySetup بـ js/category-setup.js */
 
 /* ============================ BOARD ============================ */
 /* خانة واحدة باللوح — مشتركة بين الشكلين */
@@ -1110,24 +878,28 @@ function renderEnd(){
     resetAdGates();
   }
 
+  /* جولة جديدة: الفئات تنختار من جديد، وأسئلة البنك تنسحب لمن تبدي */
   wrap.querySelector('#new-round').addEventListener('click', ()=>{
+    state.pool = state.pool.filter(t => t.bankKey === null);
     state.pool.forEach(t=>{
-      if(t.bankKey){
-        t.questions = pickQuestionsForBankTopic(t.bankKey);
-      } else {
-        t.questions.forEach(q=>{ q.text=''; q.answer=''; delete q.usedBy; delete q.revealed; });
-      }
+      t.questions.forEach(q=>{ q.text=''; q.answer=''; delete q.usedBy; delete q.revealed; });
     });
     resetRoundState();
-    goto('select');
+    state.setupActiveTeam = 0;
+    goto('setup');
   });
 
+  /* نفس الأسئلة: نفس الفئات تبقى مختارة، وبس «ابدأ اللعبة» */
   wrap.querySelector('#replay').addEventListener('click', ()=>{
+    const keep = state.selectedTopicIds
+      .map(id => state.pool.find(t => t.id === id)).filter(Boolean)
+      .map(t => ({ t: t, team: t.takenBy }));          // resetRoundState يمسح takenBy
     state.pool.forEach(t=>{
-      t.questions.forEach(q=>{ delete q.usedBy; delete q.revealed; });
+      (t.questions || []).forEach(q=>{ delete q.usedBy; delete q.revealed; });
     });
     resetRoundState();
-    goto('select');
+    keep.forEach(k => { k.t.taken = true; k.t.takenBy = k.team; state.selectedTopicIds.push(k.t.id); });
+    goto('setup');
   });
 
   wrap.querySelector('#new-hub').addEventListener('click', ()=>{ showInterstitialAd(); goto('hub'); });

@@ -213,7 +213,9 @@ const CANNED_BANK = (() => {
   const pageRequests = [];
   const errors = [];
   const consoleErrors = [];
-  page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
+  /* ويّا أول سطرين من الـ stack — بلاه ما نعرف أي تست سبّب الخطأ */
+  page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message + ' @ ' +
+    String(e.stack || '').split(/\r?\n/).slice(1, 3).map(s => s.trim()).join(' | ')));
   page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 
   await page.route('**/*', async route => {
@@ -313,7 +315,7 @@ const CANNED_BANK = (() => {
     const r = await page.evaluate(() => {
       state.pool = [];
       CATEGORY_TOPICS.forEach(t => state.pool.push(makeBankTopic(t)));
-      state.screen = 'editor'; render();
+      state.screen = 'setup'; render();
       const txt = document.body.innerText;
       return { pool: state.pool.length, bank: CATEGORY_TOPICS.length,
                lock: txt.includes('🔒') || txt.includes('للمشتركين') };
@@ -363,7 +365,7 @@ const CANNED_BANK = (() => {
      لأن اللي بعدها يشتغل عليها */
   await page.evaluate(() => {
     state.user = null;               // اختبار الإعلانات خلّى لاعب مسجّل
-    state.screen = 'editor'; state.history = []; render();
+    state.screen = 'setup'; state.history = []; render();
   });
   await page.waitForSelector('#ct-code', { timeout: 8000 });
 
@@ -503,7 +505,7 @@ const CANNED_BANK = (() => {
 
   console.log('\nالإشراف على المحتوى (متطلبات Google للـ UGC)');
   await step('كود مخفي بالبلاغات يعطي رسالة واضحة', async () => {
-    await page.evaluate(() => { state.pool = state.pool.filter(t => t.bankKey !== null); goto('editor'); });
+    await page.evaluate(() => { state.pool = state.pool.filter(t => t.bankKey !== null); goto('setup'); });
     await page.waitForSelector('#ct-code', { timeout: 8000 });
     await page.fill('#ct-code', 'HIDDEN1');
     await page.click('#ct-import');
@@ -677,11 +679,16 @@ const CANNED_BANK = (() => {
   await step('حارس الأخطاء يمنع الشاشة الفاضية', async () => {
     const shown = await page.evaluate(() => {
       state.screen = 'شاشة_غير_موجودة';
+      /* نحفظ الأصلية ونرجّعها — delete ما يشتغل على دالة معرّفة بـ function،
+         فچانت الشاشة الرئيسية تبقى خربانة لكل التستات اللي بعد هذا */
+      const orig = window.renderHub;
       window.renderHub = () => { throw new Error('عطل تجريبي'); };
-      render();
-      const t = document.getElementById('app').innerText;
-      delete window.renderHub;
-      return t;
+      try {
+        render();
+        return document.getElementById('app').innerText;
+      } finally {
+        window.renderHub = orig;
+      }
     });
     if (!shown.includes('صارت مشكلة بهذي الشاشة'))
       throw new Error('الحارس ما اشتغل — اللاعب راح يشوف شاشة فاضية');
@@ -803,59 +810,175 @@ const CANNED_BANK = (() => {
     if (!r.now) throw new Error('الكاش الجديد ما انحفظ');
   });
 
-  console.log('\nالتراجع عن اختيار الفئة');
-  await step('زر التراجع يرجّع الفئة والدور', async () => {
-    const r = await page.evaluate(() => {
-      state.screen = 'select';
-      state.selectedTopicIds = [];
-      state.turn = 0;
-      state.pool = [
-        { id: 1, name: 'أ', taken: false, questions: [] },
-        { id: 2, name: 'ب', taken: false, questions: [] },
-        { id: 3, name: 'ج', taken: false, questions: [] }
-      ];
-      render();
-      document.querySelectorAll('.pick-card')[0].click();   // الفريق الأول يختار «أ»
-      const afterPick = { turn: state.turn, picked: state.selectedTopicIds.slice(), taken: state.pool[0].taken };
-      const btn = document.getElementById('undo-pick');
-      const hasBtn = !!btn;
-      if (btn) btn.click();
-      return { afterPick, hasBtn, turn: state.turn, picked: state.selectedTopicIds.slice(), taken: state.pool[0].taken };
-    });
-    if (r.afterPick.turn !== 1 || r.afterPick.picked.length !== 1) throw new Error('الاختيار نفسه ما اشتغل');
-    if (!r.hasBtn) throw new Error('زر التراجع ما ظهر بعد أول اختيار');
-    if (r.picked.length !== 0) throw new Error('الفئة ظلت مختارة بعد التراجع');
-    if (r.taken !== false) throw new Error('علامة taken ما انشالت');
-    if (r.turn !== 0) throw new Error('الدور ما رجع للفريق الأول: ' + r.turn);
+  /* الشاشات الثلاث القديمة (اختر المواضيع ← الفرق ← اختيار بالتناوب) صارت
+     شاشة وحدة: الاختيار حر، بحث، وأقسام من قاعدة البيانات */
+  console.log('\nشاشة تجهيز لعبة الفئات');
+  const freshSetup = () => page.evaluate(() => {
+    state.reportTopic = null; state.customShareCode = null; state.activeCell = null;
+    state.pool = [];               // بلا فئات خاصة باقية من تستات قبل — أول بطاقة تكون فئة بنك
+    state.selectedTopicIds = [];
+    state.setupActiveTeam = 0; state.setupSearch = ''; state.setupSection = 'all';
+    state.history = []; state.screen = 'setup'; render();
   });
 
-  await step('ماكو زر تراجع قبل أي اختيار', async () => {
-    const has = await page.evaluate(() => {
-      state.screen = 'select';
-      state.selectedTopicIds = [];
-      state.turn = 0;
-      state.pool = [{ id: 1, name: 'أ', taken: false, questions: [] }];
-      render();
-      return !!document.getElementById('undo-pick');
+  await step('زر لعبة الفئات يفتح شاشة التجهيز مباشرة', async () => {
+    const dbg = await page.evaluate(() => {
+      state.reportTopic = null; state.customShareCode = null; state.activeCell = null;
+      state.history = []; goto('hub');
+      return { screen: state.screen, hasCard: !!document.querySelector('#card-cat'),
+               text: document.body.innerText.slice(0, 200) };
     });
-    if (has) throw new Error('زر التراجع ظهر وماكو شي ينتراجع عنه');
+    if (!dbg.hasCard) throw new Error('الشاشة الرئيسية ما انرسمت: ' + JSON.stringify(dbg));
+    await page.click('#card-cat');
+    await page.waitForFunction(() => state.screen === 'setup', null, { timeout: 8000 });
+    const r = await page.evaluate(() => ({
+      teams: document.querySelectorAll('.setup-team').length,
+      slots: document.querySelectorAll('.setup-slot').length,
+      search: !!document.querySelector('#setup-search'),
+      cards: document.querySelectorAll('#setup-list .setup-card').length,
+      start: document.querySelector('#setup-start').disabled
+    }));
+    if (r.teams !== 2 || r.slots !== 6) throw new Error('خانات الفرق: ' + JSON.stringify(r));
+    if (!r.search) throw new Error('ماكو خانة بحث');
+    if (r.cards < 6) throw new Error('الفئات ما طلعت: ' + r.cards);
+    if (!r.start) throw new Error('زر البدء مفعّل قبل ما تكتمل الفئات');
   });
 
-  await step('التراجع متاح حتى بعد اكتمال الفئات الست', async () => {
+  await step('ما تنسحب أسئلة أي فئة قبل ما تبدي اللعبة', async () => {
+    await freshSetup();
     const r = await page.evaluate(() => {
-      state.screen = 'select';
-      state.pool = [1,2,3,4,5,6].map(i => ({ id: i, name: 'ف'+i, taken: true, takenBy: (i+1)%2, questions: [] }));
-      state.selectedTopicIds = [1,2,3,4,5,6];
-      state.turn = 0;
-      render();
-      const hasStart = !!document.getElementById('start-board');
-      const btn = document.getElementById('undo-pick');
-      if (btn) btn.click();
-      return { hasStart, hadUndo: !!btn, picked: state.selectedTopicIds.length, taken6: state.pool[5].taken };
+      const before = Object.keys(loadUsedQuestions()).length;
+      render();   // فتح الشاشة ورسمها
+      const cards = document.querySelectorAll('#setup-list .setup-card');
+      cards[0].click();
+      return {
+        before, after: Object.keys(loadUsedQuestions()).length,
+        poolBank: state.pool.filter(t => t.bankKey).length,
+        q: state.pool.filter(t => t.bankKey).map(t => t.questions)
+      };
     });
-    if (!r.hasStart) throw new Error('زر البدء اختفى');
-    if (!r.hadUndo) throw new Error('ماكو زر تراجع بشاشة الاكتمال');
-    if (r.picked !== 5 || r.taken6 !== false) throw new Error('التراجع ما شال الفئة السادسة');
+    if (r.after !== r.before) throw new Error('انسحبت أسئلة وانحسبت «طالعة» قبل البدء');
+    if (r.poolBank !== 1 || r.q[0] !== null) throw new Error('الفئة المختارة لازم تبقى بلا أسئلة لحد البدء');
+  });
+
+  await step('الاختيار حر: الفئة تروح للفريق المحدد، والفريق الكامل ينقل للثاني', async () => {
+    await freshSetup();
+    const r = await page.evaluate(() => {
+      document.querySelectorAll('.setup-choose')[1].click();          // نختار للفريق الثاني أول
+      const pick = i => document.querySelectorAll('#setup-list .setup-card')[i].click();
+      pick(0); pick(1); pick(2);                                       // ٣ للفريق الثاني
+      const afterThree = { t1: teamPicks(1).length, t0: teamPicks(0).length, active: state.setupActiveTeam };
+      pick(3);                                                         // تروح للأول تلقائياً
+      return { afterThree, t0: teamPicks(0).length, t1: teamPicks(1).length };
+    });
+    if (r.afterThree.t1 !== 3 || r.afterThree.t0 !== 0) throw new Error('الفئات ما راحت للفريق المحدد: ' + JSON.stringify(r.afterThree));
+    if (r.afterThree.active !== 0) throw new Error('بعد ما كمّل الثاني، الاختيار ما انتقل للأول');
+    if (r.t0 !== 1 || r.t1 !== 3) throw new Error('التوزيع غلط: ' + JSON.stringify(r));
+  });
+
+  await step('الضغط على أي خانة مليانة يشيل فئتها (مو بس الأخيرة)', async () => {
+    await freshSetup();
+    const r = await page.evaluate(() => {
+      const pick = i => document.querySelectorAll('#setup-list .setup-card')[i].click();
+      pick(0); pick(1); pick(2);
+      const firstName = teamPicks(0)[0].name;
+      document.querySelector('.setup-team.t0 .setup-slot.filled').click();   // أول خانة
+      return { left: teamPicks(0).map(t => t.name), firstName,
+               inPool: state.pool.some(t => t.bankKey === firstName) };
+    });
+    if (r.left.length !== 2 || r.left.includes(r.firstName)) throw new Error('الخانة الأولى ما انشالت: ' + r.left.join(','));
+    if (r.inPool) throw new Error('فئة البنك المشالة بقت بالحوض');
+  });
+
+  await step('زر البدء يتفعّل بس بـ٣+٣، والأسئلة تنسحب وقت البدء', async () => {
+    await freshSetup();
+    const r = await page.evaluate(() => {
+      const pick = i => document.querySelectorAll('#setup-list .setup-card')[i].click();
+      [0,1,2,3,4].forEach(pick);
+      const disabledAt5 = document.querySelector('#setup-start').disabled;
+      pick(5);
+      const enabledAt6 = !document.querySelector('#setup-start').disabled;
+      document.querySelector('#setup-start').click();
+      const topics = state.selectedTopicIds.map(id => state.pool.find(t => t.id === id));
+      return { disabledAt5, enabledAt6, screen: state.screen,
+               filled: topics.every(t => Array.isArray(t.questions) && t.questions.length === 6),
+               split: [topics.filter(t => t.takenBy === 0).length, topics.filter(t => t.takenBy === 1).length] };
+    });
+    if (!r.disabledAt5) throw new Error('زر البدء مفعّل بخمس فئات');
+    if (!r.enabledAt6) throw new Error('زر البدء ما تفعّل بست فئات');
+    if (r.screen !== 'board') throw new Error('ما بدت اللعبة: ' + r.screen);
+    if (!r.filled) throw new Error('أسئلة الفئات ما انسحبت وقت البدء');
+    if (r.split.join() !== '3,3') throw new Error('التوزيع: ' + r.split.join('/'));
+  });
+
+  await step('البحث يتجاهل فروق الكتابة (أ/إ/ا)', async () => {
+    await freshSetup();
+    const r = await page.evaluate(() => {
+      const target = CATEGORY_TOPICS[0];
+      // نكتب اسم الفئة بلا همزات — لازم تنلكى
+      const typed = target.replace(/[أإآ]/g, 'ا');
+      const input = document.querySelector('#setup-search');
+      input.value = typed;
+      input.dispatchEvent(new Event('input'));
+      const names = [...document.querySelectorAll('#setup-list .setup-card-name')].map(e => e.textContent);
+      const stillFocused = document.activeElement === input || true;
+      input.value = 'كلمة ما موجودة ابداً';
+      input.dispatchEvent(new Event('input'));
+      const none = document.querySelector('#setup-list').innerText;
+      return { target, names, none };
+    });
+    if (!r.names.includes(r.target)) throw new Error('البحث ما لكى «' + r.target + '»: ' + r.names.join(','));
+    if (!r.none.includes('ما لقيت')) throw new Error('ماكو رسالة لمن البحث ما يلكى شي');
+  });
+
+  await step('الأقسام: الفئات تتقسم، والفئة بلا قسم تروح لـ«منوعات»', async () => {
+    await freshSetup();
+    const r = await page.evaluate(() => {
+      const keep = CATEGORY_SECTIONS;
+      const [a, b, c] = CATEGORY_TOPICS;
+      CATEGORY_SECTIONS = {
+        list: [{ name: 'رياضة', emoji: '⚽', sort_order: 10 }, { name: 'منوعات', emoji: '🛍️', sort_order: 99 }],
+        byTopic: { [a]: 'رياضة', [b]: 'رياضة' }            // c بلا قسم
+      };
+      try {
+        render();
+        const heads = [...document.querySelectorAll('.setup-section-head')].map(h => h.textContent);
+        const chips = [...document.querySelectorAll('.setup-chip')].map(ch => ch.textContent.trim());
+        state.setupSection = 'رياضة'; render();
+        const sportCards = [...document.querySelectorAll('#setup-list .setup-card-name')].map(e => e.textContent);
+        return { heads, chips, sportCards, a, b, c, cSection: topicSectionName(c) };
+      } finally { CATEGORY_SECTIONS = keep; state.setupSection = 'all'; }
+    });
+    if (!r.heads.some(h => h.includes('رياضة'))) throw new Error('ماكو عنوان قسم: ' + r.heads.join(' | '));
+    if (!r.chips.some(c => c.includes('رياضة'))) throw new Error('ماكو زر قسم: ' + r.chips.join(' | '));
+    if (r.sportCards.sort().join() !== [r.a, r.b].sort().join()) throw new Error('قسم الرياضة: ' + r.sportCards.join(','));
+    if (r.cSection !== 'منوعات') throw new Error('الفئة بلا قسم راحت لـ: ' + r.cSection);
+  });
+
+  await step('«نفس الأسئلة» يرجّع نفس الفئات لنفس الفرق', async () => {
+    await freshSetup();
+    const r = await page.evaluate(() => {
+      const pick = i => document.querySelectorAll('#setup-list .setup-card')[i].click();
+      [0,1,2,3,4,5].forEach(pick);
+      startCategoryGame();
+      const before = state.selectedTopicIds.map(id => { const t = state.pool.find(x => x.id === id); return t.name + ':' + t.takenBy; }).sort();
+      state.screen = 'end'; render();
+      document.querySelector('#replay').click();
+      const after = state.selectedTopicIds.map(id => { const t = state.pool.find(x => x.id === id); return t.name + ':' + t.takenBy; }).sort();
+      return { before, after, screen: state.screen, ready: setupReady() };
+    });
+    if (r.screen !== 'setup') throw new Error('ما رجع لشاشة التجهيز: ' + r.screen);
+    if (r.after.join() !== r.before.join()) throw new Error('الفئات أو الفرق تغيّرت: ' + r.after.join(','));
+    if (!r.ready) throw new Error('زر البدء مو جاهز بعد «نفس الأسئلة»');
+  });
+
+  await step('«جولة جديدة» ترجّع شاشة فاضية', async () => {
+    const r = await page.evaluate(() => {
+      state.screen = 'end'; render();
+      document.querySelector('#new-round').click();
+      return { screen: state.screen, picked: state.selectedTopicIds.length, bankInPool: state.pool.filter(t => t.bankKey).length };
+    });
+    if (r.screen !== 'setup' || r.picked !== 0 || r.bankInPool !== 0) throw new Error(JSON.stringify(r));
   });
 
   console.log('\nنافذة السؤال: رجوع وإخفاء الإجابة');
@@ -1045,6 +1168,9 @@ const CANNED_BANK = (() => {
       let inFlight = 0, maxConcurrent = 0;
       const calls = [];
       window.fetch = (url, opts) => {
+        // طلبات الأقسام (جدولين صغار) تنجاب ويّا البنك — مو صفحات بنك
+        if (String(url).indexOf('category_questions') === -1)
+          return Promise.resolve({ ok: true, status: 200, headers: { get: () => null }, json: async () => [] });
         const range = (opts && opts.headers && opts.headers.Range) || '';
         calls.push(range);
         inFlight++; maxConcurrent = Math.max(maxConcurrent, inFlight);
@@ -1229,7 +1355,7 @@ const CANNED_BANK = (() => {
       state.customShareCode = null;
       state.pool = state.pool.filter(t => t.bankKey !== null);
       state.pool.push(makeCustomTopicFromData('فئة مستوردة', qs, code, 'authorkey-test-1', 'أمير'));
-      goto('editor');
+      goto('setup');
       openReportModal(state.pool.find(t => t.authorKey === 'authorkey-test-1'));
     }, { code: GOOD_CODE, qs: CANNED_TOPIC.questions });
     await page.waitForSelector('#rep-block', { timeout: 8000 });
@@ -1324,7 +1450,7 @@ const CANNED_BANK = (() => {
         [{question:'س',answer:'ج',points:100}], 'PZVDBA'));
       state.pool.push(makeCustomTopicFromData('فئة ضيف',
         [{question:'س',answer:'ج',points:100}], 'GUEST1', 'author-other', 'ناشر ثاني'));
-      state.screen = 'editor'; state.history = []; render();
+      state.screen = 'setup'; state.history = []; render();
     });
     const txt = await page.evaluate(() => document.body.innerText);
     if (!txt.includes('فئاتي المحفوظة')) throw new Error('القائمة مو ظاهرة وهو مسجّل دخول');
@@ -1349,7 +1475,7 @@ const CANNED_BANK = (() => {
       // نحاكي حالة قديمة باقية بالذاكرة مع لاعب مو مسجّل
       state.myCustomTopics = [{ id:'t1', name:'شباب تجربة', share_code:'PZVDBA',
         plays_count:0, custom_topic_questions:[] }];
-      state.screen = 'editor'; render();
+      state.screen = 'setup'; render();
       const visible = document.body.innerText.includes('فئاتي المحفوظة');
       state.myCustomTopics = [];
       render();
@@ -1360,7 +1486,7 @@ const CANNED_BANK = (() => {
 
   await page.evaluate(() => {
     state.pool = state.pool.filter(t => t.bankKey !== null);
-    state.screen = 'editor'; state.history = []; render();
+    state.screen = 'setup'; state.history = []; render();
   });
 
   console.log('\nمقاطع الأغاني — شروط متجر آبل');
@@ -1641,23 +1767,27 @@ const CANNED_BANK = (() => {
 
   await step('لعبة جديدة ترجّع كل المساعدات للفريقين', async () => {
     const r = await page.evaluate(() => {
+      state.pool = []; state.selectedTopicIds = []; state.setupActiveTeam = 0;
+      state.screen = 'setup'; render();
+      const pick = i => document.querySelectorAll('#setup-list .setup-card')[i].click();
+      [0,1,2,3,4,5].forEach(pick);
       state.teams[0].usedHelps = { letter:true, blanks:true };
       state.teams[1].usedHelps = { swap:true };
-      goto('teams');
-      document.querySelector('#to-select').click();
+      document.querySelector('#setup-start').click();
       return [Object.keys(state.teams[0].usedHelps).length, Object.keys(state.teams[1].usedHelps).length];
     });
     if (r[0] || r[1]) throw new Error('بقت مساعدات مستخدمة من اللعبة السابقة: ' + r.join(' / '));
   });
 
-  await step('شاشة الإعدادات: أربع مفاتيح وبلا خانة عدد', async () => {
-    await page.evaluate(() => goto('teams'));
+  await step('إعدادات المساعدات (بشاشة التجهيز): أربع مفاتيح وبلا خانة عدد', async () => {
+    await page.evaluate(() => { state.activeCell = null; state.setupShowSettings = true; goto('setup'); });
     await page.waitForSelector('#helps-toggles', { timeout: 8000 });
     const keys = await page.$$eval('#helps-toggles .switch', els => els.map(e => e.dataset.help));
     for (const k of ['letter','blanks','choices','swap'])
       if (!keys.includes(k)) throw new Error('مفتاح ناقص: ' + k);
     const n = await page.$$eval('#helps-count', els => els.length);
     if (n !== 0) throw new Error('خانة عدد المساعدات لسه موجودة — ما عاد إلها معنى');
+    await page.evaluate(() => { state.setupShowSettings = false; });
   });
 
   console.log('\nألعاب القعدة الجديدة (الدخيل + القنبلة)');
@@ -2296,7 +2426,8 @@ const CANNED_BANK = (() => {
      الأصلي أصلاً (isNativeApp() يرجع false بالمتصفح). */
   await step('الإعلانات البينية مربوطة بالألعاب الخمسة كلها', async () => {
     const need = {
-      'game-categories.js':   ['resetAdGates(', "showBreakAd('start')", "showBreakAd('end')"],
+      'game-categories.js':   ['resetAdGates(', "showBreakAd('end')"],
+      'category-setup.js':    ['resetAdGates(', "showBreakAd('start')"],   // البداية صارت بشاشة التجهيز
       'game-whoami.js':       ['resetAdGates(', "showBreakAd('start')", "showBreakAd('end')"],
       'game-spy.js':          ['resetAdGates(', "showBreakAd('start')", "showBreakAd('end')"],
       'game-bomb.js':         ['resetAdGates(', "showBreakAd('mid')",   "showBreakAd('end')"],

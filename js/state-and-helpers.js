@@ -57,6 +57,12 @@ const state = {
   selectedTopicIds: [],
   turn: 0,
 
+  // شاشة تجهيز لعبة الفئات (js/category-setup.js)
+  setupActiveTeam: 0,        // الفريق اللي تنضاف له الفئة الجاية
+  setupSearch: '',
+  setupSection: 'all',       // 'all' أو اسم قسم أو '__mine__' (فئاتك)
+  setupShowSettings: false,  // لوحة المؤقت والمساعدات
+
   /* ترتيب الفرق العام: نتيجة كل سؤال تنجمع خلال اللعبة، وبالنهاية
      اللي يحب يسجّل يكتب يوزر فرقه. التسجيل اختياري بالكامل. */
   gameUid: null,

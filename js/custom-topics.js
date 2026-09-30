@@ -408,7 +408,7 @@ function renderCustomEditor() {
     ));
     state.customDraft = newCustomDraft();
     state.customError = '';
-    goto('editor');
+    goto('setup');
   });
   actions.querySelector('#cd-back').addEventListener('click', () => {
     state.customError = '';
@@ -532,7 +532,7 @@ function renderShareCodeOverlay() {
   modal.querySelector('#sc-close').addEventListener('click', () => {
     state.customShareCode = '';
     state.customDraft = newCustomDraft();
-    goto('editor');
+    goto('setup');
   });
   overlay.appendChild(modal);
   return overlay;

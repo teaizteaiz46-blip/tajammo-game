@@ -1,6 +1,9 @@
 /* ============================ CATEGORY QUESTION BANK (Supabase) ============================ */
 let CATEGORY_TOPICS = [];
 let CATEGORY_DATA = {};
+/* أقسام شاشة الاختيار: list = [{name, emoji, sort_order}] مرتّبة،
+   byTopic = {اسم الفئة: اسم القسم}. الفئة بلا قسم تطلع تحت «منوعات». */
+let CATEGORY_SECTIONS = { list: [], byTopic: {} };
 
 /* Supabase يحدد سقف الصفوف لكل طلب (غالباً ١٠٠٠)، فـ limit=2000 كان يقطع
    البنك بصمت وتضيع مواضيع كاملة. نجيبه على صفحات لحد ما يخلص. */
@@ -19,9 +22,11 @@ const BANK_SELECT =
    فالكاش القديم (اللي ما بيه العمود الجديد) ينهمل لحاله — بلا ما أحد يتذكر
    يرفع رقم يدوياً. والكاشات القديمة تنمسح بـ writeBankCache حتى ما تاكل
    مساحة الجهاز (البنك بحدود ٢ ميغا). */
+/* «|sections1»: الكاش صار بيه أقسام الفئات هم — نسخة قديمة بلاها تنهمل */
+const BANK_CACHE_SHAPE = BANK_SELECT + '|sections1';
 function bankCacheKey(){
   let h = 5381;
-  for(let i = 0; i < BANK_SELECT.length; i++) h = ((h << 5) + h + BANK_SELECT.charCodeAt(i)) | 0;
+  for(let i = 0; i < BANK_CACHE_SHAPE.length; i++) h = ((h << 5) + h + BANK_CACHE_SHAPE.charCodeAt(i)) | 0;
   return 'tajammo.bank.' + (h >>> 0).toString(36);
 }
 const BANK_CACHE_KEY = bankCacheKey();
@@ -76,7 +81,31 @@ function isPlayableBankRow(row){
   return !row.media_type || KNOWN_MEDIA_TYPES.indexOf(row.media_type) >= 0;
 }
 
+/* الأقسام جدولين صغار (بحدود مية سطر). تنجاب ويّا البنك بالتوازي، ولو
+   فشلت ما نوقف اللعبة — الشاشة تعرض الفئات بلا تقسيم. */
+async function fetchBankSections(){
+  const get = async path => {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, { headers: {
+      'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
+    } });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const d = await res.json();
+    return Array.isArray(d) ? d : [];
+  };
+  const [list, map] = await Promise.all([
+    get('category_sections?select=name,emoji,sort_order&order=sort_order.asc'),
+    get('category_topic_sections?select=topic,section')
+  ]);
+  const byTopic = {};
+  map.forEach(r => { if(r && r.topic && r.section) byTopic[r.topic] = r.section; });
+  return { list: list.filter(s => s && s.name), byTopic: byTopic };
+}
+
 async function fetchWholeBank(){
+  const sectionsJob = fetchBankSections().catch(e=>{
+    console.warn('تعذّر تحميل أقسام الفئات:', e);
+    return { list: [], byTopic: {} };
+  });
   const first = await fetchBankRange(0, CATEGORY_PAGE_SIZE - 1);
   let rows = first.rows;
 
@@ -100,7 +129,7 @@ async function fetchWholeBank(){
   const grouped = groupBankRows(rows.filter(isPlayableBankRow));
   const topics = Object.keys(grouped);
   if(!topics.length) throw new Error('بنك الأسئلة رجع فارغ');
-  return { grouped: grouped, topics: topics, total: first.total || rows.length };
+  return { grouped: grouped, topics: topics, total: first.total || rows.length, sections: await sectionsJob };
 }
 
 function readBankCache(){
@@ -130,14 +159,16 @@ function writeBankCache(bank){
   dropOldBankCaches();
   try{
     localStorage.setItem(BANK_CACHE_KEY, JSON.stringify({
-      at: Date.now(), total: bank.total, topics: bank.topics, data: bank.grouped
+      at: Date.now(), total: bank.total, topics: bank.topics, data: bank.grouped,
+      sections: bank.sections || null
     }));
   }catch(e){ /* ذاكرة الجهاز ممتلئة — نكمل بدون كاش، مو مشكلة حرجة */ }
 }
 
-function applyBank(grouped, topics){
+function applyBank(grouped, topics, sections){
   CATEGORY_DATA = grouped;
   CATEGORY_TOPICS = topics;
+  if(sections && Array.isArray(sections.list)) CATEGORY_SECTIONS = sections;
 }
 
 let bankLoadPromise = null;
@@ -147,7 +178,7 @@ function refreshBankInBackground(){
   if(bankRefreshing) return;
   bankRefreshing = true;
   fetchWholeBank()
-    .then(bank=>{ applyBank(bank.grouped, bank.topics); writeBankCache(bank); })
+    .then(bank=>{ applyBank(bank.grouped, bank.topics, bank.sections); writeBankCache(bank); })
     .catch(e=> console.warn('تعذّر تحديث بنك الأسئلة بالخلفية:', e))
     .then(()=>{ bankRefreshing = false; });
 }
@@ -157,13 +188,13 @@ async function loadCategoryDatabase(){
 
   const cached = readBankCache();
   if(cached){
-    applyBank(cached.data, cached.topics);
+    applyBank(cached.data, cached.topics, cached.sections);
     if(Date.now() - (cached.at || 0) > BANK_CACHE_TTL) refreshBankInBackground();
     return;
   }
 
   const bank = await fetchWholeBank();
-  applyBank(bank.grouped, bank.topics);
+  applyBank(bank.grouped, bank.topics, bank.sections);
   writeBankCache(bank);
 }
 

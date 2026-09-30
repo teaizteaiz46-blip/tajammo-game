@@ -48,10 +48,12 @@ function renderScreen(){
   switch(state.screen){
     case 'hub':           return renderHub();
     case 'cat-loading':   return renderCatLoading();
-    case 'editor':        return renderEditor();
+    case 'setup':         return renderCategorySetup();
+    /* أسماء الشاشات القديمة — صارت كلها شاشة التجهيز */
+    case 'editor':
+    case 'teams':
+    case 'select':        return renderCategorySetup();
     case 'custom-editor': return renderCustomEditor();
-    case 'teams':         return renderTeams();
-    case 'select':        return renderSelect();
     case 'board':         return renderBoard();
     case 'end':           return renderEnd();
     case 'leaderboard':   return renderLeaderboard();
@@ -95,10 +97,8 @@ function renderTopbar(){
     
   const crumbMap = {
     'cat-loading':'لعبة الفئات · تحميل البنك',
-    editor:'لعبة الفئات · اختيار المواضيع',
+    setup:'لعبة الفئات · تجهيز اللعبة',
     'custom-editor':'لعبة الفئات · فئة خاصة',
-    teams:'لعبة الفئات · الفرق والإعدادات',
-    select:'لعبة الفئات · اختيار الفئات',
     board:'لعبة الفئات · اللعب',
     end:'لعبة الفئات · النتيجة',
     leaderboard:'ترتيب الفرق',
