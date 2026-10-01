@@ -75,6 +75,37 @@
   }
   .hero p{color:var(--muted); font-size:16px; margin:0; position:relative;}
 
+  /* ---------- أعلى الشاشة الرئيسية: البروفايل + ٣ مربعات ---------- */
+  .hub-profile{
+    display:flex; align-items:center; gap:12px; margin:8px 0 12px;
+    padding:14px 16px; border-radius:22px; background:var(--panel); border:1px solid var(--line);
+  }
+  .hub-me{
+    flex:1; min-width:0; display:flex; align-items:center; gap:12px;
+    background:none; border:0; padding:0; color:inherit; font:inherit; text-align:right; cursor:pointer;
+  }
+  .hub-me-text{ flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+  .hub-hello{ font-family:'Changa', sans-serif; font-weight:700; font-size:18px; color:var(--ivory);
+    line-height:1.3; overflow-wrap:anywhere; }
+  .hub-sub{ font-size:12.5px; color:var(--muted); }
+  .hub-coins{
+    display:inline-flex; align-items:center; gap:6px; flex:0 0 auto; cursor:pointer;
+    font-family:'Changa', sans-serif; font-weight:700; font-size:16px; color:var(--gold);
+    background:rgba(212,168,87,.12); border:1px solid var(--gold-dim); border-radius:999px; padding:6px 13px;
+  }
+  .hub-tiles{ display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin:0 0 18px; }
+  .hub-tile{
+    display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer;
+    padding:14px 6px; border-radius:16px; background:var(--panel); border:1px solid var(--line);
+    font-family:'Changa', sans-serif; font-weight:700; font-size:14px; color:var(--ivory);
+  }
+  .hub-tile b{ font-size:24px; line-height:1.1; }
+  .hub-tile small{ font-family:'Tajawal', sans-serif; font-weight:500; font-size:11.5px; color:var(--muted); }
+  .hub-tile.hot{ border-color:var(--gold); background:rgba(212,168,87,.10); animation:hub-glow 2.2s ease-in-out infinite; }
+  .hub-tile.hot small{ color:var(--gold); font-weight:700; }
+  @keyframes hub-glow{ 0%,100%{ box-shadow:0 0 0 0 rgba(212,168,87,0); } 50%{ box-shadow:0 0 18px 0 rgba(212,168,87,.35); } }
+  @media (prefers-reduced-motion: reduce){ .hub-tile.hot{ animation:none; } }
+
   .bulb-row{
     display:flex; justify-content:center; gap:10px; margin:22px 0 6px; position:relative;
   }

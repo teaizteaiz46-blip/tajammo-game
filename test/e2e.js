@@ -684,13 +684,19 @@ const CANNED_BANK = (() => {
     const r = await page.evaluate(() => ({ code: state.customShareCode, err: state.customError }));
     if (!r.code) throw new Error('ما انحفظت رغم إن الرصيد يكفي: ' + r.err);
   });
-  await step('الرصيد يظهر بالشريط العلوي', async () => {
+  await step('الرصيد يظهر ببطاقة الشاشة الرئيسية وبالشريط العلوي بباقي الشاشات', async () => {
     await page.evaluate(() => { state.user.coins = 777; goto('hub'); });
-    const chip = await page.evaluate(() => {
-      const e = document.querySelector('.coin-chip');
-      return e ? e.textContent.trim() : null;
+    const r = await page.evaluate(() => {
+      const hub = document.querySelector('#hub-coins')?.textContent.trim() || null;
+      const dup = !!document.querySelector('.topbar .coin-chip');
+      state.screen = 'custom-editor'; render();
+      const bar = document.querySelector('.topbar .coin-chip')?.textContent.trim() || null;
+      goto('hub');
+      return { hub, dup, bar };
     });
-    if (!chip || !chip.includes('777')) throw new Error('الرصيد مو بالشريط: ' + chip);
+    if (!r.hub || !r.hub.includes('777')) throw new Error('الرصيد مو بالبطاقة: ' + r.hub);
+    if (r.dup) throw new Error('الرصيد مكرر بالشريط العلوي للشاشة الرئيسية');
+    if (!r.bar || !r.bar.includes('777')) throw new Error('الرصيد مو بالشريط بباقي الشاشات: ' + r.bar);
   });
   /* الإعلان بمكافأة موجود هسه — بس بالمتجر وبنهاية اللعبة، أبداً بنص الدور */
   await step('ماكو إعلان مكافأة بنص اللعب (لا مساعدة ولا زر بنافذة السؤال)', async () => {
@@ -1281,13 +1287,16 @@ const CANNED_BANK = (() => {
   console.log('\nالشاشة الرئيسية الجديدة');
   await step('اسم التطبيق نص واحد بلا تقسيم (ينكسر تشكيله على الآيفون)', async () => {
     const r = await page.evaluate(() => {
-      const h = document.querySelector('.hero h1');
-      if (!h) return null;
+      /* الاسم صار بالشريط العلوي بس (الشاشة الرئيسية صار بيها البروفايل) — جنبه
+         رمز الثيم بعنصر لحاله، فنفحص العقدة النصية مالت الاسم */
+      const b = document.querySelector('.brand');
+      if (!b) return null;
+      const t = [...b.childNodes].filter(n => n.nodeType === 3 && n.textContent.trim());
       return {
-        text: h.textContent,
-        childEls: h.children.length,
-        nodes: h.childNodes.length,
-        zwj: /‍/.test(h.textContent)
+        text: t.map(n => n.textContent.trim()).join('|'),
+        childEls: 0,
+        nodes: t.length,
+        zwj: /‍/.test(b.textContent)
       };
     });
     if (!r) throw new Error('عنوان الشاشة الرئيسية مو موجود');
@@ -1468,7 +1477,8 @@ const CANNED_BANK = (() => {
       state.user = { uid:'u9', name:'أمير', coins: 120, gamesPlayed: 4 };
       render();
     });
-    await page.click('#user-box .user-name');      // الكوينات بنفس الصندوق تفتح المتجر
+    await page.evaluate(() => goto('hub'));
+    await page.click('#hub-me');                    // البروفايل ببطاقة الشاشة الرئيسية يفتح الحساب
     await page.waitForSelector('#acc-delete', { timeout: 8000 });
     const txt = await page.evaluate(() => document.querySelector('.overlay').innerText);
     if (!txt.includes('تسجيل الخروج')) throw new Error('زر الخروج راح من الشاشة');
@@ -2550,7 +2560,7 @@ const CANNED_BANK = (() => {
       const app = document.getElementById('app');
       return { cards: app.querySelectorAll('.avatar-card').length, head: app.querySelector('.shop-head').textContent,
                watch: !!app.querySelector('#shop-watch'), earn: app.querySelector('.shop-earn').textContent,
-               chipOpensShop: (() => { goto('hub'); document.querySelector('.coin-chip').click(); return state.screen; })() };
+               chipOpensShop: (() => { goto('hub'); document.querySelector('#hub-coins').click(); return state.screen; })() };
     });
     if (r.cards !== 12) throw new Error('عدد الصور: ' + r.cards);
     if (!r.head.includes('200')) throw new Error('الرصيد ما طلع: ' + r.head);
@@ -2738,6 +2748,37 @@ const CANNED_BANK = (() => {
     if (r.without.some(n => n.startsWith('لاعب '))) throw new Error('شخصيات الباقة طلعت بلاها: ' + r.without);
     await shopDone();
     await page.evaluate(() => { window.__packUnlocked = null; state.activePacks = {}; state.packMode = {}; });
+  });
+
+  await step('الشاشة الرئيسية: بطاقة البروفايل و٣ مربعات (ضيف ومسجّل)', async () => {
+    const guest = await page.evaluate(() => {
+      state.user = null; goto('hub');
+      return { login: !!document.querySelector('#hub-login'), me: !!document.querySelector('#hub-me'),
+               tiles: [...document.querySelectorAll('.hub-tile')].map(t => t.id),
+               barLogin: !!document.querySelector('.topbar #open-auth') };
+    });
+    const user = await page.evaluate(() => {
+      state.user = { uid: 'h1', name: 'زهراء', coins: 90, gamesPlayed: 11, avatar: 'avatar_lion', frame: 'frame_gold', title: 'title_host' };
+      window.__realAdsReady2 = window.rewardedAdsReady; window.rewardedAdsReady = () => true;
+      state.rewardState = { daily_claimed: false, ads_left: 5, daily_amount: 40 };
+      goto('hub');
+      const hot = document.querySelector('#hub-daily');
+      const r = { avatar: document.querySelector('#hub-me .avatar')?.textContent, gold: !!document.querySelector('#hub-me .avatar.frame-gold'),
+                  sub: document.querySelector('.hub-sub')?.textContent, hot: hot.classList.contains('hot'), daily: hot.textContent };
+      state.rewardState = { daily_claimed: true, ads_left: 4, daily_amount: 50 }; render();
+      r.cold = !document.querySelector('#hub-daily').classList.contains('hot');
+      document.querySelector('#hub-shop').click(); r.shop = state.screen;
+      window.rewardedAdsReady = window.__realAdsReady2;
+      state.user = null; state.rewardState = null; goto('hub');
+      return r;
+    });
+    if (!guest.login || guest.me || guest.barLogin) throw new Error('الضيف: ' + JSON.stringify(guest));
+    if (guest.tiles.join() !== 'hub-daily,hub-shop,hub-board') throw new Error('المربعات: ' + guest.tiles);
+    if (user.avatar !== '🦁' || !user.gold) throw new Error('الصورة أو الإطار ما طلعوا');
+    if (!user.sub.includes('مضيف السهرة') || !user.sub.includes('11')) throw new Error('السطر: ' + user.sub);
+    if (!user.hot || !user.daily.includes('+40')) throw new Error('مكافأة اليوم ما تلمع: ' + user.daily);
+    if (!user.cold) throw new Error('بقت تلمع بعد ما انأخذت');
+    if (user.shop !== 'shop') throw new Error('مربع المتجر ما يفتحه');
   });
 
   await step('٧ ضغطات على الشعار تشغّل وتطفّي وضع التجربة للإعلانات', async () => {

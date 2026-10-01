@@ -164,7 +164,8 @@ function renderTopbar(){
     });
     authArea.appendChild(btn);
   }
-  rightGroup.appendChild(authArea);
+  // بالشاشة الرئيسية البروفايل والكوينز وزر الدخول صاروا بالبطاقة اللي فوگ الألعاب
+  if(state.screen !== 'hub') rightGroup.appendChild(authArea);
 
   return bar;
 }
@@ -192,20 +193,58 @@ const HUB_GAMES = [
 ];
 
 function renderHub(){
+  /* أعلى الشاشة: البروفايل والكوينز، وتحته ٣ مربعات (مكافأة اليوم، المتجر،
+     الترتيب) — حتى اللاعب يعرف إن أكو حساب ومتجر. اسم التطبيق بالشريط العلوي. */
+  const u = state.user;
+  const rs = state.rewardState;
+  const dailyReady = !!(u && rs && !rs.daily_claimed && rs.ads_left > 0 && rewardedAdsReady());
+  const dailyTile = !u
+    ? { hot: false, b: '🎁', t: 'مكافأة يومية', s: 'سجّل حتى تاخذها' }
+    : dailyReady ? { hot: true, b: '🎁', t: 'مكافأة اليوم', s: `+${rs.daily_amount} كوين` }
+    : rewardedAdsReady() ? { hot: false, b: '🎁', t: 'مكافأة اليوم', s: 'ارجع باچر' }
+    : { hot: false, b: '🪙', t: 'اجمع كوينز', s: 'من كل لعبة فئات' };
+
   const wrap = el(`<div>
-    <div class="hero">
-      <div class="bulb-row">${'<i></i>'.repeat(9)}</div>
-      <!-- الاسم نص واحد بلا أي تقسيم. كل حروف «تجمّع» توصل لليسار، فأي <span>
-           جوّه الكلمة يكسر تشكيل الحروف على ويب‌كِت (آيفون). اللون من CSS. -->
-      <h1>تجمّع</h1>
-      <p>${state.user ? `أهلاً ${escapeAttr(state.user.name)} — لعبت ${state.user.gamesPlayed||0} لعبة` : 'اختاروا لعبة والعبوها سوا'}</p>
+    <div class="hub-profile">
+      ${u ? `
+        <button type="button" class="hub-me" id="hub-me">
+          ${myAvatarHtml(52, true)}
+          <span class="hub-me-text">
+            <span class="hub-hello">أهلاً ${escapeAttr(u.name)} 👋</span>
+            <span class="hub-sub">${u.title ? `${titleName(u.title)} · ` : ''}لعبت ${u.gamesPlayed || 0} لعبة</span>
+          </span>
+        </button>
+        <button type="button" class="hub-coins" id="hub-coins" aria-label="متجر الكوينز">🪙 ${u.coins || 0}</button>
+      ` : `
+        <span class="hub-me-text">
+          <span class="hub-hello">اختاروا لعبة والعبوها سوا</span>
+          <span class="hub-sub">سجّل حساب حتى تجمع كوينز وتلبس صورة وإطار</span>
+        </span>
+        <button type="button" class="btn btn-gold btn-sm" id="hub-login">تسجيل الدخول</button>
+      `}
     </div>
-    <div class="btn-row" style="justify-content:center; margin-bottom:18px;">
-      <button class="btn btn-ghost btn-sm" id="hub-board">🏆 ترتيب الفرق</button>
+    <div class="hub-tiles">
+      <button type="button" class="hub-tile ${dailyTile.hot ? 'hot' : ''}" id="hub-daily">
+        <b>${dailyTile.b}</b>${dailyTile.t}<small>${dailyTile.s}</small></button>
+      <button type="button" class="hub-tile" id="hub-shop"><b>🛍️</b>المتجر<small>صور، ثيمات، باقات</small></button>
+      <button type="button" class="hub-tile" id="hub-board"><b>🏆</b>الترتيب<small>ترتيب الفرق</small></button>
     </div>
     <div class="game-cards"></div>
   </div>`);
   wrap.querySelector('#hub-board').addEventListener('click', ()=> openLeaderboard());
+  wrap.querySelector('#hub-shop').addEventListener('click', openShop);
+  wrap.querySelector('#hub-daily').addEventListener('click', ()=>{
+    if(u) openShop();
+    else { state.showAuthModal = true; state.authMode = 'signin'; state.authError = ''; render(); }
+  });
+  if(u){
+    wrap.querySelector('#hub-me').addEventListener('click', openAccountModal);
+    wrap.querySelector('#hub-coins').addEventListener('click', openShop);
+  } else {
+    wrap.querySelector('#hub-login').addEventListener('click', ()=>{
+      state.showAuthModal = true; state.authMode = 'signin'; state.authError = ''; render();
+    });
+  }
 
   const list = wrap.querySelector('.game-cards');
   HUB_GAMES.forEach(g=>{
