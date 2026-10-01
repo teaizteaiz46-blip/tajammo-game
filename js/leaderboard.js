@@ -328,6 +328,7 @@ function leaderboardRow(r, highlight){
       <span style="min-width:0; overflow-wrap:anywhere;">
         ${escapeAttr(r.name)}
         <small style="color:var(--muted); display:block;" dir="ltr">@${escapeAttr(r.handle)}</small>
+        ${titleName(r.owner_title) ? `<small class="user-title">${titleName(r.owner_title)}</small>` : ''}
       </span>
     </span>
     <span style="display:flex; align-items:center; gap:10px;">

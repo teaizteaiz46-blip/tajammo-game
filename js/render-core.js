@@ -2,6 +2,7 @@
 function render(){
   const app = document.getElementById('app');
   app.innerHTML = '';
+  applyTheme();
   app.appendChild(renderTopbar());
   let body;
   try{
@@ -20,6 +21,7 @@ function render(){
     if(b) b.addEventListener('click', ()=>{ state.screen='hub'; state.history=[]; render(); });
   }
   app.appendChild(body);
+  maybePlayWinFx();
 
   if(state.screen === 'board' && state.activeCell){
     app.appendChild(renderQuestionOverlay());
@@ -83,7 +85,7 @@ function renderScreen(){
 function renderTopbar(){
   const bar = el(`<div class="topbar">
     <button class="btn btn-ghost btn-sm" id="back-arrow" style="display:${state.history.length?'inline-flex':'none'};">→ رجوع</button>
-    <div class="brand"><span class="dot"></span> تجمّع</div>
+    <div class="brand">${brandMarkHtml()} تجمّع</div>
     <div class="topbar-right" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
       <div class="crumb"></div>
     </div>

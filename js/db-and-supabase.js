@@ -385,6 +385,9 @@ async function loadOrCreateProfile(authUser){
     coins: data.coins || 0,
     avatar: data.equipped_avatar || null,     // من متجر الكوينز — شكل جاهز مو صورة
     frame: data.equipped_frame || null,
+    theme: data.equipped_theme || null,
+    title: data.equipped_title || null,
+    fx: data.equipped_fx || null,
     termsAcceptedAt: data.terms_accepted_at || null
   };
 }

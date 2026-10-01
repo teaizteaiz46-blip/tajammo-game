@@ -648,6 +648,7 @@ function renderAccountOverlay(){
       ${myAvatarHtml(44, true)}
       <div>
         <div style="font-weight:700;">${escapeAttr(u.name || 'لاعب')}</div>
+        ${u.title ? `<div class="user-title">${titleName(u.title)}</div>` : ''}
         <div style="font-size:12.5px; color:var(--muted);">
           ${u.gamesPlayed || 0} لعبة · 🪙 ${u.coins || 0} كوين
         </div>

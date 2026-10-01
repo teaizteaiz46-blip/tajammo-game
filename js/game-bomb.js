@@ -69,6 +69,7 @@ function renderBombSetup(){
     namesList.appendChild(row);
   }
   wrap.appendChild(namesPanel);
+  wrap.appendChild(renderPackPicker('bomb'));     // باقة «فئات عراقية» من متجر الكوينز
 
   const timePanel = el(`<div class="panel">
     <div class="section-title" style="font-size:16px;">الوقت</div>

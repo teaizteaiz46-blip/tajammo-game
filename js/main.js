@@ -7,6 +7,7 @@ if(sb){
       clearUserScopedState();
     }
     render();
+    onUserChanged();            // الثيم والباقات المفتوحة من متجر الكوينز
   });
 }
 

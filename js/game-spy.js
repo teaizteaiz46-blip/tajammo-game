@@ -58,6 +58,7 @@ function renderSpySetup(){
     namesList.appendChild(row);
   }
   wrap.appendChild(namesPanel);
+  wrap.appendChild(renderPackPicker('spy'));      // باقة «أماكن عراقية» من متجر الكوينز
 
   const optPanel = el(`<div class="panel">
     <div class="section-title" style="font-size:16px;">إعدادات الجولة</div>

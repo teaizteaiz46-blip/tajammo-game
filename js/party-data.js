@@ -13,7 +13,9 @@ const PARTY_CACHE_KEY = 'tajammo.partyItems.v1';
 /* أقل عدد يخلي اللعبة تشتغل بشكل معقول */
 const PARTY_MIN = { spy: 12, bomb: 5 };
 
-let partyItems = { spy: [], bomb: [] };
+/* packs: محتوى باقات متجر الكوينز ({ pack_id: [...] }) — السيرفر ما يرجّعها
+   إلا لمن فاتح الباقة، وpickPartyItems ما يستخدمها إلا وهي بعدها مفتوحة */
+let partyItems = { spy: [], bomb: [], packs: {} };
 let partyFetching = null;
 
 function loadPartyCache(){
@@ -26,7 +28,7 @@ function loadPartyCache(){
          حتى ما ينكسر الكود الي يقرأ .text */
       const bomb = data.bomb.map(x =>
         (x && typeof x === 'object') ? x : { text: String(x), examples: '' });
-      partyItems = { spy: data.spy, bomb: bomb };
+      partyItems = { spy: data.spy, bomb: bomb, packs: (data.packs && typeof data.packs === 'object') ? data.packs : {} };
     }
   }catch(e){ /* ذاكرة الجهاز مقفلة أو النسخة تالفة — ننزّل من جديد */ }
 }
@@ -34,7 +36,7 @@ function loadPartyCache(){
 function savePartyCache(){
   try{
     localStorage.setItem(PARTY_CACHE_KEY, JSON.stringify({
-      spy: partyItems.spy, bomb: partyItems.bomb, at: Date.now()
+      spy: partyItems.spy, bomb: partyItems.bomb, packs: partyItems.packs, at: Date.now()
     }));
   }catch(e){ /* ما نكدر نخزّن — اللعبة تشتغل بهذي الجلسة على الأقل */ }
 }
@@ -48,17 +50,17 @@ async function fetchPartyItems(){
     try{
       const { data, error } = await sb
         .from('party_items')
-        .select('game,text,examples')
+        .select('game,text,examples,pack')
         .eq('is_active', true)
         .limit(2000);
       if(error) throw error;
-      const fresh = { spy: [], bomb: [] };
+      const fresh = { spy: [], bomb: [], packs: {} };
       (data||[]).forEach(r=>{
         if(!fresh[r.game] || !r.text) return;
         /* الدخيل يحتاج النص بس؛ القنبلة تحتاج الأمثلة هم لشاشة النتيجة */
-        fresh[r.game].push(r.game === 'bomb'
-          ? { text: r.text, examples: r.examples || '' }
-          : r.text);
+        const item = r.game === 'bomb' ? { text: r.text, examples: r.examples || '' } : r.text;
+        if(r.pack) (fresh.packs[r.pack] = fresh.packs[r.pack] || []).push(item);
+        else fresh[r.game].push(item);
       });
       /* استبدال كامل — مو دمج. شوف التعليق فوك. */
       if(fresh.spy.length || fresh.bomb.length){
@@ -96,7 +98,14 @@ async function ensurePartyItems(game){
 
 /* n عنصر عشوائي بلا تكرار */
 function pickPartyItems(game, n){
-  const all = (partyItems[game] || []).slice();
+  /* باقة مفتوحة: «الباقة بس» (الافتراضي) لو «الكل» — وإذا الباقة ما تكفي نرجع للأساس */
+  const base = partyItems[game] || [];
+  const p = typeof packForGame === 'function' ? packForGame(game) : null;
+  const mode = p ? packMode(game) : null;
+  const packList = (p && partyItems.packs && partyItems.packs[p.id]) || [];
+  let all = base.slice();
+  if(mode === 'pack' && packList.length >= n) all = packList.slice();
+  else if(mode) all = base.concat(packList);
   for(let i = all.length - 1; i > 0; i--){
     const j = Math.floor(Math.random() * (i + 1));
     [all[i], all[j]] = [all[j], all[i]];

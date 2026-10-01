@@ -23,7 +23,113 @@ const AVATARS = [
 const FRAME_GOLD = { id: 'frame_gold', name: 'الإطار الذهبي', price: 150 };
 const DAILY_AMOUNTS = [20, 30, 40, 50, 60, 80, 100];   // نفس reward_daily_amount بالسيرفر
 
+/* المرحلة الثانية — كلها شكلية إلا الباقات (محتوى إضافي للجلسة كلها) */
+const THEMES = [
+  { id: 'theme_night',   name: 'ليلي',        mark: '⭐', swatch: ['#0A0F1C', '#161F36', '#C9B27A'], price: 100 },
+  { id: 'theme_ramadan', name: 'رمضاني',      mark: '🌙', swatch: ['#1F0F29', '#3A1F4A', '#E2B857'], price: 100 },
+  { id: 'theme_baghdad', name: 'أزرق بغدادي', mark: '💠', swatch: ['#081C2A', '#10364E', '#E0B45A'], price: 100 },
+  { id: 'theme_rose',    name: 'وردي',        mark: '🌸', swatch: ['#200F18', '#3B1D2B', '#F2A7B9'], price: 100 }
+];
+const TITLES = [
+  { id: 'title_cat_king',   name: 'ملك الفئات' },
+  { id: 'title_spy_hunter', name: 'كاشف الدخلاء' },
+  { id: 'title_clasico',    name: 'خبير الكلاسيكو' },
+  { id: 'title_unexploded', name: 'ما ينفجر' },
+  { id: 'title_host',       name: 'مضيف السهرة' },
+  { id: 'title_brain',      name: 'عقل التجمّع' },
+  { id: 'title_legend',     name: 'أسطورة الجمعة' },
+  { id: 'title_lucky',      name: 'صاحب الحظ' }
+].map(t => Object.assign(t, { price: 75 }));
+const WIN_FX = [
+  { id: 'fx_fireworks', name: 'ألعاب نارية', emoji: ['🎆', '🎇', '✨'], price: 75 },
+  { id: 'fx_gold',      name: 'مطر ذهب',     emoji: ['🪙', '✨', '🏆'], price: 75 },
+  { id: 'fx_roses',     name: 'ورد',         emoji: ['🌹', '🌸', '💐'], price: 75 }
+];
+/* الباقات تنفتح ٢٤ ساعة، والقفل بالسيرفر (pack_active بسياسة الجدول) */
+const PACKS = [
+  { id: 'pack_whoami_football', game: 'whoami', emoji: '⚽', name: 'نجوم الكرة',    desc: '٥٠ شخصية: لاعبين ومدربين عالميين وعراقيين', price: 100 },
+  { id: 'pack_spy_iraq',        game: 'spy',    emoji: '📍', name: 'أماكن عراقية',  desc: '٣٠ مكان: المتنبي، الشورجة، الملوية، الأهوار…', price: 100 },
+  { id: 'pack_bomb_iraq',       game: 'bomb',   emoji: '🔥', name: 'فئات عراقية',   desc: '٢٣ فئة: أكلات، مناطق بغداد، تمور، ألعاب شعبية…', price: 100 }
+];
+
 function avatarById(id){ return AVATARS.find(a => a.id === id) || null; }
+function themeById(id){ return THEMES.find(t => t.id === id) || null; }
+function titleName(id){ const t = TITLES.find(t => t.id === id); return t ? t.name : ''; }
+function fxById(id){ return WIN_FX.find(f => f.id === id) || null; }
+function packForGame(game){ return PACKS.find(p => p.game === game) || null; }
+
+/* الباقة مفتوحة؟ — حسب آخر حالة من السيرفر. السيرفر هو اللي يقفل فعلاً */
+function packActive(packId){
+  const exp = (state.activePacks || {})[packId];
+  return !!exp && new Date(exp).getTime() > Date.now();
+}
+function packHoursLeft(packId){
+  const exp = (state.activePacks || {})[packId];
+  return exp ? Math.max(0, Math.ceil((new Date(exp).getTime() - Date.now()) / 3600000)) : 0;
+}
+/* باللعبة: الباقة وحدها (الافتراضي لمن تكون مفتوحة) لو «الكل» */
+function packMode(game){
+  const p = packForGame(game);
+  if(!p || !packActive(p.id)) return null;
+  return (state.packMode || {})[game] === 'all' ? 'all' : 'pack';
+}
+
+/* الثيم يتطبق على كل الصفحة — بس للاعب المسجّل اللي لابسه */
+function applyTheme(){
+  const t = state.user && themeById(state.user.theme);
+  const v = t ? t.id.replace('theme_', '') : '';
+  if(document.documentElement.dataset.theme !== v){
+    if(v) document.documentElement.dataset.theme = v;
+    else delete document.documentElement.dataset.theme;
+  }
+}
+/* شعار «تجمّع» بالشريط: النقطة الذهبية، أو رمز الثيم */
+function brandMarkHtml(){
+  const t = state.user && themeById(state.user.theme);
+  return t ? `<span class="brand-mark" aria-hidden="true">${t.mark}</span>` : `<span class="dot"></span>`;
+}
+
+/* احتفال الفوز: يطلع مرة وحدة لمن تفتح شاشة النتيجة */
+const WIN_SCREENS = ['end', 'whoami-end', 'shd-end', 'spy-result', 'bomb-end'];
+let lastFxScreen = null;
+function maybePlayWinFx(){
+  const onWin = WIN_SCREENS.includes(state.screen);
+  if(onWin && lastFxScreen !== state.screen) playWinFx();
+  lastFxScreen = onWin ? state.screen : null;
+}
+function playWinFx(fxId){
+  const fx = fxById(fxId || (state.user && state.user.fx));
+  if(!fx) return;
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const layer = document.createElement('div');
+  layer.className = 'win-fx';
+  layer.setAttribute('aria-hidden', 'true');
+  for(let i = 0; i < 28; i++){
+    const s = document.createElement('span');
+    s.textContent = fx.emoji[i % fx.emoji.length];
+    s.style.left = (Math.random() * 100) + '%';
+    s.style.animationDelay = (Math.random() * 1.2) + 's';
+    s.style.fontSize = (18 + Math.random() * 22) + 'px';
+    layer.appendChild(s);
+  }
+  document.body.appendChild(layer);
+  setTimeout(()=> layer.remove(), 4200);
+}
+
+/* بعد الدخول: حالة المتجر والباقات، وإذا أكو باقة مفتوحة نجيب محتواها */
+async function onUserChanged(){
+  if(!state.user){
+    state.activePacks = {};
+    state.rewardState = null;
+    applyTheme();
+    return;
+  }
+  const rs = await loadRewardState();
+  if(rs && Object.keys(rs.packs || {}).length && typeof fetchPartyItems === 'function'){
+    await fetchPartyItems();
+  }
+  render();
+}
 
 /* صورة البروفايل: الشكل المختار، وإلا صورة الحساب القديمة لو موجودة.
    ترجع '' إذا ماكو شي — إلا إذا forcePlaceholder (بالمتجر والحساب) */
@@ -54,6 +160,10 @@ async function loadRewardState(){
     state.user.coins = data.coins;
     state.user.avatar = data.equipped_avatar || null;
     state.user.frame = data.equipped_frame || null;
+    state.user.theme = data.equipped_theme || null;
+    state.user.title = data.equipped_title || null;
+    state.user.fx = data.equipped_fx || null;
+    state.activePacks = data.packs || {};
     return data;
   }catch(e){
     console.warn('تعذّر جلب حالة المكافآت', e);
@@ -128,7 +238,7 @@ async function buyCosmetic(item){
     const { error } = await sb.rpc('buy_cosmetic', { p_item: item });
     if(error) throw error;
     // اللي ينشترى يتلبس على طول — هذا اللي يريده اللاعب
-    const slot = item.startsWith('avatar_') ? 'avatar' : 'frame';
+    const slot = item.split('_')[0];
     const eq = await sb.rpc('equip_cosmetic', { p_slot: slot, p_item: item });
     if(eq.error) throw eq.error;
     await loadRewardState();
@@ -149,14 +259,62 @@ async function equipCosmetic(slot, item){
   try{
     const { error } = await sb.rpc('equip_cosmetic', { p_slot: slot, p_item: item });
     if(error) throw error;
-    if(slot === 'avatar') state.user.avatar = item; else state.user.frame = item;
+    state.user[slot] = item;
     await loadRewardState();
+    if(slot === 'fx' && item) playWinFx(item);       // يشوف شكله على طول
   }catch(e){
     state.rewardMsg = translateRewardError(e);
   }finally{
     state.rewardBusy = false;
     render();
   }
+}
+
+async function buyPack(packId){
+  if(state.rewardBusy || !state.user) return;
+  state.rewardBusy = true;
+  state.rewardMsg = '';
+  render();
+  try{
+    const { error } = await sb.rpc('buy_pack', { p_pack: packId });
+    if(error) throw error;
+    await loadRewardState();
+    // المحتوى ما كان ينقرا قبل الفتح — نجيبه هسه
+    const p = PACKS.find(x => x.id === packId);
+    if(p && p.game !== 'whoami' && typeof fetchPartyItems === 'function') await fetchPartyItems();
+    state.rewardMsg = `انفتحت «${p ? p.name : ''}» — باقي ${packHoursLeft(packId)} ساعة`;
+  }catch(e){
+    state.rewardMsg = translateRewardError(e);
+  }finally{
+    state.rewardBusy = false;
+    render();
+  }
+}
+
+/* سطر صغير بإعدادات «من أنا؟» و«الدخيل» و«القنبلة» — مو نافذة تطلع غصب */
+function renderPackPicker(game){
+  const p = packForGame(game);
+  if(!p) return el(`<div></div>`);
+  if(packActive(p.id)){
+    const mode = packMode(game);
+    const box = el(`<div class="panel pack-picker">
+      <div class="section-sub" style="margin:0 0 8px;">${p.emoji} باقة «${p.name}» مفتوحة — باقي ${packHoursLeft(p.id)} ساعة</div>
+      <div class="setup-chips">
+        <button type="button" class="setup-chip ${mode === 'pack' ? 'on' : ''}" data-m="pack">${p.emoji} ${p.name} بس</button>
+        <button type="button" class="setup-chip ${mode === 'all' ? 'on' : ''}" data-m="all">الكل</button>
+      </div>
+    </div>`);
+    box.querySelectorAll('[data-m]').forEach(b => b.addEventListener('click', ()=>{
+      state.packMode = Object.assign({}, state.packMode, { [game]: b.dataset.m });
+      render();
+    }));
+    return box;
+  }
+  const box = el(`<button type="button" class="pack-locked">
+    <span>🔒 ${p.emoji} باقة «${p.name}»</span><small>${p.desc} · من متجر الكوينز</small>
+  </button>`);
+  box.addEventListener('click', openShop);
+  return box;
 }
 
 function openShop(){
@@ -235,6 +393,7 @@ function renderShop(){
   wrap.appendChild(el(`<div class="panel shop-head">
     ${myAvatarHtml(64, true)}
     <div>
+      ${u.title ? `<div class="user-title">${titleName(u.title)}</div>` : ''}
       <div class="section-title" style="margin:0;">🪙 ${u.coins || 0} كوين</div>
       <div class="section-sub" style="margin:4px 0 0;">الأشياء هنا شكلية بس — ما تغيّر شي باللعب.</div>
     </div>
@@ -278,6 +437,86 @@ function renderShop(){
     g.appendChild(card);
   });
   wrap.appendChild(grid);
+
+  const busy = state.rewardBusy ? 'disabled' : '';
+  const itemButton = (slot, item) => shopItemButton(owned.has(item.id), u[slot] === item.id, item.price,
+    ()=> buyCosmetic(item.id), ()=> equipCosmetic(slot, item.id), ()=> equipCosmetic(slot, null));
+
+  // باقات المحتوى — للجلسة كلها، ٢٤ ساعة
+  const packs = el(`<div class="panel">
+    <div class="section-title" style="font-size:17px;">📦 باقات محتوى — ٢٤ ساعة</div>
+    <div class="section-sub">محتوى جديد يلعب بيه الكروب كله. الألعاب نفسها تبقى مفتوحة للكل.</div>
+    <div class="shop-list"></div>
+  </div>`);
+  PACKS.forEach(p=>{
+    const on = packActive(p.id);
+    const row = el(`<div class="shop-row pack-row">
+      <span class="avatar" style="--s:44px">${p.emoji}</span>
+      <div style="flex:1;">
+        <div style="font-weight:700;">${p.name}</div>
+        <div class="section-sub" style="margin:2px 0 0;">${p.desc}${on ? ` · <b style="color:var(--sage);">مفتوحة، باقي ${packHoursLeft(p.id)} ساعة</b>` : ''}</div>
+      </div>
+      <button class="btn btn-sm ${on ? 'btn-ghost' : 'btn-gold'}" ${busy}>${on ? `مدّد 🪙 ${p.price}` : `🪙 ${p.price}`}</button>
+    </div>`);
+    row.querySelector('button').addEventListener('click', ()=> buyPack(p.id));
+    packs.querySelector('.shop-list').appendChild(row);
+  });
+  wrap.appendChild(packs);
+
+  // الثيمات
+  const themes = el(`<div class="panel">
+    <div class="section-title" style="font-size:17px;">🎨 ثيم التطبيق</div>
+    <div class="section-sub">ألوان التطبيق كلها وشعار «تجمّع» تتغيّر — على جهازك بس.</div>
+    <div class="theme-grid"></div>
+  </div>`);
+  THEMES.forEach(t=>{
+    const b = itemButton('theme', t);
+    const card = el(`<div class="theme-card ${u.theme === t.id ? 'on' : ''}">
+      <span class="theme-swatch" style="background:linear-gradient(135deg, ${t.swatch[0]} 0 45%, ${t.swatch[1]} 45% 80%, ${t.swatch[2]} 80%)">${t.mark}</span>
+      <span class="avatar-name">${t.name}</span>
+      <button class="btn btn-sm ${b.cls}" ${busy}>${b.label}</button>
+    </div>`);
+    card.querySelector('button').addEventListener('click', b.act);
+    themes.querySelector('.theme-grid').appendChild(card);
+  });
+  wrap.appendChild(themes);
+
+  // الألقاب
+  const titles = el(`<div class="panel">
+    <div class="section-title" style="font-size:17px;">🏷️ لقب تحت اسمك</div>
+    <div class="section-sub">يبين بحسابك وتحت فريقك بترتيب الفرق.</div>
+    <div class="shop-list"></div>
+  </div>`);
+  TITLES.forEach(t=>{
+    const b = itemButton('title', t);
+    const row = el(`<div class="shop-row title-row ${u.title === t.id ? 'on' : ''}">
+      <span class="user-title" style="flex:1;">${t.name}</span>
+      <button class="btn btn-sm ${b.cls}" ${busy}>${b.label}</button>
+    </div>`);
+    row.querySelector('button').addEventListener('click', b.act);
+    titles.querySelector('.shop-list').appendChild(row);
+  });
+  wrap.appendChild(titles);
+
+  // احتفال الفوز
+  const fxPanel = el(`<div class="panel">
+    <div class="section-title" style="font-size:17px;">🎉 احتفال الفوز</div>
+    <div class="section-sub">يطلع على الشاشة بنهاية أي لعبة من الخمسة.</div>
+    <div class="shop-list"></div>
+  </div>`);
+  WIN_FX.forEach(f=>{
+    const b = itemButton('fx', f);
+    const row = el(`<div class="shop-row ${u.fx === f.id ? 'on' : ''}">
+      <span class="avatar" style="--s:44px">${f.emoji[0]}</span>
+      <span style="flex:1; font-weight:700;">${f.name}</span>
+      <button class="btn btn-ghost btn-sm fx-try" type="button">جرّب</button>
+      <button class="btn btn-sm ${b.cls}" ${busy}>${b.label}</button>
+    </div>`);
+    row.querySelector('.fx-try').addEventListener('click', ()=> playWinFx(f.id));
+    row.querySelector('.btn:not(.fx-try)').addEventListener('click', b.act);
+    fxPanel.querySelector('.shop-list').appendChild(row);
+  });
+  wrap.appendChild(fxPanel);
 
   const back = el(`<div class="btn-row" style="justify-content:center;"><button class="btn btn-ghost">رجوع</button></div>`);
   back.querySelector('button').addEventListener('click', ()=> goto('hub'));

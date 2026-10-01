@@ -16,6 +16,8 @@ const state = {
   rewardState: null,         // نتيجة ad_reward_state: الرصيد، الإعلانات الباقية، اليومية، المشتريات
   rewardBusy: false,
   rewardMsg: '',
+  activePacks: {},           // { pack_id: expires_at } — الباقات المفتوحة
+  packMode: {},              // { whoami|spy|bomb: 'pack' | 'all' }
   showAuthModal: false,
   authMode: 'signin',
   authError: '',

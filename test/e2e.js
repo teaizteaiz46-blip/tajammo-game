@@ -103,19 +103,23 @@ window.supabase = {
         }
         /* متجر الكوينز — نموذج بسيط بالذاكرة يقلّد دوال السيرفر.
            ad_reward_status يقلّد وصول تأكيد كوكل (SSV) أول ما ينسأل */
-        if(['ad_reward_state','start_ad_reward','ad_reward_status','buy_cosmetic','equip_cosmetic'].indexOf(name) >= 0){
+        if(['ad_reward_state','start_ad_reward','ad_reward_status','buy_cosmetic','equip_cosmetic','buy_pack'].indexOf(name) >= 0){
           if(!window.__signedIn) return { data: null, error: { message: 'SIGNIN_REQUIRED' } };
-          var S = window.__shop = window.__shop || { coins: 200, owned: [], avatar: null, frame: null,
-                                                     adsLeft: 5, dailyClaimed: false, streak: 3, doubleAmount: 0, tokens: {}, n: 0 };
+          var S = window.__shop = window.__shop || { coins: window.__shopStartCoins || 200, owned: [], avatar: null, frame: null,
+                                                     adsLeft: 5, dailyClaimed: false, streak: 3, doubleAmount: 0, tokens: {}, n: 0,
+                                                     theme: null, title: null, fx: null, packs: {} };
           var price = function(it){
             if(it === 'frame_gold') return 150;
             if(it === 'avatar_star' || it === 'avatar_palm') return 0;
+            if(/^theme_/.test(it)) return 100;
+            if(/^(title|fx)_/.test(it)) return 75;
             return /^avatar_/.test(it) ? 50 : null;
           };
           if(name === 'ad_reward_state') return { data: {
             coins: S.coins, ads_left: S.adsLeft, ads_limit: 5, daily_claimed: S.dailyClaimed,
             streak_day: S.streak, daily_amount: [20,30,40,50,60,80,100][S.streak - 1], extra_amount: 20,
-            double_amount: S.doubleAmount, equipped_avatar: S.avatar, equipped_frame: S.frame, owned: S.owned.slice() }, error: null };
+            double_amount: S.doubleAmount, equipped_avatar: S.avatar, equipped_frame: S.frame,
+            equipped_theme: S.theme, equipped_title: S.title, equipped_fx: S.fx, packs: Object.assign({}, S.packs), owned: S.owned.slice() }, error: null };
           if(name === 'start_ad_reward'){
             if(S.adsLeft <= 0) return { data: null, error: { message: 'AD_DAILY_LIMIT' } };
             if(params.p_kind === 'double' && S.doubleAmount <= 0) return { data: null, error: { message: 'NOTHING_TO_DOUBLE' } };
@@ -133,6 +137,14 @@ window.supabase = {
             }
             return { data: { claimed: t.claimed, granted: t.claimed ? t.amount : 0, coins: S.coins }, error: null };
           }
+          if(name === 'buy_pack'){
+            if(S.coins < 100) return { data: null, error: { message: 'NOT_ENOUGH_COINS:' + S.coins + ':100' } };
+            S.coins -= 100;
+            var base = S.packs[params.p_pack] && new Date(S.packs[params.p_pack]) > new Date() ? new Date(S.packs[params.p_pack]).getTime() : Date.now();
+            S.packs[params.p_pack] = new Date(base + 24 * 3600 * 1000).toISOString();
+            window.__packUnlocked = Object.assign({}, window.__packUnlocked, { [params.p_pack]: true });
+            return { data: { ok: true, coins: S.coins, expires_at: S.packs[params.p_pack] }, error: null };
+          }
           if(name === 'buy_cosmetic'){
             var p = price(params.p_item);
             if(p === null) return { data: null, error: { message: 'NO_SUCH_ITEM' } };
@@ -144,7 +156,8 @@ window.supabase = {
           if(name === 'equip_cosmetic'){
             var it = params.p_item;
             if(it && price(it) > 0 && S.owned.indexOf(it) < 0) return { data: null, error: { message: 'NOT_OWNED' } };
-            if(params.p_slot === 'avatar') S.avatar = it; else S.frame = it;
+            if(it && it.split('_')[0] !== params.p_slot) return { data: null, error: { message: 'BAD_SLOT' } };
+            S[params.p_slot] = it;
             return { data: { ok: true }, error: null };
           }
         }
@@ -171,6 +184,9 @@ window.supabase = {
           for(var s1=1;s1<=30;s1++) items.push({game:'spy', text:'مكان '+s1});
           for(var b1=1;b1<=20;b1++) items.push({game:'bomb', text:'اذكر شي '+b1, examples:'مثال أ، مثال ب، مثال ج'});
           items.push({game:'bomb', text:'اذكر بلد يبدأ بحرف {حرف}', examples:'تونس، تركيا، تشاد'});
+          // محتوى الباقة يرجع بس لمن تنفتح (نفس قفل السيرفر)
+          if(window.__packUnlocked && window.__packUnlocked.pack_spy_iraq)
+            for(var s2=1;s2<=15;s2++) items.push({game:'spy', text:'مكان عراقي '+s2, pack:'pack_spy_iraq'});
           var c3 = {
             select: function(){ return c3; },
             eq: function(){ return c3; },
@@ -181,7 +197,9 @@ window.supabase = {
         }
         if(table === 'whoami_characters'){
           var names = [];
-          for(var i=1;i<=40;i++) names.push({name:'شخصية '+i});
+          for(var i=1;i<=40;i++) names.push({name:'شخصية '+i, pack:null});
+          if(window.__packUnlocked && window.__packUnlocked.pack_whoami_football)
+            for(var k=1;k<=15;k++) names.push({name:'لاعب '+k, pack:'pack_whoami_football'});
           var c2 = {
             select: function(){ return c2; },
             limit: function(){ return Promise.resolve({ data: names, error: null }); },
@@ -2490,6 +2508,7 @@ const CANNED_BANK = (() => {
   const shopUser = async (extra) => page.evaluate((extra) => {
     window.__signedIn = true;
     window.__shop = null;
+    window.__shopStartCoins = (extra && extra.coins) || 200;
     state.user = Object.assign({ uid: 'shop1', name: 'زهراء', coins: 200, termsAcceptedAt: '2026-01-01' }, extra || {});
     state.rewardState = null; state.rewardMsg = ''; state.rewardBusy = false;
   }, extra || null);
@@ -2616,6 +2635,109 @@ const CANNED_BANK = (() => {
     if (r.emoji !== '🦅' || !r.gold) throw new Error('الصورة أو الإطار ما طلعوا: ' + JSON.stringify(r));
     if (r.plain) throw new Error('فريق بلا شي طلعتله صورة');
     await shopDone();
+  });
+
+  /* ───────── المتجر — المرحلة الثانية ───────── */
+  const buyAndWait = (fn) => page.evaluate(async (src) => {
+    await (new Function('return (' + src + ')()'))();
+    await new Promise(res => { const t = setInterval(() => { if (!state.rewardBusy) { clearInterval(t); res(); } }, 50); });
+  }, fn.toString());
+
+  await step('الثيم: يغيّر ألوان الصفحة والشعار، ويرجع لمن تشلحه أو تطلع', async () => {
+    await shopUser({ coins: 600 });
+    await page.evaluate(() => openShop());
+    await page.waitForFunction(() => state.rewardState !== null);
+    await buyAndWait(() => buyCosmetic('theme_ramadan'));
+    const on = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme,
+      mark: document.querySelector('.brand .brand-mark')?.textContent,
+      bg: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(), coins: state.user.coins }));
+    await buyAndWait(() => equipCosmetic('theme', null));
+    const off = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme || '', dot: !!document.querySelector('.brand .dot') }));
+    await buyAndWait(() => equipCosmetic('theme', 'theme_ramadan'));
+    const out = await page.evaluate(() => { state.user = null; render(); return document.documentElement.dataset.theme || ''; });
+    if (on.theme !== 'ramadan' || on.mark !== '🌙') throw new Error('الثيم ما تطبّق: ' + JSON.stringify(on));
+    if (on.bg.toLowerCase() !== '#2a1636') throw new Error('الألوان ما تغيّرت: ' + on.bg);
+    if (on.coins !== 500) throw new Error('السعر غلط: ' + on.coins);
+    if (off.theme || !off.dot) throw new Error('الشلح ما رجّع الأصلي');
+    if (out) throw new Error('الثيم بقى بعد ما طلع من الحساب');
+  });
+
+  await step('اللقب: يبين بالحساب والمتجر، وتحت فريق صاحبه بالترتيب', async () => {
+    await page.evaluate(() => { state.user = Object.assign({ uid: 'shop1', name: 'زهراء', coins: 500 }, {}); goto('shop'); });
+    await page.waitForFunction(() => state.rewardState !== null);
+    await buyAndWait(() => buyCosmetic('title_host'));
+    const r = await page.evaluate(() => {
+      const shop = document.querySelector('.shop-head .user-title')?.textContent;
+      openAccountModal();
+      const acc = document.querySelector('.overlay .user-title')?.textContent;
+      closeAccountModal();
+      const row = leaderboardRow({ rank: 1, handle: 'h', name: 'ف', score: 1, games: 1, answers: 1, correct: 1, owner_key: 'k', owner_title: 'title_brain' }, false);
+      const bogus = leaderboardRow({ rank: 2, handle: 'h2', name: 'ف2', score: 1, games: 1, answers: 1, correct: 1, owner_key: 'k2', owner_title: '<img src=x>' }, false);
+      return { shop, acc, board: row.querySelector('.user-title')?.textContent, bogus: !!bogus.querySelector('.user-title') || !!bogus.querySelector('img') };
+    });
+    if (r.shop !== 'مضيف السهرة' || r.acc !== 'مضيف السهرة') throw new Error('اللقب ما طلع: ' + JSON.stringify(r));
+    if (r.board !== 'عقل التجمّع') throw new Error('لقب صاحب الفريق ما طلع: ' + r.board);
+    if (r.bogus) throw new Error('لقب مو من القائمة انعرض');
+  });
+
+  await step('احتفال الفوز: يطلع مرة وحدة لمن تفتح شاشة النتيجة', async () => {
+    await buyAndWait(() => buyCosmetic('fx_roses'));
+    await page.evaluate(() => document.querySelectorAll('.win-fx').forEach(e => e.remove()));
+    const r = await page.evaluate(() => {
+      state.bombPlayers = state.bombPlayers && state.bombPlayers.length ? state.bombPlayers : [{ name: 'أ', alive: true }, { name: 'ب', alive: false }];
+      state.screen = 'bomb-end'; render();
+      const first = document.querySelectorAll('.win-fx').length;
+      render(); render();
+      const again = document.querySelectorAll('.win-fx').length;
+      const emoji = document.querySelector('.win-fx span')?.textContent;
+      state.screen = 'hub'; render();
+      document.querySelectorAll('.win-fx').forEach(e => e.remove());
+      return { first, again, emoji };
+    });
+    if (r.first !== 1 || r.again !== 1) throw new Error('عدد مرات الاحتفال: ' + JSON.stringify(r));
+    if (!['🌹', '🌸', '💐'].includes(r.emoji)) throw new Error('شكل الاحتفال غلط: ' + r.emoji);
+  });
+
+  await step('الباقة: مقفولة لحد ما تنشترى، وبعدها «الدخيل» ياخذ أماكنها', async () => {
+    const before = await page.evaluate(() => {
+      goto('spy-setup');
+      return { locked: !!document.querySelector('.pack-locked'), chips: !!document.querySelector('.pack-picker') };
+    });
+    await page.evaluate(() => goto('shop'));
+    await buyAndWait(() => buyPack('pack_spy_iraq'));
+    const r = await page.evaluate(() => {
+      const msg = state.rewardMsg, coins = state.user.coins;
+      goto('spy-setup');
+      const chips = !!document.querySelector('.pack-picker');
+      const packOnly = pickPartyItems('spy', 12).every(x => String(x).startsWith('مكان عراقي'));
+      state.packMode = { spy: 'all' };
+      const all = pickPartyItems('spy', 40);
+      const mixed = all.some(x => String(x).startsWith('مكان عراقي')) && all.some(x => !String(x).startsWith('مكان عراقي'));
+      state.packMode = {};
+      state.activePacks = { pack_spy_iraq: new Date(Date.now() - 1000).toISOString() };   // خلصت
+      const expired = pickPartyItems('spy', 40).every(x => !String(x).startsWith('مكان عراقي'));
+      return { msg, coins, chips, packOnly, mixed, expired };
+    });
+    if (!before.locked || before.chips) throw new Error('الباقة مو مقفولة قبل الشراء');
+    if (r.coins !== 250 || !r.msg.includes('أماكن عراقية')) throw new Error('الشراء: ' + JSON.stringify(r));
+    if (!r.chips || !r.packOnly) throw new Error('الأماكن ما صارت من الباقة');
+    if (!r.mixed) throw new Error('«الكل» ما يخلط');
+    if (!r.expired) throw new Error('الباقة الخلصانة بعدها تشتغل');
+  });
+
+  await step('باقة «نجوم الكرة» بـ«من أنا؟»: الشخصيات منها، وبلاها من الأساس بس', async () => {
+    await page.evaluate(() => goto('shop'));
+    await buyAndWait(() => buyPack('pack_whoami_football'));
+    const r = await page.evaluate(async () => {
+      const withPack = await fetchRandomCharacters(5);
+      state.activePacks = {};
+      const without = await fetchRandomCharacters(5);
+      return { withPack, without };
+    });
+    if (!r.withPack.every(n => n.startsWith('لاعب '))) throw new Error('الشخصيات مو من الباقة: ' + r.withPack);
+    if (r.without.some(n => n.startsWith('لاعب '))) throw new Error('شخصيات الباقة طلعت بلاها: ' + r.without);
+    await shopDone();
+    await page.evaluate(() => { window.__packUnlocked = null; state.activePacks = {}; state.packMode = {}; });
   });
 
   await step('مفاتيح إعلان المكافأة: لو بعدها _HERE الزر ما يطلع', async () => {

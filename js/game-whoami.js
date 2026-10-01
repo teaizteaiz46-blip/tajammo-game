@@ -10,10 +10,19 @@
 async function fetchRandomCharacters(n){
   const { data, error } = await sb
     .from('whoami_characters')
-    .select('name')
-    .limit(500);
+    .select('name,pack')
+    .limit(1000);
   if(error) throw error;
-  const shuffled = data.map(r=>r.name).sort(()=> Math.random()-0.5);
+  /* شخصيات الباقة ما ترجع من السيرفر إلا لمن فاتحها. «الباقة بس» هو
+     الافتراضي لمن تكون مفتوحة؛ إذا ما تكفي للاعبين نستخدم الكل */
+  const p = packForGame('whoami');
+  const mode = packMode('whoami');
+  let rows = data.filter(r => !r.pack || (p && r.pack === p.id && mode));
+  if(mode === 'pack'){
+    const only = rows.filter(r => r.pack === p.id);
+    if(only.length >= n) rows = only;
+  }
+  const shuffled = rows.map(r=>r.name).sort(()=> Math.random()-0.5);
   if(shuffled.length < n) throw new Error('not enough characters');
   return shuffled.slice(0, n);
 }
@@ -26,6 +35,7 @@ function renderWhoamiSetup(){
     <div class="section-sub">كل لاعب تنحط له شخصية بالسر — يشوفها كل الحاضرين إلا هو، ويحاول يخمنها بأسئلة نعم/لا. الشخصيات تنجلب أونلاين من قاعدة بيانات، فلازم اتصال إنترنت.</div>
   </div>`);
   wrap.appendChild(intro);
+  wrap.appendChild(renderPackPicker('whoami'));   // باقة «نجوم الكرة» من متجر الكوينز
 
   const countPanel = el(`<div class="panel">
     <div class="section-title" style="font-size:16px;">عدد اللاعبين</div>
