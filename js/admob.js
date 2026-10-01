@@ -3,13 +3,18 @@
 
 /* معرّفات الإعلانات تختلف بين أندرويد وiOS — نفس المعرّف ما يخدم المنصتين.
    بدّل معرّفات iOS من AdMob بعد ما تسوي تطبيق iOS هناك. */
+/* rewarded: وحدة «إعلان بمكافأة» — لازم تكون مفعّل بيها التحقق من السيرفر
+   (SSV) على رابط دالة admob-ssv، وإلا الكوينز ما توصل. لمن تبقى _HERE
+   أزرار الإعلان ما تطلع، والمتجر يشتغل بكوينات اللعب بس. */
 const ADMOB_IDS_ANDROID = {
   banner: 'ca-app-pub-4662085630111714/7304234310',
-  interstitial: 'ca-app-pub-4662085630111714/4127406637'
+  interstitial: 'ca-app-pub-4662085630111714/4127406637',
+  rewarded: 'ca-app-pub-4662085630111714/REWARDED_ANDROID_HERE'
 };
 const ADMOB_IDS_IOS = {
   banner: 'ca-app-pub-4662085630111714/7001331037',
-  interstitial: 'ca-app-pub-4662085630111714/1563715255'
+  interstitial: 'ca-app-pub-4662085630111714/1563715255',
+  rewarded: 'ca-app-pub-4662085630111714/REWARDED_IOS_HERE'
 };
 
 function currentPlatform(){
@@ -133,6 +138,48 @@ async function showInterstitialAd(){
     await AdMob.prepareInterstitial({ adId: adIds().interstitial });
     await AdMob.showInterstitial();
   }catch(e){ console.warn('تعذّر عرض الإعلان البيني', e); }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   إعلان بمكافأة — دائماً باختيار اللاعب (شروط AdMob)
+
+   الكوينز ما تنضاف من هنا. التطبيق يمرر «تذكرة» (رقم عشوائي من
+   start_ad_reward) لكوكل، وكوكل يرجّعها لدالة admob-ssv بعد ما الإعلان
+   يكمل، وهي تضيف الكوينز. فلو أحد عبث بالكود، ما ياخذ شي بلا إعلان.
+
+   showRewardVideoAd ما يرد أبداً إذا اللاعب سكّر الإعلان قبل ما يخلص،
+   فنراقب الإغلاق بنفسنا. النتيجة: 'ok' | 'closed' | 'nofill'
+   ───────────────────────────────────────────────────────────────────── */
+function rewardedAdsReady(){
+  const id = adIds().rewarded;
+  return isNativeApp() && admobReady && !!id && !id.includes('_HERE');
+}
+
+function showRewardedAd(token){
+  return new Promise(async resolve=>{
+    const { AdMob } = window.Capacitor.Plugins;
+    const handles = [];
+    let rewarded = false, done = false;
+    const finish = result=>{
+      if(done) return;
+      done = true;
+      handles.forEach(h=>{ try{ h && h.remove && h.remove(); }catch(e){} });
+      resolve(result);
+    };
+    try{
+      handles.push(await AdMob.addListener('onRewardedVideoAdReward', ()=>{ rewarded = true; }));
+      /* المكافأة توصل قبل الإغلاق عادةً — نطي لحظة حتى ما نسبقها */
+      handles.push(await AdMob.addListener('onRewardedVideoAdDismissed', ()=>{
+        setTimeout(()=> finish(rewarded ? 'ok' : 'closed'), 400);
+      }));
+      handles.push(await AdMob.addListener('onRewardedVideoAdFailedToShow', ()=> finish('nofill')));
+      await AdMob.prepareRewardVideoAd({ adId: adIds().rewarded, ssv: { customData: token } });
+      AdMob.showRewardVideoAd().then(()=>{ rewarded = true; }).catch(()=> finish('nofill'));
+    }catch(e){
+      console.warn('تعذّر تحميل إعلان المكافأة', e);
+      finish('nofill');
+    }
+  });
 }
 
 /* ─────────────────────────────────────────────────────────────────────

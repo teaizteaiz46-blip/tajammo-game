@@ -558,6 +558,52 @@
     border-color:var(--line); background:transparent;
     color:var(--muted); font-size:13px;
   }
+  .coin-chip[role="button"]{ cursor:pointer; }
+  .double-offer{ margin:10px auto 0; max-width:360px; text-align:center; }
+
+  /* ---------- صورة البروفايل والإطار الذهبي (متجر الكوينز) ---------- */
+  .avatar{
+    --s:32px;
+    width:var(--s); height:var(--s); flex:0 0 var(--s);
+    display:inline-flex; align-items:center; justify-content:center;
+    border-radius:50%; overflow:hidden;
+    background:var(--panel-2); border:1px solid var(--line);
+    font-size:calc(var(--s) * .56); line-height:1;
+  }
+  .avatar img{ width:100%; height:100%; object-fit:cover; }
+  .avatar.frame-gold{
+    border:2px solid var(--gold);
+    box-shadow:0 0 0 2px rgba(212,168,87,.25), 0 0 calc(var(--s) * .3) rgba(212,168,87,.45);
+  }
+
+  /* ---------- متجر الكوينز ---------- */
+  .shop-head{ display:flex; align-items:center; gap:14px; }
+  .shop-msg{
+    margin:0 0 14px; padding:10px 14px; border-radius:12px; text-align:center;
+    background:rgba(212,168,87,0.10); border:1px solid var(--gold-dim); color:var(--gold);
+  }
+  .shop-row{ display:flex; align-items:center; gap:14px; }
+  .streak-strip{ display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; }
+  .streak-day{
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    padding:8px 2px; border-radius:10px; border:1px solid var(--line);
+    background:var(--bg-2); color:var(--muted); font-size:13px;
+  }
+  .streak-day b{ color:var(--ivory); font-size:15px; }
+  .streak-day small{ font-size:10.5px; }
+  .streak-day.today{ border-color:var(--gold); background:rgba(212,168,87,0.12); }
+  .streak-day.today b{ color:var(--gold); }
+  .streak-day.done{ opacity:.55; }
+  .streak-day.done b::after{ content:' ✓'; color:var(--sage); }
+  .avatar-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:10px; }
+  .avatar-card{
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:12px 6px; border-radius:14px; border:1px solid var(--line); background:var(--bg-2);
+  }
+  .avatar-card.on{ border-color:var(--gold); background:rgba(212,168,87,0.08); }
+  .avatar-name{ font-size:13px; color:var(--muted); }
+  .avatar-card .btn, .shop-row .btn{ white-space:nowrap; }
+  .btn.on{ border-color:var(--sage); color:var(--sage); }
   .cost-note{ text-align:center; font-size:15px; }
   .cost-note .ok{ color:var(--sage); }
   .cost-note .warn{ color:var(--gold); }

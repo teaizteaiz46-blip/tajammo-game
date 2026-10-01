@@ -11,6 +11,11 @@ const state = {
   user: null,
   statsRecordedForThisGame: false,
   lastReward: null,          // نتيجة award_game_coins لآخر لعبة
+  lastRewardDoubled: false,  // «ضاعف كوينزك» انستخدمت لهاي اللعبة
+  // متجر الكوينز والإعلان بمكافأة (js/rewards.js)
+  rewardState: null,         // نتيجة ad_reward_state: الرصيد، الإعلانات الباقية، اليومية، المشتريات
+  rewardBusy: false,
+  rewardMsg: '',
   showAuthModal: false,
   authMode: 'signin',
   authError: '',

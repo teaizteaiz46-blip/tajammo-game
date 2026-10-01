@@ -645,7 +645,7 @@ function renderAccountOverlay(){
   const modal = el(`<div class="q-modal" style="max-width:430px; text-align:right;">
     <div class="section-title">حسابك</div>
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
-      ${u.photo ? `<img src="${escapeAttr(u.photo)}" style="width:44px;height:44px;border-radius:50%;border:1px solid var(--gold-dim);"/>` : ''}
+      ${myAvatarHtml(44, true)}
       <div>
         <div style="font-weight:700;">${escapeAttr(u.name || 'لاعب')}</div>
         <div style="font-size:12.5px; color:var(--muted);">
@@ -653,6 +653,7 @@ function renderAccountOverlay(){
         </div>
       </div>
     </div>
+    <button class="btn btn-ghost" id="acc-shop" style="width:100%; margin-bottom:14px;">🪙 متجر الكوينز — صورة بروفايل وإطار ذهبي</button>
     <div id="acc-blocked"></div>
     ${state.accountError ? `<div style="color:var(--rose); font-size:13px; margin-bottom:10px;">${escapeAttr(state.accountError)}</div>` : ''}
     <div class="btn-row" style="justify-content:center; margin-top:6px; flex-wrap:wrap;">
@@ -679,6 +680,7 @@ function renderAccountOverlay(){
   }
 
   modal.querySelector('#acc-close').addEventListener('click', closeAccountModal);
+  modal.querySelector('#acc-shop').addEventListener('click', openShop);
   modal.querySelector('#acc-signout').addEventListener('click', ()=>{
     closeAccountModal();
     signOutUser();
@@ -857,6 +859,8 @@ function renderEnd(){
   if(state.user && !state.statsRecordedForThisGame){
     state.statsRecordedForThisGame = true;
     state.lastReward = null;
+    state.lastRewardDoubled = false;
+    state.rewardMsg = '';
     recordGameResult(a.score + b.score).then(res=>{
       if(res){ state.lastReward = res; render(); }
     });
@@ -871,6 +875,7 @@ function renderEnd(){
       <div class="score-card t1"><span class="name">${escapeAttr(b.name)}</span><span class="pts">${b.score}</span></div>
     </div>
     ${renderRewardLine()}
+    <div id="double-slot"></div>
     <div id="board-card-slot"></div>
     <div class="btn-row" style="justify-content:center;">
       <button class="btn btn-gold" id="new-round">جولة جديدة — أسئلة جديدة</button>
@@ -883,6 +888,10 @@ function renderEnd(){
      كانت فئات خاصة بالكامل (ماكو أسئلة بنك تنقارن بين الفرق) */
   const boardCard = renderTeamBoardCard();
   if(boardCard) wrap.querySelector('#board-card-slot').appendChild(boardCard);
+
+  /* «ضاعفها بإعلان» — اختياري، ويطلع بس لمن اللعبة ربّحت كوينات */
+  const doubleOffer = renderDoubleOffer();
+  if(doubleOffer) wrap.querySelector('#double-slot').appendChild(doubleOffer);
 
   function resetRoundState(){
     state.pool.forEach(t=>{ t.taken=false; t.takenBy=null; });

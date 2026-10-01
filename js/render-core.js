@@ -57,6 +57,7 @@ function renderScreen(){
     case 'board':         return renderBoard();
     case 'end':           return renderEnd();
     case 'leaderboard':   return renderLeaderboard();
+    case 'shop':          return renderShop();
     case 'whoami-setup':  return renderWhoamiSetup();
     case 'whoami-reveal': return renderWhoamiReveal();
     case 'whoami-play':   return renderWhoamiPlay();
@@ -102,6 +103,7 @@ function renderTopbar(){
     board:'لعبة الفئات · اللعب',
     end:'لعبة الفئات · النتيجة',
     leaderboard:'ترتيب الفرق',
+    shop:'متجر الكوينز',
     'whoami-setup':'من أنا؟ · تجهيز اللاعبين',
     'whoami-reveal':'من أنا؟ · توزيع الشخصيات',
     'whoami-play':'من أنا؟ · اللعب',
@@ -128,13 +130,15 @@ function renderTopbar(){
   if(state.user){
     const coins = state.user.coins || 0;
     const box = el(`<div style="display:flex; align-items:center; gap:8px; cursor:pointer;" id="user-box">
-      ${state.user.photo ? `<img src="${escapeAttr(state.user.photo)}" style="width:28px;height:28px;border-radius:50%; border:1px solid var(--gold-dim);"/>` : ''}
-      <span style="font-size:13px; color:var(--muted);">${escapeAttr(state.user.name)}</span>
-      <span class="coin-chip" title="كوينات">🪙 ${coins}</span>
+      ${myAvatarHtml(28)}
+      <span class="user-name" style="font-size:13px; color:var(--muted);">${escapeAttr(state.user.name)}</span>
+      <span class="coin-chip" title="متجر الكوينز" role="button">🪙 ${coins}</span>
     </div>`);
     // قبل: confirm('تسجيل الخروج؟') — هسه تفتح شاشة الحساب، وبيها الخروج
     // وحذف الحساب وإدارة الناشرين المحظورين
     box.addEventListener('click', openAccountModal);
+    // الكوينات تفتح المتجر مباشرة
+    box.querySelector('.coin-chip').addEventListener('click', e=>{ e.stopPropagation(); openShop(); });
     authArea.appendChild(box);
   } else {
     const btn = el(`<button class="btn btn-ghost btn-sm" id="open-auth">تسجيل الدخول</button>`);

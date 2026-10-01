@@ -383,6 +383,8 @@ async function loadOrCreateProfile(authUser){
     gamesPlayed: data.games_played,
     totalPoints: data.total_points,
     coins: data.coins || 0,
+    avatar: data.equipped_avatar || null,     // من متجر الكوينز — شكل جاهز مو صورة
+    frame: data.equipped_frame || null,
     termsAcceptedAt: data.terms_accepted_at || null
   };
 }

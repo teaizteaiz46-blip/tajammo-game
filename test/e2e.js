@@ -101,6 +101,53 @@ window.supabase = {
           if(params.p_handles) rows = rows.filter(function(r){ return params.p_handles.indexOf(r.handle) >= 0; });
           return { data: rows.slice(0, params.p_limit || 50), error: null };
         }
+        /* متجر الكوينز — نموذج بسيط بالذاكرة يقلّد دوال السيرفر.
+           ad_reward_status يقلّد وصول تأكيد كوكل (SSV) أول ما ينسأل */
+        if(['ad_reward_state','start_ad_reward','ad_reward_status','buy_cosmetic','equip_cosmetic'].indexOf(name) >= 0){
+          if(!window.__signedIn) return { data: null, error: { message: 'SIGNIN_REQUIRED' } };
+          var S = window.__shop = window.__shop || { coins: 200, owned: [], avatar: null, frame: null,
+                                                     adsLeft: 5, dailyClaimed: false, streak: 3, doubleAmount: 0, tokens: {}, n: 0 };
+          var price = function(it){
+            if(it === 'frame_gold') return 150;
+            if(it === 'avatar_star' || it === 'avatar_palm') return 0;
+            return /^avatar_/.test(it) ? 50 : null;
+          };
+          if(name === 'ad_reward_state') return { data: {
+            coins: S.coins, ads_left: S.adsLeft, ads_limit: 5, daily_claimed: S.dailyClaimed,
+            streak_day: S.streak, daily_amount: [20,30,40,50,60,80,100][S.streak - 1], extra_amount: 20,
+            double_amount: S.doubleAmount, equipped_avatar: S.avatar, equipped_frame: S.frame, owned: S.owned.slice() }, error: null };
+          if(name === 'start_ad_reward'){
+            if(S.adsLeft <= 0) return { data: null, error: { message: 'AD_DAILY_LIMIT' } };
+            if(params.p_kind === 'double' && S.doubleAmount <= 0) return { data: null, error: { message: 'NOTHING_TO_DOUBLE' } };
+            var amt = params.p_kind === 'double' ? S.doubleAmount : (S.dailyClaimed ? 20 : [20,30,40,50,60,80,100][S.streak - 1]);
+            var tok = 'tok-' + (++S.n);
+            S.tokens[tok] = { kind: params.p_kind, amount: amt, claimed: false };
+            return { data: { token: tok, amount: amt }, error: null };
+          }
+          if(name === 'ad_reward_status'){
+            var t = S.tokens[params.p_token];
+            if(!t) return { data: null, error: null };
+            if(!t.claimed && window.__adWatched && window.__adWatched[params.p_token]){
+              t.claimed = true; S.coins += t.amount; S.adsLeft--;
+              if(t.kind === 'double') S.doubleAmount = 0; else S.dailyClaimed = true;
+            }
+            return { data: { claimed: t.claimed, granted: t.claimed ? t.amount : 0, coins: S.coins }, error: null };
+          }
+          if(name === 'buy_cosmetic'){
+            var p = price(params.p_item);
+            if(p === null) return { data: null, error: { message: 'NO_SUCH_ITEM' } };
+            if(S.owned.indexOf(params.p_item) >= 0) return { data: null, error: { message: 'ALREADY_OWNED' } };
+            if(S.coins < p) return { data: null, error: { message: 'NOT_ENOUGH_COINS:' + S.coins + ':' + p } };
+            S.coins -= p; S.owned.push(params.p_item);
+            return { data: { ok: true, coins: S.coins }, error: null };
+          }
+          if(name === 'equip_cosmetic'){
+            var it = params.p_item;
+            if(it && price(it) > 0 && S.owned.indexOf(it) < 0) return { data: null, error: { message: 'NOT_OWNED' } };
+            if(params.p_slot === 'avatar') S.avatar = it; else S.frame = it;
+            return { data: { ok: true }, error: null };
+          }
+        }
         if(name === 'report_team'){
           window.__teamReports = window.__teamReports || [];
           window.__teamReports.push(params);
@@ -627,11 +674,14 @@ const CANNED_BANK = (() => {
     });
     if (!chip || !chip.includes('777')) throw new Error('الرصيد مو بالشريط: ' + chip);
   });
-  await step('زر «شاهد إعلان» انشال من نافذة السؤال', async () => {
+  /* الإعلان بمكافأة موجود هسه — بس بالمتجر وبنهاية اللعبة، أبداً بنص الدور */
+  await step('ماكو إعلان مكافأة بنص اللعب (لا مساعدة ولا زر بنافذة السؤال)', async () => {
     const gone = await page.evaluate(() =>
-      typeof showRewardedAd === 'undefined' &&
+      !HELP_TYPES.some(h => h.key === 'ad') &&
       !document.body.innerHTML.includes('data-type="ad"'));
-    if (!gone) throw new Error('لسه أكو إعلان مكافأة بنص اللعب');
+    const src = fs.readFileSync(path.join(WWW, 'js', 'game-categories.js'), 'utf8');
+    const calls = (src.match(/watchRewardAd\(|showRewardedAd\(/g) || []).length;
+    if (!gone || calls) throw new Error('لسه أكو إعلان مكافأة بنص اللعب');
   });
   await step('مفاتيح إعلانات الفواصل تشتغل ومرة وحدة لكل فاصل', async () => {
     const r = await page.evaluate(() => {
@@ -1400,7 +1450,7 @@ const CANNED_BANK = (() => {
       state.user = { uid:'u9', name:'أمير', coins: 120, gamesPlayed: 4 };
       render();
     });
-    await page.click('#user-box');
+    await page.click('#user-box .user-name');      // الكوينات بنفس الصندوق تفتح المتجر
     await page.waitForSelector('#acc-delete', { timeout: 8000 });
     const txt = await page.evaluate(() => document.querySelector('.overlay').innerText);
     if (!txt.includes('تسجيل الخروج')) throw new Error('زر الخروج راح من الشاشة');
@@ -2434,6 +2484,144 @@ const CANNED_BANK = (() => {
     if (r.credit) throw new Error('سطر النسبة ظل بلا صورة');
     if (!r.text) throw new Error('نص السؤال انشال وياها');
     if (!r.reveal) throw new Error('زر إظهار الإجابة انشال');
+  });
+
+  /* ───────── متجر الكوينز والإعلان بمكافأة ───────── */
+  const shopUser = async (extra) => page.evaluate((extra) => {
+    window.__signedIn = true;
+    window.__shop = null;
+    state.user = Object.assign({ uid: 'shop1', name: 'زهراء', coins: 200, termsAcceptedAt: '2026-01-01' }, extra || {});
+    state.rewardState = null; state.rewardMsg = ''; state.rewardBusy = false;
+  }, extra || null);
+  const shopDone = () => page.evaluate(() => {
+    window.__signedIn = false; window.__shop = null; window.__adWatched = null;
+    state.user = null; state.rewardState = null; state.rewardMsg = '';
+    if (window.__realAdsReady) { window.rewardedAdsReady = window.__realAdsReady; window.__realAdsReady = null; }
+    if (window.__realShowRewarded) { window.showRewardedAd = window.__realShowRewarded; window.__realShowRewarded = null; }
+    goto('hub');
+  });
+  /* بالمتصفح ماكو إعلانات — نبدّلها بإعلان وهمي: 'ok' يعني كمّله، 'closed' سكّره بنصه */
+  const fakeRewardedAd = (result) => page.evaluate((result) => {
+    window.__realAdsReady = window.__realAdsReady || window.rewardedAdsReady;
+    window.__realShowRewarded = window.__realShowRewarded || window.showRewardedAd;
+    window.rewardedAdsReady = () => true;
+    window.showRewardedAd = async (token) => {
+      if (result === 'ok') { window.__adWatched = window.__adWatched || {}; window.__adWatched[token] = true; }
+      return result;
+    };
+  }, result);
+  const waitIdle = () => page.waitForFunction(() => !state.rewardBusy, null, { timeout: 15000 });
+
+  await step('المتجر للضيف: يطلب تسجيل دخول وما يعرض أشياء', async () => {
+    const r = await page.evaluate(() => {
+      state.user = null; openShop();
+      const app = document.getElementById('app');
+      return { login: !!app.querySelector('#shop-login'), cards: app.querySelectorAll('.avatar-card').length };
+    });
+    if (!r.login) throw new Error('ما طلع زر تسجيل الدخول');
+    if (r.cards) throw new Error('الضيف شاف أشياء للشراء');
+    await page.evaluate(() => goto('hub'));
+  });
+
+  await step('المتجر يعرض الرصيد والإطار و١٢ صورة، وبلا إعلانات بالمتصفح', async () => {
+    await shopUser();
+    await page.evaluate(() => openShop());
+    await page.waitForFunction(() => state.rewardState !== null);
+    const r = await page.evaluate(() => {
+      const app = document.getElementById('app');
+      return { cards: app.querySelectorAll('.avatar-card').length, head: app.querySelector('.shop-head').textContent,
+               watch: !!app.querySelector('#shop-watch'), earn: app.querySelector('.shop-earn').textContent,
+               chipOpensShop: (() => { goto('hub'); document.querySelector('.coin-chip').click(); return state.screen; })() };
+    });
+    if (r.cards !== 12) throw new Error('عدد الصور: ' + r.cards);
+    if (!r.head.includes('200')) throw new Error('الرصيد ما طلع: ' + r.head);
+    if (r.watch) throw new Error('زر الإعلان طلع بالمتصفح');
+    if (!r.earn.includes('تطبيق الموبايل')) throw new Error('ما وضّح وين تنجمع الكوينز');
+    if (r.chipOpensShop !== 'shop') throw new Error('الكوينات بالشريط العلوي ما تفتح المتجر');
+  });
+
+  await step('شراء صورة يخصم السعر ويلبسها، والمجانية تنلبس بلا خصم', async () => {
+    await page.evaluate(() => { [...document.querySelectorAll('.avatar-card')].find(c => c.textContent.includes('أسد بابل')).querySelector('button').click(); });
+    await waitIdle();
+    const r = await page.evaluate(async () => {
+      const lion = { coins: state.user.coins, avatar: state.user.avatar,
+                     header: document.querySelector('#user-box .avatar')?.textContent,
+                     label: [...document.querySelectorAll('.avatar-card')].find(c => c.textContent.includes('أسد بابل')).querySelector('button').textContent };
+      [...document.querySelectorAll('.avatar-card')].find(c => c.textContent.includes('نخلة')).querySelector('button').click();
+      await new Promise(res => { const t = setInterval(() => { if (!state.rewardBusy) { clearInterval(t); res(); } }, 50); });
+      return { lion, palm: { coins: state.user.coins, avatar: state.user.avatar } };
+    });
+    if (r.lion.coins !== 150 || r.lion.avatar !== 'avatar_lion') throw new Error('الشراء ما خصم أو ما لبس: ' + JSON.stringify(r.lion));
+    if (r.lion.header !== '🦁') throw new Error('الصورة ما طلعت بالشريط العلوي: ' + r.lion.header);
+    if (!r.lion.label.includes('لابسها')) throw new Error('الزر ما تغيّر: ' + r.lion.label);
+    if (r.palm.coins !== 150 || r.palm.avatar !== 'avatar_palm') throw new Error('المجانية خصمت أو ما انلبست: ' + JSON.stringify(r.palm));
+  });
+
+  await step('رصيد ما يكفي للإطار: رسالة واضحة وما ينخصم شي', async () => {
+    await page.evaluate(() => { window.__shop.coins = 100; state.user.coins = 100; render();
+      document.querySelector('.shop-row button').click(); });
+    await waitIdle();
+    const r = await page.evaluate(() => ({ msg: document.querySelector('.shop-msg')?.textContent, coins: window.__shop.coins, frame: state.user.frame }));
+    if (!r.msg || !r.msg.includes('ما يكفي')) throw new Error('الرسالة: ' + r.msg);
+    if (r.coins !== 100 || r.frame) throw new Error('انخصم أو انلبس الإطار');
+  });
+
+  await step('الإعلان بمكافأة: يضيف مكافأة اليوم، والإغلاق بنصه ما يضيف شي', async () => {
+    await fakeRewardedAd('closed');
+    await page.evaluate(() => render());
+    await page.evaluate(() => document.querySelector('#shop-watch').click());
+    await waitIdle();
+    const closed = await page.evaluate(() => ({ coins: window.__shop.coins, msg: state.rewardMsg }));
+    if (closed.coins !== 100 || !closed.msg.includes('سكّرت')) throw new Error('الإغلاق بنصه: ' + JSON.stringify(closed));
+
+    await fakeRewardedAd('ok');
+    await page.evaluate(() => document.querySelector('#shop-watch').click());
+    await waitIdle();
+    const ok = await page.evaluate(() => ({ coins: state.user.coins, msg: state.rewardMsg,
+                                            label: document.querySelector('#shop-watch')?.textContent,
+                                            left: document.querySelector('.shop-earn').textContent }));
+    if (ok.coins !== 140) throw new Error('مكافأة اليوم (٤٠) ما انضافت: ' + ok.coins);
+    if (!ok.msg.includes('+40')) throw new Error('الرسالة: ' + ok.msg);
+    if (!ok.label.includes('+20')) throw new Error('بعد اليومية لازم يصير +٢٠: ' + ok.label);
+    if (!ok.left.includes('باقي 4')) throw new Error('عدّاد الإعلانات ما نزل');
+  });
+
+  await step('«ضاعفها بإعلان» بنهاية اللعبة: مرة وحدة وبس إذا اللعبة ربّحت', async () => {
+    const r = await page.evaluate(async () => {
+      state.lastReward = { earned: 12, coins: 152, reason: 'OK' };
+      state.lastRewardDoubled = false; state.rewardMsg = '';
+      window.__shop.doubleAmount = 12;
+      const offer = renderDoubleOffer();
+      const before = offer && offer.querySelector('button')?.textContent;
+      offer.querySelector('button').click();
+      await new Promise(res => { const t = setInterval(() => { if (!state.rewardBusy) { clearInterval(t); res(); } }, 50); });
+      const after = renderDoubleOffer();
+      state.lastReward = { earned: 0, coins: 152, reason: 'DAILY_CAP' };
+      const none = renderDoubleOffer();
+      return { before, doubled: state.lastRewardDoubled, afterText: after && after.textContent, none: none === null };
+    });
+    if (!r.before || !r.before.includes('+12')) throw new Error('الزر ما طلع: ' + r.before);
+    if (!r.doubled || !r.afterText.includes('انضاعفت')) throw new Error('ما انضاعفت: ' + r.afterText);
+    if (!r.none) throw new Error('العرض طلع للعبة ما ربّحت');
+  });
+
+  await step('ترتيب الفرق يعرض صورة وإطار صاحب الفريق', async () => {
+    const r = await page.evaluate(() => {
+      const row = leaderboardRow({ rank: 1, handle: 'sqour', name: 'الصقور', score: 900, games: 3, answers: 10, correct: 8,
+                                   owner_key: 'k', owner_avatar: 'avatar_falcon', owner_frame: 'frame_gold' }, false);
+      const plain = leaderboardRow({ rank: 2, handle: 'aswad', name: 'الأسود', score: 800, games: 3, answers: 10, correct: 7, owner_key: 'k2' }, false);
+      const a = row.querySelector('.avatar');
+      return { emoji: a && a.textContent, gold: a && a.classList.contains('frame-gold'), plain: !!plain.querySelector('.avatar') };
+    });
+    if (r.emoji !== '🦅' || !r.gold) throw new Error('الصورة أو الإطار ما طلعوا: ' + JSON.stringify(r));
+    if (r.plain) throw new Error('فريق بلا شي طلعتله صورة');
+    await shopDone();
+  });
+
+  await step('مفاتيح إعلان المكافأة: لو بعدها _HERE الزر ما يطلع', async () => {
+    const r = await page.evaluate(() => ({ ready: rewardedAdsReady(), android: ADMOB_IDS_ANDROID.rewarded, ios: ADMOB_IDS_IOS.rewarded }));
+    if (r.ready) throw new Error('rewardedAdsReady رجعت true بالمتصفح');
+    if (!r.android || !r.ios) throw new Error('مفتاح rewarded ناقص');
   });
 
   /* الإعلانات البينية كانت مربوطة بلعبة الفئات بس. هذا فحص نصّي على

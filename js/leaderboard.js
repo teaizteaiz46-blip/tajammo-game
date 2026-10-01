@@ -322,8 +322,9 @@ function leaderboardRow(r, highlight){
   const medal = r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : r.rank;
   const mine = isMyTeamRow(r);
   const row = el(`<div class="score-row" ${highlight ? 'style="border-color:var(--gold-dim); background:rgba(212,168,87,0.10);"' : ''}>
-    <span style="display:flex; gap:10px; align-items:baseline; min-width:0;">
+    <span style="display:flex; gap:10px; align-items:center; min-width:0;">
       <b style="min-width:28px; display:inline-block;">${medal}</b>
+      ${avatarHtml(r.owner_avatar, r.owner_frame, 30)}
       <span style="min-width:0; overflow-wrap:anywhere;">
         ${escapeAttr(r.name)}
         <small style="color:var(--muted); display:block;" dir="ltr">@${escapeAttr(r.handle)}</small>
