@@ -105,6 +105,23 @@
   .ch-nav .tiny{flex:1; text-align:center;}
   .has-ch{color:var(--sage); font-size:13px;}
   .edit-ch{border:0; background:none; color:var(--gold); cursor:pointer; font-size:14px; padding:2px 6px;}
+  /* تبويب التصفح والتعديل */
+  .e-wrap{overflow-x:auto;}
+  .e-tbl{min-width:980px;}
+  .e-tbl td{vertical-align:top;}
+  .e-tbl input[type=text], .e-tbl textarea, .e-tbl select{padding:7px 9px; font-size:13px; border-radius:8px;}
+  .e-tbl textarea{min-height:56px;}
+  .e-tbl .dec input{margin-bottom:5px;}
+  .e-tbl tr.dirty td{background:rgba(212,175,95,.07);}
+  .e-tbl tr.dirty td:first-child{box-shadow:inset 3px 0 0 var(--gold);}
+  .e-tbl tr.saved td{background:rgba(122,168,116,.10);}
+  .e-media .mini{display:flex; gap:6px; align-items:center; margin-top:5px;}
+  .e-media .mini input{width:58px;}
+  .e-media img{width:70px; height:86px; object-fit:cover; border-radius:8px; display:block; margin-bottom:5px; background:var(--panel-2);}
+  .e-play{white-space:nowrap;}
+  .e-st{font-size:11px; margin-top:4px; line-height:1.5;}
+  .e-st.ok{color:var(--sage);} .e-st.err{color:#ffb2b2;}
+  .e-actions{display:flex; flex-direction:column; gap:6px;}
 </style>
 </head>
 <body>
@@ -141,6 +158,35 @@
     <div class="tabs" id="tabs">
       <button data-t="q" class="on">أسئلة وفئات</button>
       <button data-t="s">أغاني</button>
+      <button data-t="e">تصفح وتعديل</button>
+    </div>
+
+    <!-- ══════════ تبويب التصفح والتعديل ══════════
+         تختار فئة فتطلع كل أسئلتها بجدول: السؤال، الجواب، الخيارات، والمقطع أو الصورة.
+         كل خانة تنعدّل بمكانها، وزر «حفظ» لكل سطر يحفظ هذاك السطر بس. -->
+    <div class="hidden" id="tab-e">
+      <div class="card">
+        <div class="row" style="grid-template-columns:2fr 1fr 1fr 1fr; align-items:end;">
+          <div><label>الفئة</label><select id="e-topic"></select></div>
+          <div><label>النقاط</label>
+            <select id="e-pts">
+              <option value="">الكل</option><option value="100">١٠٠</option><option value="200">٢٠٠</option>
+              <option value="400">٤٠٠</option><option value="600">٦٠٠</option>
+            </select></div>
+          <div><label>بحث بالسؤال أو الجواب</label><input type="text" id="e-q" placeholder="كلمة…"></div>
+          <div><label>عرض</label>
+            <select id="e-show">
+              <option value="">كل الأسئلة</option>
+              <option value="nochoices">بلا خيارات بس</option>
+              <option value="media">بيها مقطع أو صورة بس</option>
+            </select></div>
+        </div>
+        <div class="tiny" id="e-count"></div>
+        <div class="hint">التعديل يوصل للاعبين خلال يوم على الأكثر — التطبيق يحدّث نسخته من البنك كل ٢٤ ساعة.
+          الأسطر اللي تغيّرت ولسه ما انحفظت تبين بإطار ذهبي.</div>
+      </div>
+      <div class="msg" id="e-msg"></div>
+      <div class="e-wrap"><div id="e-table"><div class="tiny">اختار فئة</div></div></div>
     </div>
 
     <div class="cols" id="tab-q">
@@ -783,7 +829,234 @@ $('tabs').addEventListener('click', e=>{
   $('tabs').querySelectorAll('button').forEach(x=>x.classList.toggle('on', x===b));
   $('tab-q').classList.toggle('hidden', b.dataset.t !== 'q');
   $('tab-s').classList.toggle('hidden', b.dataset.t !== 's');
+  $('tab-e').classList.toggle('hidden', b.dataset.t !== 'e');
   if(b.dataset.t === 's') fillSongTopics();
+  if(b.dataset.t === 'e') fillEditTopics();
+});
+
+/* ═════════ تبويب التصفح والتعديل ═════════ */
+let eRows = [];              // أسئلة الفئة المختارة كما بقاعدة البيانات
+let eAudio = null, eStop = null;
+
+function fillEditTopics(){
+  const sel = $('e-topic');
+  const keep = sel.value;
+  sel.innerHTML = '<option value="">— اختار فئة —</option>'
+    + topics.map(t => `<option value="${esc(t.topic)}">${esc(t.topic)} (${arNum(t.total)})</option>`).join('');
+  if(keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+
+async function loadEditRows(){
+  const topic = $('e-topic').value;
+  say($('e-msg'), '', '');
+  if(!topic){ eRows = []; $('e-table').innerHTML = '<div class="tiny">اختار فئة</div>'; $('e-count').textContent = ''; return; }
+  $('e-table').innerHTML = '<div class="spin">…</div>';
+  const { data, error } = await sb.from('category_questions')
+    .select('id,points,question,answer,media_type,image,clip_start,clip_seconds,media_credit,category_question_choices(decoys)')
+    .eq('topic', topic).order('points').order('id').range(0, 1999);
+  if(error){ $('e-table').innerHTML = '<div class="msg err">' + esc(error.message) + '</div>'; return; }
+  eRows = data || [];
+  renderEditRows();
+}
+
+function eVisibleRows(){
+  const pts = $('e-pts').value, q = normalizeArabic($('e-q').value), show = $('e-show').value;
+  return eRows.filter(r =>
+    (!pts || String(r.points) === pts) &&
+    (!q || normalizeArabic(r.question + ' ' + r.answer).indexOf(q) !== -1) &&
+    (show !== 'nochoices' || !choicesOf(r)) &&
+    (show !== 'media' || r.media_type === 'song' || r.media_type === 'photo'));
+}
+
+function eMediaCell(r){
+  if(r.media_type === 'song') return `<div class="e-media">
+      <span class="tag">🎵 مقطع</span>
+      <input type="text" data-f="image" value="${esc(r.image)}" title="كلمة البحث بمتجر آبل (اسم الأغنية + المطرب)" style="margin-top:5px;">
+      <div class="mini">
+        <label style="margin:0;">يبدي</label><input type="text" inputmode="numeric" data-f="clip_start" value="${esc(r.clip_start)}">
+        <label style="margin:0;">يستمر</label><input type="text" inputmode="numeric" data-f="clip_seconds" value="${esc(r.clip_seconds)}">
+      </div>
+      <div class="mini">
+        <button class="btn btn-gold btn-sm e-play" data-act="play">▶ سمّع</button>
+        <button class="btn btn-ghost btn-sm" data-act="stop">■</button>
+      </div>
+      <div class="e-st" data-st></div>
+    </div>`;
+  if(r.media_type === 'photo') return `<div class="e-media">
+      <img src="${esc(r.image)}" alt="" onerror="this.style.opacity=.2">
+      <input type="text" data-f="image" value="${esc(r.image)}" dir="ltr" title="رابط الصورة من upload.wikimedia.org">
+      <input type="text" data-f="media_credit" value="${esc(r.media_credit)}" title="سطر النسبة: المصور + الرخصة" style="margin-top:5px;">
+    </div>`;
+  if(r.media_type) return `<span class="tag">${esc(r.media_type)}</span>`;
+  return '<span class="tiny">—</span>';
+}
+
+function renderEditRows(){
+  stopEditAudio();
+  const rows = eVisibleRows();
+  $('e-count').textContent = arNum(rows.length) + ' من ' + arNum(eRows.length) + ' سؤال'
+    + ' · بلا خيارات: ' + arNum(eRows.filter(r => !choicesOf(r)).length);
+  if(!rows.length){ $('e-table').innerHTML = '<div class="tiny">ماكو أسئلة تطابق الفلتر</div>'; return; }
+
+  $('e-table').innerHTML = '<table class="e-tbl"><thead><tr>'
+    + '<th style="width:70px;">النقاط</th><th style="width:28%;">السؤال</th><th style="width:18%;">الجواب</th>'
+    + '<th style="width:20%;">الخيارات الغلط</th><th style="width:170px;">مقطع / صورة</th><th style="width:84px;"></th>'
+    + '</tr></thead><tbody>'
+    + rows.map(eRowHtml).join('') + '</tbody></table>';
+}
+
+function eRowHtml(r){
+        const d = choicesOf(r) || [];
+        return `<tr data-id="${r.id}">
+          <td><select data-f="points">${[100,200,400,600].map(p => `<option value="${p}" ${r.points === p ? 'selected' : ''}>${arNum(p)}</option>`).join('')}</select>
+              <div class="tiny" style="margin-top:4px;">#${r.id}</div></td>
+          <td><textarea data-f="question">${esc(r.question)}</textarea></td>
+          <td><textarea data-f="answer">${esc(r.answer)}</textarea></td>
+          <td class="dec">${[0,1,2].map(i => `<input type="text" data-d="${i}" value="${esc(d[i] || '')}" placeholder="${i === 2 ? 'خيار ٣ (اختياري)' : 'خيار ' + arNum(i + 1)}">`).join('')}</td>
+          <td>${eMediaCell(r)}</td>
+          <td><div class="e-actions">
+            <button class="btn btn-gold btn-sm" data-act="save" disabled>حفظ</button>
+            <button class="btn btn-ghost btn-sm" data-act="undo" disabled>تراجع</button>
+          </div></td>
+        </tr>`;
+}
+
+function eRowOf(tr){ return eRows.find(r => r.id === +tr.dataset.id); }
+
+/* شنو مكتوب هسه بالسطر */
+function eReadRow(tr){
+  const v = {};
+  tr.querySelectorAll('[data-f]').forEach(x => { v[x.dataset.f] = x.value; });
+  v.decoys = [...tr.querySelectorAll('[data-d]')].map(x => x.value.trim().replace(/\s+/g, ' ')).filter(Boolean);
+  return v;
+}
+
+function eIsDirty(tr){
+  const r = eRowOf(tr), v = eReadRow(tr);
+  if(String(r.points) !== v.points || r.question !== v.question || r.answer !== v.answer) return true;
+  if('image' in v && (r.image || '') !== v.image) return true;
+  if('media_credit' in v && (r.media_credit || '') !== v.media_credit) return true;
+  if('clip_start' in v && String(r.clip_start) !== v.clip_start) return true;
+  if('clip_seconds' in v && String(r.clip_seconds) !== v.clip_seconds) return true;
+  return (choicesOf(r) || []).join('|') !== v.decoys.join('|');
+}
+
+function eMark(tr){
+  const dirty = eIsDirty(tr);
+  tr.classList.toggle('dirty', dirty);
+  tr.classList.remove('saved');
+  tr.querySelector('[data-act=save]').disabled = !dirty;
+  tr.querySelector('[data-act=undo]').disabled = !dirty;
+}
+
+async function eSave(tr){
+  const r = eRowOf(tr), v = eReadRow(tr);
+  const msg = $('e-msg');
+  const q = v.question.trim(), a = v.answer.trim();
+  if(!q || !a) return say(msg, 'السؤال والجواب ما يصير يكونون فاضيين (#' + r.id + ').', 'err');
+
+  // الخيارات: نفس فحص بطاقة الخيارات
+  if(v.decoys.length === 1) return say(msg, 'الخيارات: اكتب خيارين غلط على الأقل، أو امسحها كلها (#' + r.id + ').', 'err');
+  if(v.decoys.length && new Set(v.decoys.map(chNorm)).size !== v.decoys.length)
+    return say(msg, 'أكو خيارين نفس الشي (#' + r.id + ').', 'err');
+  const same = v.decoys.find(x => answerParts(a).includes(chNorm(x)));
+  if(same) return say(msg, '«' + same + '» هو نفسه الجواب الصح — الخيارات لازم تكون غلط (#' + r.id + ').', 'err');
+
+  const upd = { points: +v.points, question: q, answer: a };
+  if('image' in v){
+    upd.image = r.media_type === 'photo' ? commonsImageUrl(v.image.trim()) : v.image.trim();
+    if(!upd.image) return say(msg, (r.media_type === 'song' ? 'كلمة بحث المقطع' : 'رابط الصورة') + ' فاضي (#' + r.id + ').', 'err');
+  }
+  if('media_credit' in v){
+    upd.media_credit = v.media_credit.trim();
+    if(!upd.media_credit) return say(msg, 'سطر نسبة الصورة إلزامي (#' + r.id + ').', 'err');
+  }
+  if('clip_start' in v){
+    const st = parseInt(v.clip_start, 10), ln = parseInt(v.clip_seconds, 10);
+    if(!(st >= 0 && st <= 29) || !(ln >= 3 && ln <= 30))
+      return say(msg, 'المقطع: البداية من ٠ لـ٢٩، والمدة من ٣ لـ٣٠ ثانية (#' + r.id + ').', 'err');
+    upd.clip_start = st; upd.clip_seconds = ln;
+  }
+
+  tr.querySelector('[data-act=save]').disabled = true;
+  say(msg, 'جاري الحفظ…', 'warn');
+  const { error } = await sb.from('category_questions').update(upd).eq('id', r.id);
+  if(error){ eMark(tr); return say(msg, error.code === '42501' ? 'قاعدة البيانات رفضت — هذا الحساب مو مشرف.' : 'تعذّر الحفظ: ' + error.message, 'err'); }
+
+  const hadChoices = !!choicesOf(r);
+  const ch = v.decoys.length
+    ? await sb.from('category_question_choices').upsert({ question_id: r.id, decoys: v.decoys }, { onConflict: 'question_id' })
+    : hadChoices ? await sb.from('category_question_choices').delete().eq('question_id', r.id) : { error: null };
+  if(ch.error){ eMark(tr); return say(msg, 'السؤال انحفظ، بس الخيارات ما انحفظت: ' + ch.error.message, 'err'); }
+
+  Object.assign(r, upd, { category_question_choices: v.decoys.length ? { decoys: v.decoys } : null });
+  tr.querySelectorAll('[data-f=image]').forEach(x => { x.value = upd.image; });
+  const img = tr.querySelector('.e-media img'); if(img) img.src = upd.image;
+  eMark(tr);
+  tr.classList.add('saved');
+  say(msg, '✓ انحفظ السؤال #' + r.id, 'ok');
+  $('e-count').textContent = $('e-count').textContent.replace(/بلا خيارات: .*/, 'بلا خيارات: ' + arNum(eRows.filter(x => !choicesOf(x)).length));
+}
+
+function stopEditAudio(){
+  clearTimeout(eStop);
+  if(eAudio){ eAudio.pause(); eAudio = null; }
+}
+
+/* نفس طريقة اللعبة بالضبط: نبحث بكلمة الصورة (limit=5) ونختار نسخة المطرب
+   اللي بالجواب «الأغنية - المطرب»، ونشغّل من البداية للمدة المكتوبة */
+async function ePlay(tr){
+  const v = eReadRow(tr), st = tr.querySelector('[data-st]');
+  stopEditAudio();
+  st.className = 'e-st'; st.textContent = '…جاري البحث';
+  try{
+    const dash = v.answer.lastIndexOf(' - ');
+    const artist = dash > -1 ? v.answer.slice(dash + 3) : '';
+    const res = (await itunes(v.image, { limit: '5' })).filter(x => x.previewUrl);
+    const track = (artist && res.find(x => artistLooksRight(artist, x.artistName))) || res[0];
+    if(!track){ st.className = 'e-st err'; st.textContent = 'ماكو مقطع — باللعبة يتحوّل لسؤال نصي'; return; }
+    const start = Math.max(0, parseInt(v.clip_start, 10) || 0);
+    const secs = Math.min(30, Math.max(3, parseInt(v.clip_seconds, 10) || 10));
+    eAudio = new Audio(track.previewUrl);
+    eAudio.addEventListener('loadedmetadata', ()=>{
+      try{ eAudio.currentTime = (eAudio.duration && start >= eAudio.duration) ? 0 : start; }catch(e){}
+    }, { once: true });
+    await eAudio.play();
+    eStop = setTimeout(stopEditAudio, secs * 1000);
+    const ok = !artist || artistLooksRight(artist, track.artistName);
+    st.className = 'e-st ' + (ok ? 'ok' : 'err');
+    st.textContent = (ok ? '▶ ' : '⚠ مطرب ثاني: ') + track.trackName + ' — ' + track.artistName;
+  }catch(e){
+    st.className = 'e-st err'; st.textContent = 'تعذّر التشغيل: ' + e.message;
+  }
+}
+
+/* الفلتر والفئة يعيدون رسم الجدول — فنسأل قبل ما تضيع تعديلات ما انحفظت */
+function eKeepEdits(){
+  return !document.querySelector('.e-tbl tr.dirty') || confirm('أكو أسطر تعدّلت وما انحفظت — راح تضيع. تكمل؟');
+}
+let eLastTopic = '';
+$('e-topic').addEventListener('change', ()=>{
+  if(!eKeepEdits()){ $('e-topic').value = eLastTopic; return; }
+  eLastTopic = $('e-topic').value;
+  loadEditRows();
+});
+['e-pts', 'e-show'].forEach(id => $(id).addEventListener('change', ()=>{ if(eKeepEdits()) renderEditRows(); }));
+$('e-q').addEventListener('input', ()=>{ if(!document.querySelector('.e-tbl tr.dirty')) renderEditRows(); });
+$('e-q').addEventListener('change', ()=>{ if(eKeepEdits()) renderEditRows(); });
+$('e-table').addEventListener('input', e => { const tr = e.target.closest('tr[data-id]'); if(tr) eMark(tr); });
+$('e-table').addEventListener('change', e => { const tr = e.target.closest('tr[data-id]'); if(tr) eMark(tr); });
+$('e-table').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if(!b) return;
+  const tr = b.closest('tr[data-id]');
+  if(b.dataset.act === 'save') eSave(tr);
+  if(b.dataset.act === 'play') ePlay(tr);
+  if(b.dataset.act === 'stop') stopEditAudio();
+  if(b.dataset.act === 'undo') tr.outerHTML = eRowHtml(eRowOf(tr));   // السطر هذا بس — باقي التعديلات تبقى
+});
+/* لا تطلع من الصفحة وأكو تعديلات ما انحفظت */
+window.addEventListener('beforeunload', e => {
+  if(document.querySelector('.e-tbl tr.dirty')){ e.preventDefault(); e.returnValue = ''; }
 });
 
 function fillSongTopics(){
