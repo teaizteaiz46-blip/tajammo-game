@@ -2740,6 +2740,20 @@ const CANNED_BANK = (() => {
     await page.evaluate(() => { window.__packUnlocked = null; state.activePacks = {}; state.packMode = {}; });
   });
 
+  await step('٧ ضغطات على الشعار تشغّل وتطفّي وضع التجربة للإعلانات', async () => {
+    const tap7 = () => page.evaluate(() => { for (let i = 0; i < 7; i++) document.querySelector('.brand').click(); });
+    await page.evaluate(() => { try { localStorage.removeItem('tajammo.adTestMode'); } catch (e) {} goto('hub'); });
+    const few = await page.evaluate(() => { for (let i = 0; i < 6; i++) document.querySelector('.brand').click(); return adTestMode(); });
+    await page.waitForTimeout(4100);                 // الضغطات القديمة تنتهي
+    await tap7();
+    const on = await page.evaluate(() => ({ mode: adTestMode(), badge: !!document.querySelector('.brand .test-badge') }));
+    await tap7();
+    const off = await page.evaluate(() => ({ mode: adTestMode(), badge: !!document.querySelector('.brand .test-badge') }));
+    if (few) throw new Error('٦ ضغطات شغّلته');
+    if (!on.mode || !on.badge) throw new Error('ما اشتغل: ' + JSON.stringify(on));
+    if (off.mode || off.badge) throw new Error('ما انطفى: ' + JSON.stringify(off));
+  });
+
   await step('مفاتيح إعلان المكافأة: لو بعدها _HERE الزر ما يطلع', async () => {
     const r = await page.evaluate(() => ({ ready: rewardedAdsReady(), android: ADMOB_IDS_ANDROID.rewarded, ios: ADMOB_IDS_IOS.rewarded }));
     if (r.ready) throw new Error('rewardedAdsReady رجعت true بالمتصفح');

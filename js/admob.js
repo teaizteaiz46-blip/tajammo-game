@@ -32,6 +32,23 @@ function adIdsReady(){
 
 let admobReady = false;
 
+/* وضع التجربة — لجهاز صاحب التطبيق: الإعلانات تصير إعلانات تجربة من كوكل
+   (isTesting) وما تنحسب، فيجرّب براحته بلا ما يسجّل الجهاز بـAdMob.
+   ينفتح وينسد بـ٧ ضغطات على شعار «تجمّع» (render-core.js). */
+const AD_TEST_KEY = 'tajammo.adTestMode';
+function adTestMode(){
+  try{ return localStorage.getItem(AD_TEST_KEY) === '1'; }catch(e){ return false; }
+}
+function toggleAdTestMode(){
+  const on = !adTestMode();
+  try{ on ? localStorage.setItem(AD_TEST_KEY, '1') : localStorage.removeItem(AD_TEST_KEY); }catch(e){}
+  /* البانر الحالي انحمّل بالوضع القديم — نعيده */
+  if(admobReady){
+    try{ window.Capacitor.Plugins.AdMob.removeBanner().then(()=> showBannerAd()).catch(()=>{}); }catch(e){}
+  }
+  return on;
+}
+
 function isNativeApp(){
   return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 }
@@ -124,6 +141,7 @@ async function showBannerAd(){
     const { AdMob, BannerAdPosition, BannerAdSize } = window.Capacitor.Plugins;
     await AdMob.showBanner({
       adId: adIds().banner,
+      isTesting: adTestMode(),
       adSize: BannerAdSize.ADAPTIVE_BANNER,
       position: BannerAdPosition.BOTTOM_CENTER,
       margin: 0
@@ -135,7 +153,7 @@ async function showInterstitialAd(){
   if(!admobReady) return;
   try{
     const { AdMob } = window.Capacitor.Plugins;
-    await AdMob.prepareInterstitial({ adId: adIds().interstitial });
+    await AdMob.prepareInterstitial({ adId: adIds().interstitial, isTesting: adTestMode() });
     await AdMob.showInterstitial();
   }catch(e){ console.warn('تعذّر عرض الإعلان البيني', e); }
 }
@@ -173,7 +191,7 @@ function showRewardedAd(token){
         setTimeout(()=> finish(rewarded ? 'ok' : 'closed'), 400);
       }));
       handles.push(await AdMob.addListener('onRewardedVideoAdFailedToShow', ()=> finish('nofill')));
-      await AdMob.prepareRewardVideoAd({ adId: adIds().rewarded, ssv: { customData: token } });
+      await AdMob.prepareRewardVideoAd({ adId: adIds().rewarded, isTesting: adTestMode(), ssv: { customData: token } });
       AdMob.showRewardVideoAd().then(()=>{ rewarded = true; }).catch(()=> finish('nofill'));
     }catch(e){
       console.warn('تعذّر تحميل إعلان المكافأة', e);

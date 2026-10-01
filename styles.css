@@ -622,6 +622,7 @@
     display:flex; align-items:center; justify-content:center; font-size:24px;
   }
   .brand-mark{ font-size:15px; line-height:1; }
+  .test-badge{ font-size:11px; font-weight:700; color:var(--rose); border:1px solid var(--rose-dim); border-radius:999px; padding:1px 7px; margin-inline-start:6px; }
   .pack-picker{ padding:14px 16px; }
   .pack-locked{
     display:flex; flex-direction:column; gap:3px; width:100%; margin:0 0 16px;

@@ -82,15 +82,27 @@ function renderScreen(){
   }
 }
 
+let brandTaps = [];
 function renderTopbar(){
   const bar = el(`<div class="topbar">
     <button class="btn btn-ghost btn-sm" id="back-arrow" style="display:${state.history.length?'inline-flex':'none'};">→ رجوع</button>
-    <div class="brand">${brandMarkHtml()} تجمّع</div>
+    <div class="brand">${brandMarkHtml()} تجمّع${adTestMode() ? ' <span class="test-badge">🧪 إعلانات تجربة</span>' : ''}</div>
     <div class="topbar-right" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
       <div class="crumb"></div>
     </div>
   </div>`);
   bar.querySelector('.brand').addEventListener('click', ()=>{
+    /* ٧ ضغطات خلال ٤ ثواني = وضع التجربة للإعلانات (شوف admob.js) */
+    const now = Date.now();
+    brandTaps = brandTaps.filter(t => now - t < 4000).concat(now);
+    if(brandTaps.length >= 7){
+      brandTaps = [];
+      const on = toggleAdTestMode();
+      alert(on ? '🧪 وضع التجربة شغّال على هذا الموبايل: كل الإعلانات صارت إعلانات تجربة وما تنحسب. إعلان المكافأة يطلع بس الكوينز ما تنضاف.'
+               : 'وضع التجربة انطفى — الإعلانات رجعت طبيعية.');
+      render();
+      return;
+    }
     stopTimer();
     stopWhoamiTimer();
     stopSpyTimer();

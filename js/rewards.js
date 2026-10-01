@@ -209,6 +209,8 @@ async function watchRewardAd(kind){
     const result = await showRewardedAd(data.token);
     if(result === 'nofill'){ state.rewardMsg = 'ماكو إعلان متوفر هسه — جرّب بعد شوية.'; return; }
     if(result === 'closed'){ state.rewardMsg = 'سكّرت الإعلان قبل ما يخلص، فما انضافت كوينز.'; return; }
+    // إعلانات التجربة ما تبلّغ السيرفر، فما ننتظر شي ما راح يجي
+    if(adTestMode()){ state.rewardMsg = '🧪 وضع التجربة: الإعلان اشتغل، بس الكوينز ما تنضاف بإعلانات التجربة.'; return; }
 
     state.rewardMsg = '...جاري إضافة الكوينز';
     render();
