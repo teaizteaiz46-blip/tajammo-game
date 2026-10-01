@@ -9,12 +9,12 @@
 const ADMOB_IDS_ANDROID = {
   banner: 'ca-app-pub-4662085630111714/7304234310',
   interstitial: 'ca-app-pub-4662085630111714/4127406637',
-  rewarded: 'ca-app-pub-4662085630111714/REWARDED_ANDROID_HERE'
+  rewarded: 'ca-app-pub-4662085630111714/4116153564'
 };
 const ADMOB_IDS_IOS = {
   banner: 'ca-app-pub-4662085630111714/7001331037',
   interstitial: 'ca-app-pub-4662085630111714/1563715255',
-  rewarded: 'ca-app-pub-4662085630111714/REWARDED_IOS_HERE'
+  rewarded: 'ca-app-pub-4662085630111714/4850650739'
 };
 
 function currentPlatform(){
