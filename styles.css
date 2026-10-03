@@ -653,6 +653,26 @@
     display:flex; align-items:center; justify-content:center; font-size:24px;
   }
   .brand-mark{ font-size:15px; line-height:1; }
+
+  /* «لاحظت غلط؟» — زر هادئ أسفل نافذة السؤال، ونافذة البلاغ والملاحظة الأولى */
+  .q-feedback{
+    display:block; margin:16px auto 0; padding:6px 14px; cursor:pointer;
+    background:none; border:1px dashed var(--line); border-radius:999px;
+    color:var(--muted); font:inherit; font-size:12.5px;
+  }
+  .q-feedback:hover{ border-color:var(--gold-dim); color:var(--ivory); }
+  .fb-intro, .fb-modal{ max-width:420px; }
+  .fb-intro{ text-align:center; }
+  .fb-intro p{ color:var(--muted); line-height:1.9; margin:0 0 12px; }
+  .fb-intro-icon{ font-size:40px; margin-bottom:6px; }
+  .fb-chip{ display:inline-block; padding:1px 9px; border-radius:999px; border:1px dashed var(--gold-dim); color:var(--ivory); font-weight:700; white-space:nowrap; }
+  .fb-thanks{ color:var(--gold) !important; font-weight:700; }
+  .fb-q{ background:var(--bg-2); border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin:0 0 14px; font-size:14px; line-height:1.7; }
+  .fb-q-topic{ font-size:11.5px; color:var(--muted); }
+  .fb-q-a{ color:var(--sage); font-weight:700; font-size:13px; margin-top:2px; }
+  .fb-reasons{ display:flex; flex-wrap:wrap; gap:6px; }
+  .fb-modal textarea{ width:100%; box-sizing:border-box; padding:10px 12px; border-radius:12px; border:1px solid var(--line);
+    background:var(--bg-2); color:var(--ivory); font:inherit; font-size:14px; resize:vertical; }
   .test-badge{ font-size:11px; font-weight:700; color:var(--rose); border:1px solid var(--rose-dim); border-radius:999px; padding:1px 7px; margin-inline-start:6px; }
   .pack-picker{ padding:14px 16px; }
   .pack-locked{

@@ -32,6 +32,12 @@ function render(){
   if(state.customShareCode){
     app.appendChild(renderShareCodeOverlay());
   }
+  if(state.showFeedbackIntro){
+    app.appendChild(renderFeedbackIntro());
+  }
+  if(state.feedbackQ){
+    app.appendChild(renderQuestionFeedbackOverlay());
+  }
   if(state.reportTopic){
     app.appendChild(renderReportOverlay());
   }

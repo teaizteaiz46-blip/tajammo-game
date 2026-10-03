@@ -324,7 +324,7 @@ function renderCategorySetup(){
     <button class="btn btn-gold" id="setup-start" ${ready ? '' : 'disabled'}>ابدأ اللعبة</button>
     <button class="btn btn-ghost" id="setup-back">رجوع</button>
   </div>`);
-  actions.querySelector('#setup-start').addEventListener('click', startCategoryGame);
+  actions.querySelector('#setup-start').addEventListener('click', startCategoryGameWithIntro);   // أول مرة: ملاحظة «ساعدنا نطوّر اللعبة»
   actions.querySelector('#setup-back').addEventListener('click', ()=> goto('hub'));
   wrap.appendChild(actions);
 

@@ -505,7 +505,12 @@ function renderQuestionOverlay(){
                   <button class="btn btn-gold" id="reveal">${q.mediaType==='acting' ? '🎭 إظهار الكلمة' : 'إظهار الإجابة'}</button>
       </div>
     `}
+    ${topic.bankKey && q.bankId ? `<button class="q-feedback" id="q-feedback" type="button">✏️ لاحظت غلط؟</button>` : ''}
   </div>`);
+
+  /* أسئلة البنك بس — الفئات الخاصة عدها ⚑ بلّغ، وأصحابها هم اللي يصلحونها */
+  const fbBtn = modal.querySelector('#q-feedback');
+  if(fbBtn) fbBtn.addEventListener('click', ()=> openQuestionFeedback(topic, q));
 
   /* الصورة تنزل من الإنترنت وقت اللعب. لو ما وصلت (نت مقطوع، أو الرابط
      انكسر من المصدر)، نشيل مكانها ونشيل سطر النسبة وياها — السؤال يبقى

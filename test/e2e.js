@@ -161,6 +161,10 @@ window.supabase = {
             return { data: { ok: true }, error: null };
           }
         }
+        if(name === 'submit_question_feedback'){
+          window.__feedback = (window.__feedback || []).concat([params]);
+          return { data: { ok: true, already: false }, error: null };
+        }
         if(name === 'report_team'){
           window.__teamReports = window.__teamReports || [];
           window.__teamReports.push(params);
@@ -322,6 +326,9 @@ const CANNED_BANK = (() => {
   };
 
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+  /* ملاحظة «ساعدنا نطوّر اللعبة» تطلع أول مرة بس — نعتبرها انشافت حتى ما
+     توقّف الاختبارات اللي تضغط «ابدأ اللعبة»، وإلها اختبار لحالها */
+  await page.evaluate(() => { try { localStorage.setItem('tajammo.feedbackIntroSeen', '1'); } catch (e) {} });
 
   console.log('\nالأساسيات');
   await step('الصفحة تفتح والهب يظهر', async () => {
@@ -1700,6 +1707,74 @@ const CANNED_BANK = (() => {
     });
     await page.waitForSelector('.help-wrap, .q-modal', { timeout: 8000 });
   };
+
+  console.log('\n«لاحظت غلط؟» — ملاحظات اللاعبين على الأسئلة');
+  await step('زر «لاحظت غلط؟» بأسئلة البنك، ويرسل رقم السؤال والسبب والملاحظة', async () => {
+    await openFirstQuestion();
+    const r = await page.evaluate(async () => {
+      window.__feedback = [];
+      const t = state.pool.find(x => x.id === state.activeCell.topicId);
+      const q = t.questions.find(x => x.id === state.activeCell.qId);
+      q.bankId = q.bankId || 4242;            // بنك الاختبار بلا أرقام صفوف — بالحقيقي كل سؤال عنده id
+      render();
+      const btn = document.querySelector('#q-feedback');
+      if (!btn) return { btn: false };
+      btn.click();
+      const shown = document.querySelector('.fb-q')?.textContent || '';
+      document.querySelector('#fb-send').click();                     // بلا سبب ← رسالة
+      const noReason = document.querySelector('.fb-modal')?.textContent.includes('اختار شنو الغلط');
+      document.querySelector('[data-r="wrong_answer"]').click();
+      const note = document.querySelector('#fb-note');
+      note.value = 'الصح هو كذا'; note.dispatchEvent(new Event('input'));
+      document.querySelector('#fb-send').click();
+      await new Promise(res => setTimeout(res, 50));
+      const done = document.querySelector('.fb-modal')?.textContent.includes('شكراً');
+      document.querySelector('#fb-close').click();
+      return { btn: true, shown, noReason, sent: window.__feedback, bankId: q.bankId, done,
+               back: !!document.querySelector('.q-modal') && !state.feedbackQ };
+    });
+    if (!r.btn) throw new Error('الزر ما طلع بسؤال من البنك');
+    if (!r.noReason) throw new Error('انرسل بلا ما يختار السبب');
+    if (r.sent.length !== 1) throw new Error('عدد البلاغات: ' + r.sent.length);
+    const p = r.sent[0];
+    if (p.p_question_id !== r.bankId || p.p_reason !== 'wrong_answer' || p.p_note !== 'الصح هو كذا')
+      throw new Error('البلاغ غلط: ' + JSON.stringify(p));
+    if (!r.done || !r.back) throw new Error('ما رجع للسؤال بعد الشكر');
+  });
+
+  await step('«لاحظت غلط؟» ما يطلع بالفئات الخاصة (عدها ⚑ بلّغ)', async () => {
+    const r = await page.evaluate(() => {
+      const t = makeCustomTopicFromData('فئتي', [{ question: 'س', answer: 'ج', points: 100 }], 'ABC123', 'k', 'أمير');
+      t.taken = true; t.takenBy = 0;
+      state.pool.push(t); state.selectedTopicIds.push(t.id);
+      state.activeCell = { topicId: t.id, qId: t.questions[0].id }; render();
+      const has = !!document.querySelector('#q-feedback');
+      state.activeCell = null; render();
+      return has;
+    });
+    if (r) throw new Error('الزر طلع بفئة خاصة');
+  });
+
+  await step('ملاحظة «ساعدنا نطوّر اللعبة» تطلع أول مرة بس قبل اللعبة', async () => {
+    const r = await page.evaluate(() => {
+      localStorage.removeItem('tajammo.feedbackIntroSeen');
+      window.setupReady = window.setupReady;          // نستعمل الأصلية
+      const realReady = window.setupReady, realStart = window.startCategoryGame;
+      let started = 0;
+      window.setupReady = () => true; window.startCategoryGame = () => { started++; };
+      startCategoryGameWithIntro();
+      const first = { intro: !!document.querySelector('.fb-intro'), started };
+      document.querySelector('#fb-intro-go').click();
+      const afterGo = { intro: !!document.querySelector('.fb-intro'), started, seen: localStorage.getItem('tajammo.feedbackIntroSeen') };
+      startCategoryGameWithIntro();
+      const second = { intro: !!document.querySelector('.fb-intro'), started };
+      window.setupReady = realReady; window.startCategoryGame = realStart;
+      return { first, afterGo, second };
+    });
+    if (!r.first.intro || r.first.started) throw new Error('أول مرة: ' + JSON.stringify(r.first));
+    if (r.afterGo.intro || r.afterGo.started !== 1 || r.afterGo.seen !== '1') throw new Error('بعد «يلا نلعب»: ' + JSON.stringify(r.afterGo));
+    if (r.second.intro || r.second.started !== 2) throw new Error('ثاني مرة طلعت: ' + JSON.stringify(r.second));
+  });
 
   /* «خيارات» تطلع بس للسؤال اللي عنده خيارات مكتوبة بالجدول */
   await step('«خيارات» تطلع بس للسؤال اللي عنده خيارات بالجدول', async () => {

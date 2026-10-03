@@ -39,6 +39,9 @@ const state = {
 
   // الإشراف على المحتوى (متطلبات سياسة Google للـ UGC)
   reportTopic: null,
+  // «لاحظت غلط؟» على أسئلة البنك (js/question-feedback.js)
+  showFeedbackIntro: false,
+  feedbackQ: null, feedbackReason: '', feedbackNote: '', feedbackError: '', feedbackDone: false, feedbackBusy: false,
   reportReason: '',
   reportNote: '',
   reportBusy: false,
