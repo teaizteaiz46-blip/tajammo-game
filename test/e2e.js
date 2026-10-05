@@ -2576,17 +2576,53 @@ const CANNED_BANK = (() => {
       try {
         const ov = renderQuestionOverlay();
         const img = ov.querySelector('.q-photo img');
-        img.dispatchEvent(new Event('error'));
+        img.dispatchEvent(new Event('error'));          // الأولى ← محاولة ثانية
+        const afterFirst = !!ov.querySelector('.q-photo');
+        img.dispatchEvent(new Event('error'));          // الثانية ← ماكو بديل هنا فتنشال
+        if (!afterFirst) return { photo: 'removed-too-early' };
         return { photo: !!ov.querySelector('.q-photo'),
                  credit: !!ov.querySelector('.q-credit'),
                  text: !!ov.querySelector('.q-text'),
                  reveal: !!ov.querySelector('#reveal') };
       } finally { state.pool = savedPool; state.activeCell = savedCell; }
     });
+    if (r.photo === 'removed-too-early') throw new Error('الصورة انشالت قبل المحاولة الثانية');
     if (r.photo) throw new Error('الصورة المكسورة ظلت بالنافذة');
     if (r.credit) throw new Error('سطر النسبة ظل بلا صورة');
     if (!r.text) throw new Error('نص السؤال انشال وياها');
     if (!r.reveal) throw new Error('زر إظهار الإجابة انشال');
+  });
+
+  await step('صورة ما تحمّلت مرتين: السؤال يتبدّل بسؤال بلا صورة، بلا ما تنحرق مساعدة', async () => {
+    const r = await page.evaluate(() => {
+      const key = 'خلط تجريبي';
+      CATEGORY_DATA[key] = { 100: [
+        { bankId: 501, text: 'منو هذا اللاعب؟', answer: 'لاعب', image: 'https://example.test/missing.png', mediaType: 'photo', credit: 'ك' },
+        { bankId: 502, text: 'سؤال نصي بديل', answer: 'جواب بديل', image: null, mediaType: null, decoys: ['أ', 'ب'] }
+      ] };
+      const q = { id: 9901, points: 100, bankId: 501, text: 'منو هذا اللاعب؟', answer: 'لاعب', image: 'https://example.test/missing.png', mediaType: 'photo', credit: 'ك' };
+      const topic = { id: 903, name: key, bankKey: key, questions: [q], taken: true, takenBy: 0 };
+      const savedPool = state.pool, savedCell = state.activeCell, savedScreen = state.screen;
+      state.pool = [topic]; state.selectedTopicIds = [903];
+      state.activeCell = { topicId: 903, qId: 9901 }; state.screen = 'board';
+      resetTeamHelps();
+      try {
+        render();
+        const img = document.querySelector('.q-photo img');
+        img.dispatchEvent(new Event('error'));
+        img.dispatchEvent(new Event('error'));
+        return { text: document.querySelector('.q-text')?.textContent, photo: !!document.querySelector('.q-photo'),
+                 note: !!document.querySelector('.q-swapped-note'), bankId: q.bankId, decoys: q.decoys,
+                 helpsUsed: Object.keys(state.teams[0].usedHelps || {}).length };
+      } finally {
+        delete CATEGORY_DATA[key];
+        state.pool = savedPool; state.activeCell = savedCell; state.screen = savedScreen; render();
+      }
+    });
+    if (r.text !== 'سؤال نصي بديل' || r.photo || r.bankId !== 502) throw new Error('ما تبدّل: ' + JSON.stringify(r));
+    if (!r.note) throw new Error('ما وضّح للاعبين ليش تبدّل');
+    if (!r.decoys || r.decoys.length !== 2) throw new Error('خيارات البديل ما وصلت');
+    if (r.helpsUsed) throw new Error('انحسبت مساعدة على الفريق');
   });
 
   /* ───────── متجر الكوينز والإعلان بمكافأة ───────── */

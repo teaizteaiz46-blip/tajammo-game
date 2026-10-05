@@ -280,6 +280,7 @@
                   من <b>commons.wikimedia.org</b> بس — كل شي هناك مرخّص بحرية.
                   افتح صفحة الصورة ← كليك يمين على الصورة ← Copy image address.
                   الرابط لازم يبدي بـ<code>upload.wikimedia.org</code>، مو رابط الصفحة.
+                  وقت الحفظ تنسخ الصورة لسيرفرنا تلقائياً — التطبيق يعرض نسختنا.
                 </div>
               </div>
             </div>
@@ -640,6 +641,20 @@ preview();
 /* ═════════ الحفظ ═════════ */
 // كومنز صار ينطي روابط thumb.wikimedia.org مع ?utm_… — نرجّعها لـupload.wikimedia.org
 // حتى تطابق اللي مكتوب بسياسة الخصوصية
+/* صور كومنز تنسخها دالة mirror-photo لـbucket «question-photos» — ويكيميديا صارت ترجّع
+   429 لمتصفح التطبيق بالآيفون. رابط عندنا أصلاً ← يبقى مثل ما هو. يرجّع { image, image_source } أو { error } */
+const OUR_PHOTOS = SUPABASE_URL + '/storage/v1/object/public/question-photos/';
+async function mirrorPhoto(u){
+  u = commonsImageUrl(String(u || '').trim());
+  if(u.startsWith(OUR_PHOTOS)) return { image: u, image_source: null };
+  if(!/^https:\/\/upload\.wikimedia\.org\//i.test(u)) return { error: 'الرابط لازم يكون من upload.wikimedia.org' };
+  const { data, error } = await sb.functions.invoke('mirror-photo', { body: { urls: [u] } });
+  if(error) return { error: error.message };
+  const r = data && data.results && data.results[u];
+  if(!r || !r.ok) return { error: (r && r.error) || 'ما رجع رابط' };
+  return { image: r.url, image_source: u };
+}
+
 function commonsImageUrl(u){
   if(!/^https:\/\/thumb\.wikimedia\.org\//i.test(u)) return u;
   return u.split('?')[0].replace(/^https:\/\/thumb\.wikimedia\.org\//i, 'https://upload.wikimedia.org/');
@@ -662,10 +677,19 @@ $('save').addEventListener('click', async ()=>{
 
   $('save').disabled = true;
   say(msg, 'جاري الحفظ…', 'warn');
+  // صورة من كومنز ← ننسخها لسيرفرنا أول (التطبيق ما يطلب من ويكيميديا وقت اللعب)
+  let photo = { image: img, image_source: null };
+  if(kind === 'photo'){
+    say(msg, 'جاري نسخ الصورة لسيرفرنا…', 'warn');
+    const m = await mirrorPhoto(img);
+    if(m.error){ $('save').disabled = false; return say(msg, 'تعذّر نسخ الصورة: ' + m.error, 'err'); }
+    photo = m;
+  }
   const { error } = await sb.from('category_questions').insert({
     topic, points: Number($('pts').value), question: q, answer: a,
     media_type: kind === 'photo' ? 'photo' : null,
-    image:      kind === 'photo' ? img : null,
+    image:      kind === 'photo' ? photo.image : null,
+    image_source: kind === 'photo' ? photo.image_source : null,
     media_credit: kind === 'photo' ? cr : null
   });
   $('save').disabled = false;
@@ -1093,6 +1117,13 @@ async function eSave(tr){
   if('image' in v){
     upd.image = r.media_type === 'photo' ? commonsImageUrl(v.image.trim()) : v.image.trim();
     if(!upd.image) return say(msg, (r.media_type === 'song' ? 'كلمة بحث المقطع' : 'رابط الصورة') + ' فاضي (#' + r.id + ').', 'err');
+    if(r.media_type === 'photo' && upd.image !== r.image){
+      say(msg, 'جاري نسخ الصورة لسيرفرنا…', 'warn');
+      const m = await mirrorPhoto(upd.image);
+      if(m.error) return say(msg, 'تعذّر نسخ الصورة (#' + r.id + '): ' + m.error, 'err');
+      upd.image = m.image;
+      if(m.image_source) upd.image_source = m.image_source;
+    }
   }
   if('media_credit' in v){
     upd.media_credit = v.media_credit.trim();

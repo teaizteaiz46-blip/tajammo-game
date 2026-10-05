@@ -294,6 +294,23 @@ function helpHintHtml(hint){
   return `<div class="help-result help-choices">${opts.map(choiceHtml).join('')}</div>`;
 }
 
+/* صورة السؤال ما تحمّلت مرتين ← سؤال بلا صورة من نفس الفئة والمستوى.
+   مو مساعدة، فما تنحسب على الفريق. يرجّع false إذا ماكو بديل. */
+function replaceBrokenPhotoQuestion(topic, q){
+  if(!topic || !topic.bankKey) return false;
+  const tier = ((CATEGORY_DATA[topic.bankKey] || {})[q.points] || [])
+    .filter(x => x.mediaType !== 'photo' && x.bankId !== q.bankId);
+  let fresh = pickFromTier(tier, topic.bankKey, q.points, 1)[0];
+  if(fresh && !songClipsAllowed()) fresh = songQuestionToText(fresh);
+  if(!fresh) return false;
+  Object.assign(q, {
+    bankId: fresh.bankId, text: fresh.text, answer: fresh.answer, image: fresh.image,
+    mediaType: fresh.mediaType, credit: fresh.credit, clipStart: fresh.clipStart,
+    clipSeconds: fresh.clipSeconds, decoys: fresh.decoys || null, photoSwapped: true
+  });
+  return true;
+}
+
 function wireHelpButtons(modal, topic, q){
   modal.querySelectorAll('.help-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -478,6 +495,7 @@ function renderQuestionOverlay(){
         : ''
     }</div>
     <div class="q-points">${q.points} نقطة</div>
+    ${q.photoSwapped ? `<div class="q-swapped-note">📷 الصورة ما تحمّلت، فبدّلنا السؤال بسؤال ثاني</div>` : ''}
     ${q.mediaType === 'flag' && q.image ? `<img src="https://flagcdn.com/w320/${q.image}.png" style="width:180px; max-width:70%; border-radius:8px; margin-bottom:14px; box-shadow:0 4px 14px rgba(0,0,0,0.4);" alt=""/>` : ''}
     ${q.mediaType === 'photo' && q.image ? `
       <div class="q-photo"><img src="${escapeAttr(q.image)}" alt="" loading="eager" decoding="async"></div>
@@ -517,7 +535,24 @@ function renderQuestionOverlay(){
      نصياً مقروءاً بدل أيقونة صورة مكسورة بنص الجولة. */
   const qImg = modal.querySelector('.q-photo img');
   if(qImg){
+    /* محاولة ثانية أول (النت يتقطع لحظة)، وإذا فشلت نبدّل السؤال بسؤال بلا
+       صورة بنفس المستوى — «منو هذا اللاعب؟» بلا صورة ما ينلعب. بلاغات
+       «المقطع أو الصورة ما تشتغل» من الآيفون هي اللي نبّهتنا. */
+    let retried = false;
+    const src = q.image;              // ثابت — q ممكن يتبدّل قبل ما توصل المحاولة الثانية
     qImg.addEventListener('error', ()=>{
+      if(!retried && src){
+        retried = true;
+        setTimeout(()=>{
+          if(q.image === src && qImg.isConnected) qImg.src = src + (src.indexOf('?') === -1 ? '?' : '&') + 'retry=1';
+        }, 1200);
+        return;
+      }
+      if(replaceBrokenPhotoQuestion(topic, q)){
+        state.helpHints = {0:null, 1:null};
+        render();
+        return;
+      }
       const box = modal.querySelector('.q-photo');
       const cr  = modal.querySelector('.q-credit');
       if(box) box.remove();
