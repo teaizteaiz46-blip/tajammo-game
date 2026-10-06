@@ -1933,6 +1933,23 @@ const CANNED_BANK = (() => {
     if (!r.title.includes('متبقي 1')) throw new Error('العدّاد غلط: ' + r.title);
   });
 
+  /* الطلب: الجواب العربي ويا ترجمته ما ينحسب ضعف — العربي بس، والإنكليزي لحاله ينحسب */
+  await step('«عدد الأحرف» و«أول حرف» يحسبون العربي بس إذا الجواب بالغتين', async () => {
+    const r = await page.evaluate(() => [
+      ['ليونيل ميسي (Lionel Messi)', 10, 'ل'],
+      ['Kattegat (كاتيغات)', 7, 'ك'],
+      ['PTSD — اضطراب ما بعد الصدمة', 17, 'ا'],
+      ['المنتفخون (Bloaters).', 9, 'ا'],
+      ['مَدينة الصَّدر', 10, 'م'],
+      ['The Godfather', 12, 'T'],
+      ['وغلاوتك - Amr Diab', 7, 'و', 'song'],
+    ].map(([answer, n, first, mediaType]) => {
+      const c = hintChars({ answer, mediaType });
+      return c.length === n && c[0] === first ? null : `${answer} → ${c.length} ${c[0]}`;
+    }).filter(Boolean));
+    if (r.length) throw new Error('حساب غلط: ' + r.join(' | '));
+  });
+
   await step('لعبة جديدة ترجّع كل المساعدات للفريقين', async () => {
     const r = await page.evaluate(() => {
       state.pool = []; state.selectedTopicIds = []; state.setupActiveTeam = 0;

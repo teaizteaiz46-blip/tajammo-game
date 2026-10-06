@@ -195,6 +195,30 @@ function songTitleOnly(s){
   return i > 0 ? s.slice(0, i).trim() : s;
 }
 
+/* الجزء الي تنحسب منه مساعدتي «أول حرف» و«عدد الأحرف».
+   هوايه أجوبة مكتوبة بالعربي ويا ترجمتها: «ليونيل ميسي (Lionel Messi)»
+   أو «Kattegat (كاتيغات)» أو «PTSD — اضطراب ما بعد الصدمة» — لو نحسب
+   الكل يطلع العدد ضعف. فإذا الجواب بي عربي، ناخذ القطع العربية بس؛
+   وإذا كله إنكليزي يبقى مثل ما هو. كلمة إنكليزية بنص جملة عربية
+   («فيتامين D») تبقى، لأنها جزء من الجواب مو ترجمة إله. */
+const AR_LETTER = /[؀-ۿ]/;
+function hintAnswerPart(q){
+  let s = String(q.answer || '').trim();
+  if(q.mediaType === 'song') s = songTitleOnly(s);
+  if(!AR_LETTER.test(s) || !/[A-Za-z]/.test(s)) return s;
+  const inside = [];
+  const outside = s.replace(/\(([^()]*)\)/g, (m, x) => { inside.push(x); return '|'; });
+  const pieces = outside.split(/\||\s[-–—]\s/).concat(inside);
+  const arabic = pieces.filter(p => AR_LETTER.test(p));
+  return arabic.length ? arabic.join(' ') : s;
+}
+/* الحروف والأرقام بس — المسافات والنقاط والأقواس والتشكيل والتطويل ما تنحسب.
+   مديات صريحة بدل \p{L} لأن WebView القديم بالأندرويد ما يفهمها. */
+const HINT_CHAR = /[A-Za-z0-9À-ɏء-غف-ي٠-٩ٱ-ۓ۰-۹]/g;
+function hintChars(q){
+  return hintAnswerPart(q).match(HINT_CHAR) || [];
+}
+
 function questionChoices(q){
   if(!q || !Array.isArray(q.decoys) || q.decoys.length < 2) return null;
   let opts = [q.answer].concat(q.decoys).map(s => String(s || '').trim());
@@ -344,9 +368,9 @@ function wireHelpButtons(modal, topic, q){
 
       let hint = '';
       if(type==='letter'){
-        hint = 'أول حرف: ' + (q.answer.trim().charAt(0) || '؟');
+        hint = 'أول حرف: ' + (hintChars(q)[0] || '؟');
       } else if(type==='blanks'){
-        hint = 'عدد الأحرف: ' + q.answer.replace(/\s/g,'').length;
+        hint = 'عدد الأحرف: ' + hintChars(q).length;
       } else if(type==='choices'){
         /* الخلط يصير هنا، وقت الضغط — فكل مرة يطلع ترتيب جديد */
         const opts = questionChoices(q);
